@@ -1,6 +1,30 @@
 import React, { createContext, useState, useContext } from 'react';
 import { format } from 'date-fns';
 
+function useLocalStorage(key, initialValue) {
+  const [storedValue, setStoredValue] = useState(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      return item ? JSON.parse(item) : initialValue;
+    } catch (error) {
+      console.warn(`Error reading localStorage key "${key}":`, error);
+      return initialValue;
+    }
+  });
+
+  const setValue = (value) => {
+    try {
+      const valueToStore = value instanceof Function ? value(storedValue) : value;
+      setStoredValue(valueToStore);
+      window.localStorage.setItem(key, JSON.stringify(valueToStore));
+    } catch (error) {
+      console.warn(`Error setting localStorage key "${key}":`, error);
+    }
+  };
+
+  return [storedValue, setValue];
+}
+
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
 
@@ -32,7 +56,7 @@ export const AppProvider = ({ children }) => {
   const canViewDashboard = isAdmin || isGerente;
 
   // ── Clientes (modelo CRM ampliado) ───────────────────────────────────────
-  const [clients, setClients] = useState([
+  const [clients, setClients] = useLocalStorage('cielo_clients', [
     {
       id: 'C-001',
       // Datos generales
@@ -104,7 +128,7 @@ export const AppProvider = ({ children }) => {
   ]);
 
   // ── Productos ─────────────────────────────────────────────────────────────
-  const [products, setProducts] = useState([
+  const [products, setProducts] = useLocalStorage('cielo_products', [
     { id: 'P-101', name: 'Excavadora Cat 320', totalStock: 3, availableStock: 2, category: 'Heavy Machinery', value: 350000, image: 'https://images.unsplash.com/photo-1541888087405-c8108c48a8f1?auto=format&fit=crop&q=80&w=150' },
     { id: 'P-102', name: 'Martillo Demoledor Bosch', totalStock: 5, availableStock: 5, category: 'Power Tools', value: 45000, image: 'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&q=80&w=150' },
     { id: 'P-103', name: 'Planta Eléctrica 10kW', totalStock: 2, availableStock: 2, category: 'Equipment', value: 85000, image: 'https://images.unsplash.com/photo-1580983546051-7649d214a1e9?auto=format&fit=crop&q=80&w=150' },
@@ -113,28 +137,28 @@ export const AppProvider = ({ children }) => {
   ]);
 
   // ── Facturas ──────────────────────────────────────────────────────────────
-  const [invoices, setInvoices] = useState([
+  const [invoices, setInvoices] = useLocalStorage('cielo_invoices', [
     { id: 'INV-001', clientId: 'C-001', obraId: 'O-001-1', amount: 500000, status: 'Pending', date: '2023-10-20', items: [{ productId: 'P-101', quantity: 1, days: 1, price: 350000 }, { productId: 'P-104', quantity: 10, days: 1, price: 15000 }] },
     { id: 'INV-002', clientId: 'C-002', obraId: 'O-002-1', amount: 250000, status: 'Paid', date: '2023-10-15', items: [{ productId: 'P-102', quantity: 2, days: 2, price: 45000 }, { productId: 'P-104', quantity: 2, days: 5, price: 15000 }] },
     { id: 'INV-003', clientId: 'C-003', obraId: 'O-003-1', amount: 1200000, status: 'Pending', date: '2023-10-05', items: [{ productId: 'P-103', quantity: 1, days: 14, price: 85000 }] },
   ]);
 
   // ── Logs ──────────────────────────────────────────────────────────────────
-  const [logs, setLogs] = useState([
+  const [logs, setLogs] = useLocalStorage('cielo_logs', [
     { id: 1, action: 'Rental Exit', product: 'Excavadora Cat 320', client: 'Constructora Alfa', time: '2023-10-20 08:30 AM', type: 'exit' },
     { id: 2, action: 'Rental Return', product: 'Martillo Demoledor Bosch', client: 'Ingenieros Beta', time: '2023-10-21 04:15 PM', type: 'entry' },
     { id: 3, action: 'Maintenance', product: 'Mezcladora de Concreto 1 Bulto', client: 'Internal', time: '2023-10-22 09:00 AM', type: 'system' },
   ]);
 
   // ── Mantenimientos ────────────────────────────────────────────────────────
-  const [maintenances, setMaintenances] = useState([
+  const [maintenances, setMaintenances] = useLocalStorage('cielo_maintenances', [
     { id: 'M-001', productId: 'P-101', type: 'Preventivo', description: 'Cambio de aceite y filtros', status: 'Completado', date: '2023-10-10', cost: 150000 },
     { id: 'M-002', productId: 'P-105', type: 'Correctivo', description: 'Reparación de motor', status: 'En Proceso', date: '2023-10-22', cost: 320000 },
   ]);
 
   // ── Remisiones ────────────────────────────────────────────────────────────────
   // Estado: 'Activa' | 'Parcial' | 'Cerrada'
-  const [remisiones, setRemisiones] = useState([
+  const [remisiones, setRemisiones] = useLocalStorage('cielo_remisiones', [
     {
       id: 'REM-001',
       clientId: 'C-001', obraId: 'O-001-1',
@@ -356,7 +380,7 @@ export const AppProvider = ({ children }) => {
 
   // ── Cotizaciones ─────────────────────────────────────────────────────────
   // Estado: 'Borrador' | 'Enviada' | 'Aprobada' | 'Rechazada'
-  const [cotizaciones, setCotizaciones] = useState([
+  const [cotizaciones, setCotizaciones] = useLocalStorage('cielo_cotizaciones', [
     {
       id: 'COT-001',
       clientId: 'C-001', obraId: 'O-001-1',
@@ -414,7 +438,7 @@ export const AppProvider = ({ children }) => {
   };
 
   // ── Gastos ──────────────────────────────────────────────────────
-  const [gastos, setGastos] = useState([
+  const [gastos, setGastos] = useLocalStorage('cielo_gastos', [
     { id: 'G-001', fecha: '2023-10-01', concepto: 'Arriendo bodega', proveedor: 'Inmobiliaria XYZ', categoria: 'Arriendo', monto: 1500000, iva: 0, estado: 'Pagado', notas: '' },
     { id: 'G-002', fecha: '2023-10-05', concepto: 'Combustible camiones', proveedor: 'Terpel', categoria: 'Transporte', monto: 350000, iva: 66500, estado: 'Pagado', notas: 'Semana 1' },
     { id: 'G-003', fecha: '2023-10-10', concepto: 'Repuestos motor', proveedor: 'Automáxt S.A.S', categoria: 'Mantenimiento', monto: 420000, iva: 79800, estado: 'Pendiente', notas: 'Retroexcavadora P-101' },
@@ -436,13 +460,13 @@ export const AppProvider = ({ children }) => {
   };
 
   // ── Empleados + Nómina ────────────────────────────────────────────
-  const [empleados, setEmpleados] = useState([
+  const [empleados, setEmpleados] = useLocalStorage('cielo_empleados', [
     { id: 'EMP-001', nombre: 'Andrés Martínez', cargo: 'Conductor / Despachador', salarioDia: 66667, tipo: 'Fijo', activo: true },
     { id: 'EMP-002', nombre: 'Carlos Roa', cargo: 'Operario de Equipos', salarioDia: 50000, tipo: 'Fijo', activo: true },
     { id: 'EMP-003', nombre: 'Laura Gómez', cargo: 'Administradora', salarioDia: 83333, tipo: 'Fijo', activo: true },
   ]);
 
-  const [liquidaciones, setLiquidaciones] = useState([
+  const [liquidaciones, setLiquidaciones] = useLocalStorage('cielo_liquidaciones', [
     { id: 'LIQ-001', empleadoId: 'EMP-001', periodo: '2023-10-01 / 2023-10-31', diasTrabajados: 26, horasExtra: 8, valorHoraExtra: 12500, deduccionSalud: 4, deduccionPension: 4, fondoSolidaridad: 0, bonificaciones: 0, estado: 'Pagado' },
   ]);
 
