@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 import { format } from 'date-fns';
 
 function useLocalStorage(key, initialValue) {
@@ -127,14 +127,18 @@ export const AppProvider = ({ children }) => {
     },
   ]);
 
-  // ── Productos ─────────────────────────────────────────────────────────────
-  const [products, setProducts] = useLocalStorage('cielo_products', [
-    { id: 'P-101', name: 'Excavadora Cat 320', totalStock: 3, availableStock: 2, category: 'Heavy Machinery', value: 350000, image: 'https://images.unsplash.com/photo-1541888087405-c8108c48a8f1?auto=format&fit=crop&q=80&w=150' },
-    { id: 'P-102', name: 'Martillo Demoledor Bosch', totalStock: 5, availableStock: 5, category: 'Power Tools', value: 45000, image: 'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&q=80&w=150' },
-    { id: 'P-103', name: 'Planta Eléctrica 10kW', totalStock: 2, availableStock: 2, category: 'Equipment', value: 85000, image: 'https://images.unsplash.com/photo-1580983546051-7649d214a1e9?auto=format&fit=crop&q=80&w=150' },
-    { id: 'P-104', name: 'Andamio Tubular', totalStock: 100, availableStock: 60, category: 'Structures', value: 15000, image: 'https://images.unsplash.com/photo-1533038676239-502a507fa733?auto=format&fit=crop&q=80&w=150' },
-    { id: 'P-105', name: 'Mezcladora de Concreto 1 Bulto', totalStock: 4, availableStock: 3, category: 'Machinery', value: 65000, image: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=150' },
-  ]);
+  // ── Productos (Desde API Postgres) ────────────────────────────────────────
+  const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    // Cargar productos del backend al iniciar
+    fetch('/api/products')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setProducts(data);
+      })
+      .catch(err => console.error('Error cargando productos:', err));
+  }, []);
 
   // ── Facturas ──────────────────────────────────────────────────────────────
   const [invoices, setInvoices] = useLocalStorage('cielo_invoices', [
@@ -244,20 +248,76 @@ export const AppProvider = ({ children }) => {
     }));
   };
 
-  // ── Product CRUD ──────────────────────────────────────────────────────────
-  const addProduct = (product) => {
-    setProducts(prev => [...prev, { ...product, id: `P-${String(prev.length + 101).padStart(3, '0')}`, totalStock: product.totalStock || 1, availableStock: product.totalStock || 1 }]);
+  // ── Product CRUD (Persist to API) ─────────────────────────────────────────
+  const addProduct = async (product) => {
+    const newProduct = {
+      ...product,
+      id: `P-${String(products.length + 101).padStart(3, '0')}`,
+      totalStock: product.totalStock || 1,
+      availableStock: product.totalStock || 1
+    };
+
+    // Update local state immediately for fast UI
+    setProducts(prev => [...prev, newProduct]);
     logAction('Product Created', product.name, 'System Admin', 'system');
+
+    // Send to backend
+    try {
+      await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProduct)
+      });
+    } catch (err) { console.error('Error guardando producto en API:', err); }
   };
-  const editProduct = (productId, updatedData) => {
-    setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...updatedData, availableStock: updatedData.totalStock - (p.totalStock - p.availableStock) } : p));
+
+  const editProduct = async (productId, updatedData) => {
+    let finalProduct = null;
+
+    setProducts(prev => prev.map(p => {
+      if (p.id === productId) {
+        finalProduct = { ...p, ...updatedData, availableStock: updatedData.totalStock - (p.totalStock - p.availableStock) };
+        return finalProduct;
+      }
+      return p;
+    }));
     logAction('Product Edited', updatedData.name, 'System Admin', 'system');
+
+    if (finalProduct) {
+      // Send update to backend
+      try {
+        await fetch(`/api/products/${productId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(finalProduct)
+        });
+      } catch (err) { console.error('Error actualizando producto en API:', err); }
+    }
   };
-  const returnProduct = (productId, quantity, clientId) => {
-    setProducts(prev => prev.map(p => p.id === productId ? { ...p, availableStock: Math.min(p.totalStock, p.availableStock + quantity) } : p));
-    const product = products.find(p => p.id === productId);
+
+  const returnProduct = async (productId, quantity, clientId) => {
+    let finalProduct = null;
+    setProducts(prev => prev.map(p => {
+      if (p.id === productId) {
+        finalProduct = { ...p, availableStock: Math.min(p.totalStock, p.availableStock + quantity) };
+        return finalProduct;
+      }
+      return p;
+    }));
+
+    if (finalProduct) {
+      try {
+        await fetch(`/api/products/${productId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(finalProduct)
+        });
+      } catch (err) { console.error('Error actualizando producto en API (devolución):', err); }
+    }
+
     const client = clients.find(c => c.id === clientId);
-    logAction('Rental Return', `${quantity}x ${product?.name}`, client?.name || 'Unknown', 'entry');
+    const product = products.find(p => p.id === productId);
+    logAction('Rental Return', `${quantity}x ${product?.name || productId}`, client?.name || 'Unknown', 'entry');
   };
 
   // ── Invoice CRUD ──────────────────────────────────────────────────────────
