@@ -186,8 +186,14 @@ app.put('/api/products/:id', async (req, res) => {
 // ─── Serve React Static Files in Production ─────────────────────────────
 if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT) {
     app.use(express.static(path.join(__dirname, 'dist')));
-    app.get('/(.*)', (req, res) => {
-        res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+
+    // Fallback for Single Page Application
+    app.use((req, res, next) => {
+        if (req.method === 'GET' && !req.path.startsWith('/api')) {
+            res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+        } else {
+            next();
+        }
     });
 }
 
