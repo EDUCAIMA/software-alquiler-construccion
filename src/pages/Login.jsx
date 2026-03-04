@@ -13,13 +13,11 @@ export default function Login() {
         e.preventDefault();
         setError('');
         setLoading(true);
-        await new Promise(r => setTimeout(r, 500)); // small delay for UX
+        await new Promise(r => setTimeout(r, 500));
         const result = login(form.username.trim(), form.password);
         if (!result.success) setError(result.error);
         setLoading(false);
     };
-
-    const fillDemo = (username, password) => setForm({ username, password });
 
     return (
         <div style={{
@@ -120,32 +118,6 @@ export default function Login() {
                     </form>
                 </div>
 
-                {/* Demo credentials */}
-                <div className="glass-panel" style={{ padding: '1rem 1.25rem' }}>
-                    <p style={{ fontSize: '0.7rem', color: '#64748b', marginBottom: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Accesos de demostración</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                        {[
-                            { label: 'Administrador', user: 'admin', pw: 'admin123', color: '#3b82f6' },
-                            { label: 'Gerente', user: 'gerente', pw: 'gerente123', color: '#10b981' },
-                            { label: 'Operativo', user: 'op', pw: 'op123', color: '#f97316' },
-                        ].map(item => (
-                            <button key={item.user} type="button"
-                                onClick={() => fillDemo(item.user, item.pw)}
-                                style={{
-                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                    padding: '0.4rem 0.6rem', background: 'rgba(255,255,255,0.04)',
-                                    border: `1px solid rgba(255,255,255,0.08)`, borderRadius: 6,
-                                    cursor: 'pointer', transition: 'background 0.15s',
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-                            >
-                                <span style={{ fontSize: '0.8rem', color: item.color, fontWeight: 600 }}>{item.label}</span>
-                                <span style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>{item.user} / {item.pw}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
             </div>
         </div>
     );
