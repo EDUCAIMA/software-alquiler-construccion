@@ -151,6 +151,21 @@ export const AppProvider = ({ children }) => {
     logAction('Product Edited', updatedData.name, 'System Admin', 'system');
   };
 
+  const deleteProduct = async (productId) => {
+    await api.del(`/api/products/${productId}`);
+    await reloadAll();
+    logAction('Product Deleted', productId, 'System Admin', 'system');
+  };
+
+  const darDeBajaProduct = async (productId, motivo) => {
+    const current = products.find(p => p.id === productId);
+    if (!current) return;
+    const updated = { ...current, estado: 'Dado de baja', motivoBaja: motivo, fechaBaja: format(new Date(), 'yyyy-MM-dd'), availableStock: 0 };
+    await api.put(`/api/products/${productId}`, updated);
+    await reloadAll();
+    logAction('Equipo Dado de Baja', current.name, 'System Admin', 'system');
+  };
+
   const returnProduct = async (productId, quantity, clientId) => {
     const current = products.find(p => p.id === productId);
     if (!current) return;
@@ -169,7 +184,9 @@ export const AppProvider = ({ children }) => {
       id: nextId(invoices, 'INV'),
       amount,
       status: 'Pending',
-      date: format(new Date(), 'yyyy-MM-dd')
+      date: format(new Date(), 'yyyy-MM-dd'),
+      remisionEnabled: false,
+      remisionCreada: false,
     };
     await api.post('/api/invoices', newInvoice);
 
@@ -184,10 +201,51 @@ export const AppProvider = ({ children }) => {
     logAction('Rental Order Generated', `Invoice ${newInvoice.id}`, client?.name || 'Unknown', 'exit');
   };
 
+  // ─── Crear factura directamente desde una cotización aprobada ─────────────
+  const createInvoiceFromCotizacion = async (cotizacionId) => {
+    const cot = cotizaciones.find(c => c.id === cotizacionId);
+    if (!cot) return;
+
+    const items = cot.items.map(i => ({
+      productId: i.productId,
+      quantity: i.cantidad,
+      days: i.dias,
+      price: i.tarifaDia,
+    }));
+    const amount = items.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
+
+    const newInvoice = {
+      clientId: cot.clientId,
+      obraId: cot.obraId,
+      cotizacionId,
+      items,
+      amount,
+      status: 'Pending',
+      date: format(new Date(), 'yyyy-MM-dd'),
+      remisionEnabled: false,
+      remisionCreada: false,
+      id: nextId(invoices, 'INV'),
+    };
+    await api.post('/api/invoices', newInvoice);
+
+    // Actualizar deuda del cliente
+    const client = clients.find(c => c.id === cot.clientId);
+    if (client) {
+      await api.put(`/api/clients/${client.id}`, { ...client, debt: client.debt + amount });
+    }
+
+    // Marcar cotización como Facturada
+    await api.put(`/api/cotizaciones/${cotizacionId}`, { ...cot, estado: 'Facturada', facturaId: newInvoice.id });
+
+    await reloadAll();
+    logAction('Factura desde Cotización', `${newInvoice.id} ← ${cotizacionId}`, client?.name || 'Unknown', 'exit');
+    return newInvoice;
+  };
+
   const payInvoice = async (invoiceId) => {
     const invoice = invoices.find(inv => inv.id === invoiceId);
     if (!invoice || invoice.status === 'Paid') return;
-    const updated = { ...invoice, status: 'Paid', paidDate: format(new Date(), 'yyyy-MM-dd') };
+    const updated = { ...invoice, status: 'Paid', paidDate: format(new Date(), 'yyyy-MM-dd'), remisionEnabled: true };
     await api.put(`/api/invoices/${invoiceId}`, updated);
 
     // Actualizar deuda del cliente
@@ -198,6 +256,14 @@ export const AppProvider = ({ children }) => {
 
     await reloadAll();
     logAction('Payment Received', `Invoice ${invoiceId} - $${invoice.amount.toLocaleString()}`, client?.name || 'Unknown', 'entry');
+  };
+
+  // Marcar factura como remisionCreada (llamado desde Remisiones al crear la remisión desde ella)
+  const marcarRemisionCreada = async (invoiceId) => {
+    const invoice = invoices.find(inv => inv.id === invoiceId);
+    if (!invoice) return;
+    await api.put(`/api/invoices/${invoiceId}`, { ...invoice, remisionCreada: true });
+    await reloadAll();
   };
 
   // ─── MAINTENANCE CRUD ─────────────────────────────────────────────────────
@@ -370,9 +436,9 @@ export const AppProvider = ({ children }) => {
       // Clients
       clients, setClients, addClient, editClient, addObra, editObra,
       // Products
-      products, setProducts, addProduct, editProduct, returnProduct,
+      products, setProducts, addProduct, editProduct, returnProduct, deleteProduct, darDeBajaProduct,
       // Invoices
-      invoices, setInvoices, createInvoice, payInvoice,
+      invoices, setInvoices, createInvoice, payInvoice, createInvoiceFromCotizacion, marcarRemisionCreada,
       // Other
       logs, maintenances, addMaintenance, editMaintenance,
       // Remisiones

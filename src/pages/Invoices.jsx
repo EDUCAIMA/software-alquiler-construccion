@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle } from 'lucide-react';
+import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export default function Invoices() {
     const { invoices, clients, products, createInvoice, payInvoice } = useAppContext();
+    const navigate = useNavigate();
 
     // New Invoice Modal
     const [showModal, setShowModal] = useState(false);
@@ -334,6 +336,7 @@ export default function Invoices() {
                         <thead>
                             <tr>
                                 <th>No. Factura</th>
+                                <th>Origen</th>
                                 <th>Cliente</th>
                                 <th>Obra/Proyecto</th>
                                 <th>Monto Total</th>
@@ -348,6 +351,15 @@ export default function Invoices() {
                                 return (
                                     <tr key={invoice.id}>
                                         <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{invoice.id}</td>
+                                        <td>
+                                            {invoice.cotizacionId ? (
+                                                <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(99,102,241,0.12)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.3)' }}>
+                                                    📋 {invoice.cotizacionId}
+                                                </span>
+                                            ) : (
+                                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Manual</span>
+                                            )}
+                                        </td>
                                         <td style={{ fontWeight: 600 }}>{client?.name || 'N/A'}</td>
                                         <td className="text-muted">{client?.obra || '-'}</td>
                                         <td style={{ fontWeight: 700 }}>${invoice.amount.toLocaleString()}</td>
@@ -380,6 +392,14 @@ export default function Invoices() {
                                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.78rem', color: '#10b981', fontWeight: 600, padding: '0.4rem 0.6rem' }}>
                                                         <CheckCircle size={14} /> Pagada
                                                     </span>
+                                                )}
+                                                {invoice.status === 'Paid' && invoice.remisionEnabled && !invoice.remisionCreada && (
+                                                    <button
+                                                        onClick={() => navigate('/remisiones')}
+                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.4rem 0.8rem', borderRadius: 8, background: 'linear-gradient(135deg,#10b981,#059669)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', boxShadow: '0 2px 8px rgba(16,185,129,0.35)' }}
+                                                        title="Ir a Remisiones para despachar">
+                                                        <ArrowRight size={14} /> Pasar a Remisión
+                                                    </button>
                                                 )}
                                             </div>
                                         </td>

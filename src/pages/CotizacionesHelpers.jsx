@@ -16,9 +16,123 @@ const ESTADO_CFG = {
     'Enviada': { color: '#f97316', bg: 'rgba(249,115,22,0.12)', icon: Send },
     'Aprobada': { color: '#10b981', bg: 'rgba(16,185,129,0.12)', icon: CheckCircle },
     'Rechazada': { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', icon: XCircle },
+    'Facturada': { color: '#6366f1', bg: 'rgba(99,102,241,0.12)', icon: FileText },
 };
 
-const fmtCOP = n => `$${(n || 0).toLocaleString('es-CO')}`;
+const fmtCOP = n => `$${(Number(n) || 0).toLocaleString('es-CO')}`;
+
+// ─── PDF Cotización al Cliente ───────────────────────────────────────────────
+function generateCotizacionPDF(cot, client, obra) {
+    const doc = new jsPDF();
+    const W = doc.internal.pageSize.getWidth();
+    const fmtN = n => (Number(n) || 0).toLocaleString('es-CO');
+
+    // Header gradient
+    doc.setFillColor(30, 41, 59); doc.rect(0, 0, W, 42, 'F');
+    doc.setFillColor(59, 130, 246); doc.rect(0, 42, W, 4, 'F');
+
+    // Logo / Title
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(255, 255, 255);
+    doc.text('CIELO', 14, 20);
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text('Alquiler de Equipos y Herramientas de Construcción', 14, 28);
+    doc.text('NIT: 900.XXX.XXX-X  |  Tel: (601) 000-0000  |  cielo@empresa.co', 14, 35);
+
+    doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+    doc.text('COTIZACIÓN', W - 14, 20, { align: 'right' });
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.text(cot.id, W - 14, 28, { align: 'right' });
+    doc.text(`Fecha: ${cot.fecha || '—'}`, W - 14, 35, { align: 'right' });
+
+    // Client info box
+    let y = 54;
+    doc.setFillColor(248, 250, 252); doc.roundedRect(14, y, W - 28, 32, 3, 3, 'F');
+    doc.setDrawColor(226, 232, 240); doc.roundedRect(14, y, W - 28, 32, 3, 3, 'S');
+    doc.setTextColor(30, 41, 59);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+    doc.text('CLIENTE', 20, y + 8);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.text(client?.name || '—', 20, y + 16);
+    doc.setFontSize(8.5); doc.setTextColor(100, 116, 139);
+    doc.text(`NIT/CC: ${client?.nit || '—'}  |  ${client?.type || ''}  |  Régimen: ${client?.regimen || '—'}`, 20, y + 23);
+    doc.text(`Obra: ${obra?.nombre || '—'}  |  ${obra?.ubicacion || '—'}`, 20, y + 29);
+
+    // Valid until
+    const validHasta = cot.fecha ? new Date(new Date(cot.fecha).getTime() + (cot.validezDias || 15) * 86400000).toISOString().slice(0, 10) : '—';
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(59, 130, 246);
+    doc.text(`Válida hasta: ${validHasta}`, W - 20, y + 16, { align: 'right' });
+
+    // Items table
+    const subtotal = cot.items.reduce((s, i) => s + (Number(i.cantidad) * Number(i.dias) * Number(i.tarifaDia)), 0);
+    const porcIVA = client?.porcIVA || 0;
+    const porcRet = client?.porcRetencion || 0;
+    const iva = Math.round(subtotal * porcIVA / 100);
+    const ret = Math.round(subtotal * porcRet / 100);
+    const total = subtotal + iva - ret + Number(cot.transporte || 0);
+
+    y += 38;
+    autoTable(doc, {
+        startY: y,
+        head: [['#', 'Equipo / Herramienta', 'Cant.', 'Días', 'Tarifa/día', 'Subtotal']],
+        body: cot.items.map((i, idx) => [
+            idx + 1,
+            i.nombre,
+            i.cantidad,
+            i.dias,
+            `$${fmtN(i.tarifaDia)}`,
+            `$${fmtN(Number(i.cantidad) * Number(i.dias) * Number(i.tarifaDia))}`,
+        ]),
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8.5, fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 4 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: { 0: { cellWidth: 10 }, 4: { halign: 'right' }, 5: { halign: 'right', fontStyle: 'bold' } },
+    });
+
+    // Totals
+    y = doc.lastAutoTable.finalY + 6;
+    const totals = [
+        ['Subtotal', `$${fmtN(subtotal)}`],
+        ...(porcIVA > 0 ? [[`+ IVA (${porcIVA}%)`, `$${fmtN(iva)}`]] : []),
+        ...(porcRet > 0 ? [[`\u2014 Retención (${porcRet}%)`, `-$${fmtN(ret)}`]] : []),
+        ...(Number(cot.transporte) > 0 ? [['+ Transporte', `$${fmtN(cot.transporte)}`]] : []),
+    ];
+    const totW = 80;
+    const totX = W - 14 - totW;
+    totals.forEach(([k, v]) => {
+        doc.setFillColor(248, 250, 252); doc.rect(totX, y, totW, 8, 'F');
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(100, 116, 139);
+        doc.text(k, totX + 4, y + 5.5);
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 41, 59);
+        doc.text(v, W - 16, y + 5.5, { align: 'right' });
+        y += 9;
+    });
+    // Total row
+    doc.setFillColor(59, 130, 246); doc.rect(totX, y, totW, 10, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(255, 255, 255);
+    doc.text('TOTAL', totX + 4, y + 7);
+    doc.text(`$${fmtN(total)}`, W - 16, y + 7, { align: 'right' });
+    y += 16;
+
+    // Commercial conditions
+    const condY = Math.max(y, doc.lastAutoTable.finalY + 60);
+    doc.setFillColor(241, 245, 249); doc.roundedRect(14, y, W - 28, 28, 3, 3, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(30, 41, 59);
+    doc.text('CONDICIONES COMERCIALES', 20, y + 7);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(71, 85, 105);
+    const conds = [
+        `Forma de pago: ${cot.metodoPago || '—'}  |  Plazo de entrega: ${cot.plazoEntrega || '—'}  |  Transporte: ${cot.responsableTransporte || '—'}`,
+        cot.notas ? `Notas: ${cot.notas}` : ''
+    ].filter(Boolean);
+    conds.forEach((line, idx) => doc.text(doc.splitTextToSize(line, W - 40), 20, y + 14 + idx * 7));
+
+    // Footer
+    const pageH = doc.internal.pageSize.getHeight();
+    doc.setFillColor(30, 41, 59); doc.rect(0, pageH - 14, W, 14, 'F');
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(148, 163, 184);
+    doc.text(`Cotización ${cot.id} — CIELO Alquiler de Equipos — Generado el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, W / 2, pageH - 5, { align: 'center' });
+
+    doc.save(`Cotizacion_${cot.id}.pdf`);
+}
 
 // ─── PDF generators ───────────────────────────────────────────────────────────
 function generateContratoPDF(cot, client, obra) {
@@ -276,4 +390,5 @@ function HabeasDataModal({ onAccept, onClose }) {
     );
 }
 
-export { generateContratoPDF, generatePagarePDF, generateCartaPDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP };
+export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP };
+

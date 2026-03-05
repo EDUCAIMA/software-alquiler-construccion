@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
     Plus, Search, Truck, Package, RotateCcw, CheckCircle,
     AlertTriangle, Clock, X, ChevronRight, Filter, FileText,
-    MapPin, ArrowDownCircle, Info
+    MapPin, ArrowDownCircle, Info, CreditCard
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
@@ -23,14 +23,24 @@ const sField = (label, value, color) => (
 );
 
 // ─── Modal: Nueva Remisión ────────────────────────────────────────────────────
-function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances }) {
-    const [step, setStep] = useState(1);
-    const [clientId, setClientId] = useState('');
-    const [obraId, setObraId] = useState('');
+function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, facturaPreload }) {
+    const [step, setStep] = useState(facturaPreload ? 2 : 1);
+    const [clientId, setClientId] = useState(facturaPreload?.clientId || '');
+    const [obraId, setObraId] = useState(facturaPreload?.obraId || '');
     const [fecha, setFecha] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [transporte, setTransporte] = useState(0);
     const [notas, setNotas] = useState('');
-    const [items, setItems] = useState([]);
+    const [items, setItems] = useState(() => {
+        if (facturaPreload?.items) {
+            return facturaPreload.items.map(i => ({
+                productId: i.productId,
+                nombre: products.find(p => p.id === i.productId)?.name || i.productId,
+                cantidad: i.quantity,
+                tarifaDia: i.price,
+            }));
+        }
+        return [];
+    });
     const [selProd, setSelProd] = useState('');
     const [selCant, setSelCant] = useState(1);
     const [blockError, setBlockError] = useState('');
@@ -461,14 +471,22 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Remisiones() {
-    const { clients, products, remisiones, addRemision, registrarDevolucion, maintenances } = useAppContext();
+    const { clients, products, remisiones, invoices, addRemision, registrarDevolucion, maintenances, marcarRemisionCreada } = useAppContext();
 
     const [search, setSearch] = useState('');
     const [filterEstado, setFilterEstado] = useState('Todos');
     const [filterClient, setFilterClient] = useState('');
     const [showNueva, setShowNueva] = useState(false);
+    const [facturaPreload, setFacturaPreload] = useState(null);
     const [devolucionTarget, setDevolucionTarget] = useState(null); // { clientId, obraId }
     const [blockMsg, setBlockMsg] = useState('');
+
+    // Facturas pagadas pendientes de remisión
+    const pendingInvoices = useMemo(() => {
+        return (invoices || []).filter(inv =>
+            inv.status === 'Paid' && inv.remisionEnabled === true && !inv.remisionCreada
+        );
+    }, [invoices]);
 
     // KPIs
     const activas = remisiones.filter(r => r.estado === 'Activa').length;
@@ -500,6 +518,11 @@ export default function Remisiones() {
         try {
             setBlockMsg('');
             addRemision(data);
+            // Si viene de una factura pre-cargada, marcarla como remisión creada
+            if (facturaPreload?.id) {
+                marcarRemisionCreada(facturaPreload.id);
+            }
+            setFacturaPreload(null);
         } catch (e) {
             setBlockMsg(e.message);
         }
@@ -519,10 +542,50 @@ export default function Remisiones() {
                     <h1>Remisiones</h1>
                     <p className="text-muted">Control de despachos, devoluciones y lógica PEPS</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setShowNueva(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <button className="btn btn-primary" onClick={() => { setFacturaPreload(null); setShowNueva(true); }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <Plus size={18} /> Nueva Remisión
                 </button>
             </div>
+
+            {/* ─── Facturas Pagadas Pendientes de Remisión ─────────────────────── */}
+            {pendingInvoices.length > 0 && (
+                <div style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(5,150,105,0.05))', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 14, padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+                        <CreditCard size={18} style={{ color: '#10b981' }} />
+                        <span style={{ fontWeight: 700, color: '#10b981', fontSize: '0.95rem' }}>
+                            {pendingInvoices.length} Factura(s) Pagada(s) — Listas para Despachar
+                        </span>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>Clic en "Crear Remisión" para despachar</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                        {pendingInvoices.map(inv => {
+                            const client = clients.find(c => c.id === inv.clientId);
+                            const obra = client?.obras?.find(o => o.id === inv.obraId);
+                            return (
+                                <div key={inv.id} style={{ background: 'var(--glass-bg)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 10, padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#10b981', fontSize: '0.85rem' }}>{inv.id}</span>
+                                    {inv.cotizacionId && (
+                                        <span style={{ fontSize: '0.7rem', background: 'rgba(99,102,241,0.12)', color: '#6366f1', padding: '2px 8px', borderRadius: 999, border: '1px solid rgba(99,102,241,0.3)', fontWeight: 700 }}>
+                                            📋 {inv.cotizacionId}
+                                        </span>
+                                    )}
+                                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{client?.name || 'N/A'}</span>
+                                    {obra && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}><MapPin size={11} />{obra.nombre}</span>}
+                                    <span style={{ fontWeight: 700, color: '#10b981', fontSize: '0.9rem' }}>${inv.amount?.toLocaleString()}</span>
+                                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{inv.items?.length || 0} equipo(s)</span>
+                                    <button
+                                        className="btn btn-sm"
+                                        style={{ marginLeft: 'auto', background: '#10b981', color: 'white', display: 'flex', alignItems: 'center', gap: 5, fontWeight: 700, fontSize: '0.78rem' }}
+                                        onClick={() => { setFacturaPreload(inv); setShowNueva(true); }}
+                                    >
+                                        <Truck size={14} /> Crear Remisión
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Block Message */}
             {blockMsg && (
@@ -651,11 +714,12 @@ export default function Remisiones() {
             {/* Modals */}
             {showNueva && (
                 <NuevaRemisionModal
-                    onClose={() => { setShowNueva(false); }}
+                    onClose={() => { setShowNueva(false); setFacturaPreload(null); }}
                     onSave={handleSaveRemision}
                     clients={clients}
                     products={products}
                     maintenances={maintenances}
+                    facturaPreload={facturaPreload}
                 />
             )}
             {devolucionTarget && (

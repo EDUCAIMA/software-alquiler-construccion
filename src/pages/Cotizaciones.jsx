@@ -8,7 +8,7 @@ import {
 import { useAppContext } from '../context/AppContext';
 import { format } from 'date-fns';
 import {
-    generateContratoPDF, generatePagarePDF, generateCartaPDF,
+    generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF,
     SignatureCanvas, WebcamCapture, HabeasDataModal,
     ESTADO_CFG, fmtCOP
 } from './CotizacionesHelpers';
@@ -42,9 +42,10 @@ function NuevaCotizacionModal({ onClose, onSave, clients, products }) {
         if (!selProd || selCant < 1) return;
         const prod = products.find(p => p.id === selProd);
         if (!prod) return;
+        const tarifaDia = Number(prod.value) || 0;
         const ex = items.findIndex(i => i.productId === selProd);
         if (ex >= 0) { const u = [...items]; u[ex].cantidad += selCant; setItems(u); }
-        else setItems(prev => [...prev, { productId: selProd, nombre: prod.name, cantidad: selCant, dias: selDias, tarifaDia: prod.value }]);
+        else setItems(prev => [...prev, { productId: selProd, nombre: prod.name || selProd, cantidad: selCant, dias: selDias, tarifaDia }]);
         setSelProd(''); setSelCant(1); setSelDias(1);
     };
 
@@ -143,7 +144,13 @@ function NuevaCotizacionModal({ onClose, onSave, clients, products }) {
                                         <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Equipo</label>
                                         <select value={selProd} onChange={e => setSelProd(e.target.value)} style={SS}>
                                             <option value="">Seleccionar…</option>
-                                            {products.map(p => <option key={p.id} value={p.id}>{p.name} — {fmtCOP(p.value)}/día</option>)}
+                                            {products
+                                                .filter(p => p.estado !== 'Dado de baja')
+                                                .map(p => (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.name} — {fmtCOP(Number(p.value) || 0)}/día
+                                                    </option>
+                                                ))}
                                         </select>
                                     </div>
                                     <div>
@@ -167,8 +174,8 @@ function NuevaCotizacionModal({ onClose, onSave, clients, products }) {
                                                     <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1e293b' }}>{item.nombre}</td>
                                                     <td style={{ padding: '0.75rem 1rem' }}>{item.cantidad}</td>
                                                     <td style={{ padding: '0.75rem 1rem' }}>{item.dias}</td>
-                                                    <td style={{ padding: '0.75rem 1rem', color: '#10b981', fontWeight: 500 }}>{fmtCOP(item.tarifaDia)}</td>
-                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#1e293b' }}>{fmtCOP(item.cantidad * item.dias * item.tarifaDia)}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', color: '#10b981', fontWeight: 500 }}>{fmtCOP(Number(item.tarifaDia) || 0)}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#1e293b' }}>{fmtCOP(item.cantidad * item.dias * (Number(item.tarifaDia) || 0))}</td>
                                                     <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}><button onClick={() => setItems(items.filter((_, i) => i !== idx))} style={{ background: '#fee2e2', border: 'none', cursor: 'pointer', color: '#ef4444', display: 'inline-flex', padding: '0.4rem', borderRadius: 6, transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#fecaca'} onMouseLeave={e => e.currentTarget.style.background = '#fee2e2'}><X size={14} /></button></td>
                                                 </tr>
                                             ))}
@@ -440,7 +447,7 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
 }
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
-function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenApproval }) {
+function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenApproval, onFacturar }) {
     const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
     const subtotal = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0);
     const iva = Math.round(subtotal * (client?.porcIVA || 0) / 100);
@@ -524,6 +531,14 @@ function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenAppr
 
                     {/* Actions */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+
+                        {/* Botón Imprimir Cotización — SIEMPRE visible */}
+                        <button
+                            onClick={() => generateCotizacionPDF(cot, client, obra)}
+                            style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: 'linear-gradient(135deg,#3b82f6,#2563eb)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 4px 12px rgba(59,130,246,0.35)' }}>
+                            <Download size={15} /> Imprimir / PDF Cotización
+                        </button>
+
                         {cot.estado === 'Borrador' && (
                             <button onClick={() => onUpdateEstado(cot.id, 'Enviada')} style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: '#f97316', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                                 <Send size={15} /> Marcar como Enviada
@@ -539,6 +554,14 @@ function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenAppr
                                 <XCircle size={15} /> Rechazar
                             </button>
                         )}
+
+                        {/* === BOTÓN PRINCIPAL: PASAR A FACTURACIÓN === */}
+                        {cot.estado === 'Aprobada' && !cot.facturaId && (
+                            <button onClick={onFacturar} style={{ width: '100%', padding: '0.8rem', borderRadius: 10, background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 6px 20px rgba(99,102,241,0.45)', letterSpacing: '0.02em' }}>
+                                <FileText size={18} /> ➜ Pasar a Facturación
+                            </button>
+                        )}
+
                         {cot.estado === 'Aprobada' && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981', textAlign: 'center' }}>Documentos Legales:</p>
@@ -547,6 +570,13 @@ function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenAppr
                                         <Download size={14} /> {label}
                                     </button>
                                 ))}
+                            </div>
+                        )}
+                        {cot.estado === 'Facturada' && (
+                            <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 10, padding: '0.85rem', textAlign: 'center' }}>
+                                <div style={{ fontSize: '0.72rem', color: '#6366f1', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Factura Generada</div>
+                                <div style={{ fontWeight: 800, color: '#6366f1', fontFamily: 'monospace', fontSize: '1rem' }}>{cot.facturaId}</div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>Ver en Facturación para gestionar el pago</div>
                             </div>
                         )}
                     </div>
@@ -564,7 +594,7 @@ function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenAppr
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function Cotizaciones() {
-    const { clients, products, cotizaciones, addCotizacion, actualizarEstadoCotizacion } = useAppContext();
+    const { clients, products, cotizaciones, addCotizacion, actualizarEstadoCotizacion, createInvoiceFromCotizacion } = useAppContext();
     const [search, setSearch] = useState('');
     const [filterE, setFilterE] = useState('Todos');
     const [showNew, setShowNew] = useState(false);
@@ -620,7 +650,7 @@ export default function Cotizaciones() {
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por ID o cliente…" style={{ ...IS, paddingLeft: '2rem', width: '100%', boxSizing: 'border-box' }} />
                 </div>
                 <select value={filterE} onChange={e => setFilterE(e.target.value)} style={{ ...IS, minWidth: 140 }}>
-                    {['Todos', 'Borrador', 'Enviada', 'Aprobada', 'Rechazada'].map(v => <option key={v}>{v}</option>)}
+                    {['Todos', 'Borrador', 'Enviada', 'Aprobada', 'Facturada', 'Rechazada'].map(v => <option key={v}>{v}</option>)}
                 </select>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{filtered.length} registro(s)</span>
             </div>
@@ -672,10 +702,20 @@ export default function Cotizaciones() {
                                                     <CheckCircle size={12} /> Aprobar
                                                 </button>
                                             )}
-                                            {cot.estado === 'Aprobada' && (
+                                            {cot.estado === 'Aprobada' && !cot.facturaId && (
+                                                <button onClick={() => createInvoiceFromCotizacion(cot.id)} className="btn btn-sm" style={{ background: '#6366f1', color: 'white', border: 'none', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.75rem', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    <FileText size={12} /> Facturar
+                                                </button>
+                                            )}
+                                            {cot.estado === 'Aprobada' && cot.facturaId && (
                                                 <button onClick={() => generateContratoPDF(cot, getClient(cot.clientId), getObra(cot))} className="btn btn-sm" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.75rem', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
                                                     <Download size={12} /> PDF
                                                 </button>
+                                            )}
+                                            {cot.estado === 'Facturada' && (
+                                                <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: 'rgba(99,102,241,0.12)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                    <FileText size={11} /> Facturada: {cot.facturaId}
+                                                </span>
                                             )}
                                         </td>
                                     </tr>
@@ -696,6 +736,7 @@ export default function Cotizaciones() {
                     onClose={() => setSelected(null)}
                     onUpdateEstado={actualizarEstadoCotizacion}
                     onOpenApproval={() => { setApproving(selectedCot.id); setSelected(null); }}
+                    onFacturar={() => { createInvoiceFromCotizacion(selectedCot.id); setSelected(null); }}
                 />
             )}
 
