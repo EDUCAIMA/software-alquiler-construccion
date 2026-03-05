@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: true, // Expone en todas las interfaces de red (necesario para dispositivos físicos)
     proxy: {
       '/api': {
         target: 'http://localhost:3000',

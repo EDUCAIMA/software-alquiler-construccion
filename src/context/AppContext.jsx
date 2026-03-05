@@ -87,7 +87,15 @@ export const AppProvider = ({ children }) => {
     setLogs(prev => [{ id: Date.now(), action, product, client, time: format(new Date(), 'yyyy-MM-dd hh:mm a'), type }, ...prev]);
   };
 
-  const nextId = (list, prefix) => `${prefix}-${String(list.length + 1).padStart(3, '0')}`;
+  const nextId = (list, prefix, minStart = 1) => {
+    if (!list || list.length === 0) return `${prefix}-${String(minStart).padStart(3, '0')}`;
+    const ids = list.map(item => {
+      const match = item.id ? String(item.id).match(/\d+$/) : null;
+      return match ? parseInt(match[0], 10) : 0;
+    });
+    const maxId = Math.max(...ids, minStart - 1);
+    return `${prefix}-${String(maxId + 1).padStart(3, '0')}`;
+  };
 
   // ─── CLIENTS CRUD ─────────────────────────────────────────────────────────
   const addClient = async (client) => {
@@ -133,7 +141,7 @@ export const AppProvider = ({ children }) => {
   const addProduct = async (product) => {
     const newProduct = {
       ...product,
-      id: `P-${String(products.length + 101).padStart(3, '0')}`,
+      id: nextId(products, 'P', 101),
       totalStock: product.totalStock || 1,
       availableStock: product.totalStock || 1
     };
