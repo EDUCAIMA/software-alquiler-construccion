@@ -13,6 +13,39 @@ import {
 } from './CotizacionesHelpers';
 import NuevaCotizacionModal from './NuevaCotizacionModal';
 
+// ─── Error Boundary para el modal de nueva cotización ────────────────────────
+class ModalErrorBoundary extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+    }
+    componentDidCatch(error, info) {
+        console.error('❌ Error en NuevaCotizacionModal:', error, info);
+    }
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div style={{ background: 'white', padding: '2rem', borderRadius: 12, maxWidth: 500, width: '90%' }}>
+                        <h3 style={{ color: '#ef4444', marginBottom: '1rem' }}>⚠️ Error al cargar el formulario</h3>
+                        <pre style={{ background: '#f8fafc', padding: '1rem', borderRadius: 8, fontSize: '0.75rem', overflow: 'auto', maxHeight: 200, color: '#dc2626' }}>
+                            {this.state.error?.message || String(this.state.error)}
+                        </pre>
+                        <button onClick={() => { this.setState({ hasError: false, error: null }); this.props.onClose?.(); }}
+                            style={{ marginTop: '1rem', padding: '0.5rem 1.5rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+
 // ─── Approval Modal ───────────────────────────────────────────────────────────
 function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
     const [step, setStep] = useState(1); // 1=habeas, 2=firma, 3=foto, 4=biometria
@@ -475,12 +508,14 @@ export default function Cotizaciones() {
 
             {/* New Quote Modal */}
             {showNew && (
-                <NuevaCotizacionModal
-                    onClose={() => setShowNew(false)}
-                    onSave={addCotizacion}
-                    clients={clients}
-                    products={products}
-                />
+                <ModalErrorBoundary onClose={() => setShowNew(false)}>
+                    <NuevaCotizacionModal
+                        onClose={() => setShowNew(false)}
+                        onSave={addCotizacion}
+                        clients={clients}
+                        products={products}
+                    />
+                </ModalErrorBoundary>
             )}
         </>
     );
