@@ -487,7 +487,7 @@ export default function Products() {
             {/* Add Modal */}
             {showAddModal && (
                 <div className="modal-overlay">
-                    <div className="modal-content fadeIn" style={{ maxWidth: 580, maxHeight: '90vh', overflowY: 'auto', marginTop: '30vh' }}>
+                    <div className="modal-content fadeIn" style={{ maxWidth: 580, maxHeight: '90vh', overflowY: 'auto', marginTop: '40vh' }}>
                         <h3 className="modal-title">Agregar Nuevo Equipo</h3>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
@@ -533,7 +533,7 @@ export default function Products() {
             {/* Edit Modal */}
             {showEditModal && editingProduct && (
                 <div className="modal-overlay">
-                    <div className="modal-content fadeIn" style={{ maxWidth: 580, maxHeight: '90vh', overflowY: 'auto', marginTop: '30vh' }}>
+                    <div className="modal-content fadeIn" style={{ maxWidth: 580, maxHeight: '90vh', overflowY: 'auto', marginTop: '40vh' }}>
                         <h3 className="modal-title">Editar Equipo — {editingProduct.id}</h3>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
