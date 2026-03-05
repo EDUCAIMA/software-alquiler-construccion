@@ -3,7 +3,7 @@ import {
     FilePlus, CheckCircle, X, ChevronRight, Plus,
     MapPin, Package, Truck, CreditCard, Clock
 } from 'lucide-react';
-import { fmtCOP } from './CotizacionesHelpers';
+import { fmtCOP } from './cotizacionesUtils';
 
 // Componente independiente para evitar re-renders en cascada desde Cotizaciones.jsx
 export default function NuevaCotizacionModal({ onClose, onSave, clients, products }) {
