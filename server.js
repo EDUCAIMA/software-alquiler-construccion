@@ -81,9 +81,16 @@ async function initDB() {
         status VARCHAR(50) DEFAULT 'Pending',
         date DATE DEFAULT CURRENT_DATE,
         paid_date DATE,
-        items JSONB DEFAULT '[]'
+        items JSONB DEFAULT '[]',
+        cotizacion_id VARCHAR(50),
+        remision_enabled BOOLEAN DEFAULT false,
+        remision_creada BOOLEAN DEFAULT false
       )
     `);
+        // Migración: agregar columnas si no existen (idempotente)
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cotizacion_id VARCHAR(50)`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS remision_enabled BOOLEAN DEFAULT false`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS remision_creada BOOLEAN DEFAULT false`);
 
         // --- Cotizaciones ---
         await client.query(`
@@ -229,7 +236,10 @@ const mapInvoice = r => ({
     amount: Number(r.amount), status: r.status,
     date: r.date ? r.date.toISOString().split('T')[0] : '',
     paidDate: r.paid_date ? r.paid_date.toISOString().split('T')[0] : null,
-    items: r.items || []
+    items: r.items || [],
+    cotizacionId: r.cotizacion_id || null,
+    remisionEnabled: r.remision_enabled || false,
+    remisionCreada: r.remision_creada || false
 });
 
 const mapCot = r => ({
@@ -370,10 +380,11 @@ app.get('/api/invoices', async (req, res) => {
 
 app.post('/api/invoices', async (req, res) => {
     try {
-        const { id, clientId, obraId, amount, status, date, paidDate, items } = req.body;
+        const { id, clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada } = req.body;
         await pool.query(
-            `INSERT INTO invoices (id,client_id,obra_id,amount,status,date,paid_date,items) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-            [id, clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || [])]
+            `INSERT INTO invoices (id,client_id,obra_id,amount,status,date,paid_date,items,cotizacion_id,remision_enabled,remision_creada) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            [id, clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
+                cotizacionId || null, remisionEnabled || false, remisionCreada || false]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -381,10 +392,11 @@ app.post('/api/invoices', async (req, res) => {
 
 app.put('/api/invoices/:id', async (req, res) => {
     try {
-        const { clientId, obraId, amount, status, date, paidDate, items } = req.body;
+        const { clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada } = req.body;
         await pool.query(
-            `UPDATE invoices SET client_id=$1,obra_id=$2,amount=$3,status=$4,date=$5,paid_date=$6,items=$7 WHERE id=$8`,
-            [clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []), req.params.id]
+            `UPDATE invoices SET client_id=$1,obra_id=$2,amount=$3,status=$4,date=$5,paid_date=$6,items=$7,cotizacion_id=$8,remision_enabled=$9,remision_creada=$10 WHERE id=$11`,
+            [clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
+                cotizacionId || null, remisionEnabled || false, remisionCreada || false, req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
