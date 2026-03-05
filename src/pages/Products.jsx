@@ -191,7 +191,7 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
                                 ['Proveedor', product.proveedor || 'N/A'],
                                 ['Fecha de Compra', product.fechaCompra || 'N/A'],
                                 ['Costo Adquisición', product.costoAdquisicion ? `$${Number(product.costoAdquisicion).toLocaleString()}` : 'N/A'],
-                                ['Tarifa Alquiler/día', `$${(product.value || 0).toLocaleString()}`],
+                                ['Tarifa Alquiler', `$${(product.value || 0).toLocaleString()} / ${product.tipoCobro || 'Día'}`],
                             ].map(([k, v]) => (
                                 <div key={k}>
                                     <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>{k}</div>
@@ -352,7 +352,7 @@ export default function Products() {
     const [hojaProduct, setHojaProduct] = useState(null);
     const [bajaProduct, setBajaProduct] = useState(null);
     const [deleteProduct_, setDeleteProduct] = useState(null);
-    const [newProduct, setNewProduct] = useState({ name: '', category: '', value: '', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
+    const [newProduct, setNewProduct] = useState({ name: '', category: '', value: '', tipoCobro: 'Día', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
     const fileInputRef = useRef(null);
 
     const hasPendingMaint = (productId) =>
@@ -362,7 +362,7 @@ export default function Products() {
         if (newProduct.name) {
             addProduct({ ...newProduct, value: Number(newProduct.value), totalStock: Number(newProduct.totalStock), image: newProduct.image || 'https://placehold.co/150x150/e2e8f0/475569?text=Equipo' });
             setShowAddModal(false);
-            setNewProduct({ name: '', category: '', value: '', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
+            setNewProduct({ name: '', category: '', value: '', tipoCobro: 'Día', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
         }
     };
 
@@ -391,7 +391,7 @@ export default function Products() {
                         <thead>
                             <tr>
                                 <th>Cod.</th><th>Imagen</th><th>Nombre</th><th>Categoría</th>
-                                <th>Stock</th><th>Valor/Día</th><th>Estado</th><th>Acción</th>
+                                <th>Stock</th><th>Tarifa Alquiler</th><th>Estado</th><th>Acción</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -420,7 +420,7 @@ export default function Products() {
                                             <div style={{ fontWeight: 600 }}>Total: {p.totalStock}</div>
                                             <div className="text-muted" style={{ fontSize: '0.8rem' }}>Disp: {p.availableStock}</div>
                                         </td>
-                                        <td>${p.value.toLocaleString()}</td>
+                                        <td>${p.value.toLocaleString()} / {p.tipoCobro || 'Día'}</td>
                                         <td>
                                             {isBaja ? (
                                                 <div className="badge" style={{ background: 'rgba(249,115,22,0.15)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)', fontSize: '0.72rem' }}>Dado de baja</div>
@@ -508,10 +508,18 @@ export default function Products() {
                                 </select>
                             </div>
                             <div className="input-group" style={{ margin: 0 }}>
-                                <label className="input-label">Valor Alquiler/día ($)</label>
-                                <input type="number" className="input-base" value={newProduct.value}
-                                    onChange={e => setNewProduct(prev => ({ ...prev, value: e.target.value }))}
-                                    placeholder="Ej. 15000" />
+                                <label className="input-label">Tarifa Alquiler ($)</label>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input type="number" className="input-base" value={newProduct.value}
+                                        onChange={e => setNewProduct(prev => ({ ...prev, value: e.target.value }))}
+                                        placeholder="Ej. 15000" style={{ flex: 1 }} />
+                                    <select className="input-base" style={{ width: 110, padding: '0.6rem' }} value={newProduct.tipoCobro || 'Día'}
+                                        onChange={e => setNewProduct(prev => ({ ...prev, tipoCobro: e.target.value }))}>
+                                        <option value="Día">Día</option>
+                                        <option value="Hora">Hora</option>
+                                        <option value="Servicio">Servicio</option>
+                                    </select>
+                                </div>
                             </div>
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Stock Total</label>
@@ -555,9 +563,17 @@ export default function Products() {
                                 </select>
                             </div>
                             <div className="input-group" style={{ margin: 0 }}>
-                                <label className="input-label">Valor/día ($)</label>
-                                <input type="number" className="input-base" value={editingProduct.value}
-                                    onChange={e => setEditingProduct(prev => ({ ...prev, value: e.target.value }))} />
+                                <label className="input-label">Tarifa Alquiler ($)</label>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input type="number" className="input-base" value={editingProduct.value}
+                                        onChange={e => setEditingProduct(prev => ({ ...prev, value: e.target.value }))} style={{ flex: 1 }} />
+                                    <select className="input-base" style={{ width: 110, padding: '0.6rem' }} value={editingProduct.tipoCobro || 'Día'}
+                                        onChange={e => setEditingProduct(prev => ({ ...prev, tipoCobro: e.target.value }))}>
+                                        <option value="Día">Día</option>
+                                        <option value="Hora">Hora</option>
+                                        <option value="Servicio">Servicio</option>
+                                    </select>
+                                </div>
                             </div>
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Stock Total</label>

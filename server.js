@@ -47,46 +47,48 @@ async function initDB() {
         proximo_mantenimiento DATE
       )
     `);
+        // Migración: agregar columna tipo_cobro si no existe
+        await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS tipo_cobro VARCHAR(50) DEFAULT 'Día'`);
 
         // --- Clientes (obras guardadas como JSONB para mantener la estructura actual) ---
         await client.query(`
-      CREATE TABLE IF NOT EXISTS clients (
-        id VARCHAR(50) PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        tipo_persona VARCHAR(50),
-        nit VARCHAR(50),
-        regimen VARCHAR(50),
-        responsable_iva BOOLEAN DEFAULT false,
-        porc_iva NUMERIC(5,2) DEFAULT 0,
-        porc_retencion NUMERIC(5,2) DEFAULT 0,
-        email VARCHAR(255),
-        phone VARCHAR(50),
-        direccion VARCHAR(255),
-        ciudad VARCHAR(100),
-        departamento VARCHAR(100),
-        contacto_principal VARCHAR(255),
-        joined DATE DEFAULT CURRENT_DATE,
-        debt NUMERIC(12,2) DEFAULT 0,
-        obras JSONB DEFAULT '[]'
-      )
-    `);
+      CREATE TABLE IF NOT EXISTS clients(
+            id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            tipo_persona VARCHAR(50),
+            nit VARCHAR(50),
+            regimen VARCHAR(50),
+            responsable_iva BOOLEAN DEFAULT false,
+            porc_iva NUMERIC(5, 2) DEFAULT 0,
+            porc_retencion NUMERIC(5, 2) DEFAULT 0,
+            email VARCHAR(255),
+            phone VARCHAR(50),
+            direccion VARCHAR(255),
+            ciudad VARCHAR(100),
+            departamento VARCHAR(100),
+            contacto_principal VARCHAR(255),
+            joined DATE DEFAULT CURRENT_DATE,
+            debt NUMERIC(12, 2) DEFAULT 0,
+            obras JSONB DEFAULT '[]'
+        )
+            `);
 
         // --- Facturas ---
         await client.query(`
-      CREATE TABLE IF NOT EXISTS invoices (
-        id VARCHAR(50) PRIMARY KEY,
-        client_id VARCHAR(50),
-        obra_id VARCHAR(50),
-        amount NUMERIC(15,2) DEFAULT 0,
-        status VARCHAR(50) DEFAULT 'Pending',
-        date DATE DEFAULT CURRENT_DATE,
-        paid_date DATE,
-        items JSONB DEFAULT '[]',
-        cotizacion_id VARCHAR(50),
-        remision_enabled BOOLEAN DEFAULT false,
-        remision_creada BOOLEAN DEFAULT false
-      )
-    `);
+      CREATE TABLE IF NOT EXISTS invoices(
+                id VARCHAR(50) PRIMARY KEY,
+                client_id VARCHAR(50),
+                obra_id VARCHAR(50),
+                amount NUMERIC(15, 2) DEFAULT 0,
+                status VARCHAR(50) DEFAULT 'Pending',
+                date DATE DEFAULT CURRENT_DATE,
+                paid_date DATE,
+                items JSONB DEFAULT '[]',
+                cotizacion_id VARCHAR(50),
+                remision_enabled BOOLEAN DEFAULT false,
+                remision_creada BOOLEAN DEFAULT false
+            )
+            `);
         // Migración: agregar columnas si no existen (idempotente)
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cotizacion_id VARCHAR(50)`);
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS remision_enabled BOOLEAN DEFAULT false`);
@@ -94,108 +96,108 @@ async function initDB() {
 
         // --- Cotizaciones ---
         await client.query(`
-      CREATE TABLE IF NOT EXISTS cotizaciones (
-        id VARCHAR(50) PRIMARY KEY,
-        client_id VARCHAR(50),
-        obra_id VARCHAR(50),
-        fecha DATE DEFAULT CURRENT_DATE,
-        validez_dias INTEGER DEFAULT 15,
-        metodo_pago VARCHAR(100),
-        responsable_transporte VARCHAR(100),
-        plazo_entrega VARCHAR(100),
-        transporte NUMERIC(12,2) DEFAULT 0,
-        notas TEXT,
-        estado VARCHAR(50) DEFAULT 'Borrador',
-        items JSONB DEFAULT '[]',
-        habeas_data BOOLEAN DEFAULT false,
-        habeas_data_timestamp TIMESTAMPTZ,
-        firma TEXT,
-        foto TEXT
-      )
-    `);
+      CREATE TABLE IF NOT EXISTS cotizaciones(
+                id VARCHAR(50) PRIMARY KEY,
+                client_id VARCHAR(50),
+                obra_id VARCHAR(50),
+                fecha DATE DEFAULT CURRENT_DATE,
+                validez_dias INTEGER DEFAULT 15,
+                metodo_pago VARCHAR(100),
+                responsable_transporte VARCHAR(100),
+                plazo_entrega VARCHAR(100),
+                transporte NUMERIC(12, 2) DEFAULT 0,
+                notas TEXT,
+                estado VARCHAR(50) DEFAULT 'Borrador',
+                items JSONB DEFAULT '[]',
+                habeas_data BOOLEAN DEFAULT false,
+                habeas_data_timestamp TIMESTAMPTZ,
+                firma TEXT,
+                foto TEXT
+            )
+            `);
 
         // --- Remisiones ---
         await client.query(`
-      CREATE TABLE IF NOT EXISTS remisiones (
-        id VARCHAR(50) PRIMARY KEY,
-        client_id VARCHAR(50),
-        obra_id VARCHAR(50),
-        fecha DATE DEFAULT CURRENT_DATE,
-        transporte NUMERIC(12,2) DEFAULT 0,
-        estado VARCHAR(50) DEFAULT 'Activa',
-        notas TEXT,
-        items JSONB DEFAULT '[]'
-      )
-    `);
+      CREATE TABLE IF NOT EXISTS remisiones(
+                id VARCHAR(50) PRIMARY KEY,
+                client_id VARCHAR(50),
+                obra_id VARCHAR(50),
+                fecha DATE DEFAULT CURRENT_DATE,
+                transporte NUMERIC(12, 2) DEFAULT 0,
+                estado VARCHAR(50) DEFAULT 'Activa',
+                notas TEXT,
+                items JSONB DEFAULT '[]'
+            )
+            `);
 
         // --- Mantenimientos ---
         await client.query(`
-      CREATE TABLE IF NOT EXISTS maintenances (
-        id VARCHAR(50) PRIMARY KEY,
-        product_id VARCHAR(50),
-        type VARCHAR(100),
-        description TEXT,
-        status VARCHAR(50) DEFAULT 'Pendiente',
-        date DATE DEFAULT CURRENT_DATE,
-        cost NUMERIC(12,2) DEFAULT 0
-      )
-    `);
+      CREATE TABLE IF NOT EXISTS maintenances(
+                id VARCHAR(50) PRIMARY KEY,
+                product_id VARCHAR(50),
+                type VARCHAR(100),
+                description TEXT,
+                status VARCHAR(50) DEFAULT 'Pendiente',
+                date DATE DEFAULT CURRENT_DATE,
+                cost NUMERIC(12, 2) DEFAULT 0
+            )
+            `);
 
         // --- Gastos ---
         await client.query(`
-      CREATE TABLE IF NOT EXISTS gastos (
-        id VARCHAR(50) PRIMARY KEY,
-        fecha DATE DEFAULT CURRENT_DATE,
-        concepto VARCHAR(255),
-        proveedor VARCHAR(255),
-        categoria VARCHAR(100),
-        monto NUMERIC(12,2) DEFAULT 0,
-        iva NUMERIC(12,2) DEFAULT 0,
-        estado VARCHAR(50) DEFAULT 'Pendiente',
-        notas TEXT
-      )
-    `);
+      CREATE TABLE IF NOT EXISTS gastos(
+                id VARCHAR(50) PRIMARY KEY,
+                fecha DATE DEFAULT CURRENT_DATE,
+                concepto VARCHAR(255),
+                proveedor VARCHAR(255),
+                categoria VARCHAR(100),
+                monto NUMERIC(12, 2) DEFAULT 0,
+                iva NUMERIC(12, 2) DEFAULT 0,
+                estado VARCHAR(50) DEFAULT 'Pendiente',
+                notas TEXT
+            )
+            `);
 
         // --- Empleados ---
         await client.query(`
-      CREATE TABLE IF NOT EXISTS empleados (
-        id VARCHAR(50) PRIMARY KEY,
-        nombre VARCHAR(255) NOT NULL,
-        cargo VARCHAR(255),
-        salario_dia NUMERIC(12,2) DEFAULT 0,
-        tipo VARCHAR(50) DEFAULT 'Fijo',
-        activo BOOLEAN DEFAULT true
-      )
-    `);
+      CREATE TABLE IF NOT EXISTS empleados(
+                id VARCHAR(50) PRIMARY KEY,
+                nombre VARCHAR(255) NOT NULL,
+                cargo VARCHAR(255),
+                salario_dia NUMERIC(12, 2) DEFAULT 0,
+                tipo VARCHAR(50) DEFAULT 'Fijo',
+                activo BOOLEAN DEFAULT true
+            )
+            `);
 
         // --- Liquidaciones ---
         await client.query(`
-      CREATE TABLE IF NOT EXISTS liquidaciones (
-        id VARCHAR(50) PRIMARY KEY,
-        empleado_id VARCHAR(50),
-        periodo VARCHAR(100),
-        dias_trabajados INTEGER DEFAULT 0,
-        horas_extra NUMERIC(6,2) DEFAULT 0,
-        valor_hora_extra NUMERIC(12,2) DEFAULT 0,
-        deduccion_salud NUMERIC(5,2) DEFAULT 4,
-        deduccion_pension NUMERIC(5,2) DEFAULT 4,
-        fondo_solidaridad NUMERIC(5,2) DEFAULT 0,
-        bonificaciones NUMERIC(12,2) DEFAULT 0,
-        estado VARCHAR(50) DEFAULT 'Pendiente'
-      )
-    `);
+      CREATE TABLE IF NOT EXISTS liquidaciones(
+                id VARCHAR(50) PRIMARY KEY,
+                empleado_id VARCHAR(50),
+                periodo VARCHAR(100),
+                dias_trabajados INTEGER DEFAULT 0,
+                horas_extra NUMERIC(6, 2) DEFAULT 0,
+                valor_hora_extra NUMERIC(12, 2) DEFAULT 0,
+                deduccion_salud NUMERIC(5, 2) DEFAULT 4,
+                deduccion_pension NUMERIC(5, 2) DEFAULT 4,
+                fondo_solidaridad NUMERIC(5, 2) DEFAULT 0,
+                bonificaciones NUMERIC(12, 2) DEFAULT 0,
+                estado VARCHAR(50) DEFAULT 'Pendiente'
+            )
+            `);
 
         // --- Seed inicial de products si está vacío ---
         const { rows: pRows } = await client.query('SELECT COUNT(*) FROM products');
         if (parseInt(pRows[0].count) === 0) {
             await client.query(`
-        INSERT INTO products (id, name, total_stock, available_stock, category, value, image) VALUES
-        ('P-101','Excavadora Cat 320',3,2,'Heavy Machinery',350000,'https://images.unsplash.com/photo-1541888087405-c8108c48a8f1?auto=format&fit=crop&q=80&w=150'),
-        ('P-102','Martillo Demoledor Bosch',5,5,'Power Tools',45000,'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&q=80&w=150'),
-        ('P-103','Planta Eléctrica 10kW',2,2,'Equipment',85000,'https://images.unsplash.com/photo-1580983546051-7649d214a1e9?auto=format&fit=crop&q=80&w=150'),
-        ('P-104','Andamio Tubular',100,60,'Structures',15000,'https://images.unsplash.com/photo-1533038676239-502a507fa733?auto=format&fit=crop&q=80&w=150'),
-        ('P-105','Mezcladora de Concreto 1 Bulto',4,3,'Machinery',65000,'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=150')
-      `);
+        INSERT INTO products(id, name, total_stock, available_stock, category, value, image) VALUES
+            ('P-101', 'Excavadora Cat 320', 3, 2, 'Heavy Machinery', 350000, 'https://images.unsplash.com/photo-1541888087405-c8108c48a8f1?auto=format&fit=crop&q=80&w=150'),
+            ('P-102', 'Martillo Demoledor Bosch', 5, 5, 'Power Tools', 45000, 'https://images.unsplash.com/photo-1504148455328-c376907d081c?auto=format&fit=crop&q=80&w=150'),
+            ('P-103', 'Planta Eléctrica 10kW', 2, 2, 'Equipment', 85000, 'https://images.unsplash.com/photo-1580983546051-7649d214a1e9?auto=format&fit=crop&q=80&w=150'),
+            ('P-104', 'Andamio Tubular', 100, 60, 'Structures', 15000, 'https://images.unsplash.com/photo-1533038676239-502a507fa733?auto=format&fit=crop&q=80&w=150'),
+            ('P-105', 'Mezcladora de Concreto 1 Bulto', 4, 3, 'Machinery', 65000, 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&q=80&w=150')
+                `);
             console.log('✅ Productos de muestra insertados.');
         }
 
@@ -216,7 +218,8 @@ const mapProduct = r => ({
     proveedor: r.proveedor,
     fechaCompra: r.fecha_compra ? r.fecha_compra.toISOString().split('T')[0] : '',
     costoAdquisicion: r.costo_adquisicion ? Number(r.costo_adquisicion) : '',
-    proximoMantenimiento: r.proximo_mantenimiento ? r.proximo_mantenimiento.toISOString().split('T')[0] : ''
+    proximoMantenimiento: r.proximo_mantenimiento ? r.proximo_mantenimiento.toISOString().split('T')[0] : '',
+    tipoCobro: r.tipo_cobro || 'Día'
 });
 
 const mapClient = r => ({
@@ -297,12 +300,12 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
     try {
-        const { id, name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento } = req.body;
+        const { id, name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento, tipoCobro } = req.body;
         await pool.query(
-            `INSERT INTO products (id,name,category,value,total_stock,available_stock,image,proveedor,fecha_compra,costo_adquisicion,proximo_mantenimiento)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            `INSERT INTO products(id, name, category, value, total_stock, available_stock, image, proveedor, fecha_compra, costo_adquisicion, proximo_mantenimiento, tipo_cobro)
+       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
             [id, name, category, value, totalStock, availableStock, image, proveedor,
-                fechaCompra || null, costoAdquisicion || null, proximoMantenimiento || null]
+                fechaCompra || null, costoAdquisicion || null, proximoMantenimiento || null, tipoCobro || 'Día']
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -310,11 +313,11 @@ app.post('/api/products', async (req, res) => {
 
 app.put('/api/products/:id', async (req, res) => {
     try {
-        const { name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento } = req.body;
+        const { name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento, tipoCobro } = req.body;
         await pool.query(
-            `UPDATE products SET name=$1,category=$2,value=$3,total_stock=$4,available_stock=$5,image=$6,proveedor=$7,fecha_compra=$8,costo_adquisicion=$9,proximo_mantenimiento=$10 WHERE id=$11`,
+            `UPDATE products SET name = $1, category = $2, value = $3, total_stock = $4, available_stock = $5, image = $6, proveedor = $7, fecha_compra = $8, costo_adquisicion = $9, proximo_mantenimiento = $10, tipo_cobro = $11 WHERE id = $12`,
             [name, category, value, totalStock, availableStock, image, proveedor,
-                fechaCompra || null, costoAdquisicion || null, proximoMantenimiento || null, req.params.id]
+                fechaCompra || null, costoAdquisicion || null, proximoMantenimiento || null, tipoCobro || 'Día', req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -340,8 +343,8 @@ app.post('/api/clients', async (req, res) => {
         const { id, name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
             email, phone, direccion, ciudad, departamento, contactoPrincipal, joined, debt, obras } = req.body;
         await pool.query(
-            `INSERT INTO clients (id,name,tipo_persona,nit,regimen,responsable_iva,porc_iva,porc_retencion,email,phone,direccion,ciudad,departamento,contacto_principal,joined,debt,obras)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+            `INSERT INTO clients(id, name, tipo_persona, nit, regimen, responsable_iva, porc_iva, porc_retencion, email, phone, direccion, ciudad, departamento, contacto_principal, joined, debt, obras)
+       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
             [id, name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
                 email, phone, direccion, ciudad, departamento, contactoPrincipal, joined || null, debt || 0, JSON.stringify(obras || [])]
         );
@@ -354,8 +357,8 @@ app.put('/api/clients/:id', async (req, res) => {
         const { name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
             email, phone, direccion, ciudad, departamento, contactoPrincipal, joined, debt, obras } = req.body;
         await pool.query(
-            `UPDATE clients SET name=$1,tipo_persona=$2,nit=$3,regimen=$4,responsable_iva=$5,porc_iva=$6,porc_retencion=$7,
-       email=$8,phone=$9,direccion=$10,ciudad=$11,departamento=$12,contacto_principal=$13,joined=$14,debt=$15,obras=$16 WHERE id=$17`,
+            `UPDATE clients SET name = $1, tipo_persona = $2, nit = $3, regimen = $4, responsable_iva = $5, porc_iva = $6, porc_retencion = $7,
+            email = $8, phone = $9, direccion = $10, ciudad = $11, departamento = $12, contacto_principal = $13, joined = $14, debt = $15, obras = $16 WHERE id = $17`,
             [name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
                 email, phone, direccion, ciudad, departamento, contactoPrincipal, joined || null, debt || 0, JSON.stringify(obras || []), req.params.id]
         );
@@ -382,7 +385,7 @@ app.post('/api/invoices', async (req, res) => {
     try {
         const { id, clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada } = req.body;
         await pool.query(
-            `INSERT INTO invoices (id,client_id,obra_id,amount,status,date,paid_date,items,cotizacion_id,remision_enabled,remision_creada) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            `INSERT INTO invoices(id, client_id, obra_id, amount, status, date, paid_date, items, cotizacion_id, remision_enabled, remision_creada) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
             [id, clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
                 cotizacionId || null, remisionEnabled || false, remisionCreada || false]
         );
@@ -394,7 +397,7 @@ app.put('/api/invoices/:id', async (req, res) => {
     try {
         const { clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada } = req.body;
         await pool.query(
-            `UPDATE invoices SET client_id=$1,obra_id=$2,amount=$3,status=$4,date=$5,paid_date=$6,items=$7,cotizacion_id=$8,remision_enabled=$9,remision_creada=$10 WHERE id=$11`,
+            `UPDATE invoices SET client_id = $1, obra_id = $2, amount = $3, status = $4, date = $5, paid_date = $6, items = $7, cotizacion_id = $8, remision_enabled = $9, remision_creada = $10 WHERE id = $11`,
             [clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
                 cotizacionId || null, remisionEnabled || false, remisionCreada || false, req.params.id]
         );
@@ -415,8 +418,8 @@ app.post('/api/cotizaciones', async (req, res) => {
         const { id, clientId, obraId, fecha, validezDias, metodoPago, responsableTransporte,
             plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto } = req.body;
         await pool.query(
-            `INSERT INTO cotizaciones (id,client_id,obra_id,fecha,validez_dias,metodo_pago,responsable_transporte,plazo_entrega,transporte,notas,estado,items,habeas_data,habeas_data_timestamp,firma,foto)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+            `INSERT INTO cotizaciones(id, client_id, obra_id, fecha, validez_dias, metodo_pago, responsable_transporte, plazo_entrega, transporte, notas, estado, items, habeas_data, habeas_data_timestamp, firma, foto)
+       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
             [id, clientId, obraId, fecha || null, validezDias, metodoPago, responsableTransporte,
                 plazoEntrega, transporte, notas, estado, JSON.stringify(items || []),
                 habeasData || false, habeasDataTimestamp || null, firma || null, foto || null]
@@ -430,7 +433,7 @@ app.put('/api/cotizaciones/:id', async (req, res) => {
         const { clientId, obraId, fecha, validezDias, metodoPago, responsableTransporte,
             plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto } = req.body;
         await pool.query(
-            `UPDATE cotizaciones SET client_id=$1,obra_id=$2,fecha=$3,validez_dias=$4,metodo_pago=$5,responsable_transporte=$6,plazo_entrega=$7,transporte=$8,notas=$9,estado=$10,items=$11,habeas_data=$12,habeas_data_timestamp=$13,firma=$14,foto=$15 WHERE id=$16`,
+            `UPDATE cotizaciones SET client_id = $1, obra_id = $2, fecha = $3, validez_dias = $4, metodo_pago = $5, responsable_transporte = $6, plazo_entrega = $7, transporte = $8, notas = $9, estado = $10, items = $11, habeas_data = $12, habeas_data_timestamp = $13, firma = $14, foto = $15 WHERE id = $16`,
             [clientId, obraId, fecha || null, validezDias, metodoPago, responsableTransporte,
                 plazoEntrega, transporte, notas, estado, JSON.stringify(items || []),
                 habeasData || false, habeasDataTimestamp || null, firma || null, foto || null, req.params.id]
@@ -451,7 +454,7 @@ app.post('/api/remisiones', async (req, res) => {
     try {
         const { id, clientId, obraId, fecha, transporte, estado, notas, items } = req.body;
         await pool.query(
-            `INSERT INTO remisiones (id,client_id,obra_id,fecha,transporte,estado,notas,items) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            `INSERT INTO remisiones(id, client_id, obra_id, fecha, transporte, estado, notas, items) VALUES($1, $2, $3, $4, $5, $6, $7, $8)`,
             [id, clientId, obraId, fecha || null, transporte, estado, notas, JSON.stringify(items || [])]
         );
         res.json({ success: true });
@@ -462,7 +465,7 @@ app.put('/api/remisiones/:id', async (req, res) => {
     try {
         const { clientId, obraId, fecha, transporte, estado, notas, items } = req.body;
         await pool.query(
-            `UPDATE remisiones SET client_id=$1,obra_id=$2,fecha=$3,transporte=$4,estado=$5,notas=$6,items=$7 WHERE id=$8`,
+            `UPDATE remisiones SET client_id = $1, obra_id = $2, fecha = $3, transporte = $4, estado = $5, notas = $6, items = $7 WHERE id = $8`,
             [clientId, obraId, fecha || null, transporte, estado, notas, JSON.stringify(items || []), req.params.id]
         );
         res.json({ success: true });
@@ -481,7 +484,7 @@ app.post('/api/maintenances', async (req, res) => {
     try {
         const { id, productId, type, description, status, date, cost } = req.body;
         await pool.query(
-            `INSERT INTO maintenances (id,product_id,type,description,status,date,cost) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            `INSERT INTO maintenances(id, product_id, type, description, status, date, cost) VALUES($1, $2, $3, $4, $5, $6, $7)`,
             [id, productId, type, description, status, date || null, cost]
         );
         res.json({ success: true });
@@ -492,7 +495,7 @@ app.put('/api/maintenances/:id', async (req, res) => {
     try {
         const { productId, type, description, status, date, cost } = req.body;
         await pool.query(
-            `UPDATE maintenances SET product_id=$1,type=$2,description=$3,status=$4,date=$5,cost=$6 WHERE id=$7`,
+            `UPDATE maintenances SET product_id = $1, type = $2, description = $3, status = $4, date = $5, cost = $6 WHERE id = $7`,
             [productId, type, description, status, date || null, cost, req.params.id]
         );
         res.json({ success: true });
@@ -511,7 +514,7 @@ app.post('/api/gastos', async (req, res) => {
     try {
         const { id, fecha, concepto, proveedor, categoria, monto, iva, estado, notas } = req.body;
         await pool.query(
-            `INSERT INTO gastos (id,fecha,concepto,proveedor,categoria,monto,iva,estado,notas) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            `INSERT INTO gastos(id, fecha, concepto, proveedor, categoria, monto, iva, estado, notas) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
             [id, fecha || null, concepto, proveedor, categoria, monto, iva, estado, notas]
         );
         res.json({ success: true });
@@ -522,7 +525,7 @@ app.put('/api/gastos/:id', async (req, res) => {
     try {
         const { fecha, concepto, proveedor, categoria, monto, iva, estado, notas } = req.body;
         await pool.query(
-            `UPDATE gastos SET fecha=$1,concepto=$2,proveedor=$3,categoria=$4,monto=$5,iva=$6,estado=$7,notas=$8 WHERE id=$9`,
+            `UPDATE gastos SET fecha = $1, concepto = $2, proveedor = $3, categoria = $4, monto = $5, iva = $6, estado = $7, notas = $8 WHERE id = $9`,
             [fecha || null, concepto, proveedor, categoria, monto, iva, estado, notas, req.params.id]
         );
         res.json({ success: true });
@@ -541,7 +544,7 @@ app.post('/api/empleados', async (req, res) => {
     try {
         const { id, nombre, cargo, salarioDia, tipo, activo } = req.body;
         await pool.query(
-            `INSERT INTO empleados (id,nombre,cargo,salario_dia,tipo,activo) VALUES ($1,$2,$3,$4,$5,$6)`,
+            `INSERT INTO empleados(id, nombre, cargo, salario_dia, tipo, activo) VALUES($1, $2, $3, $4, $5, $6)`,
             [id, nombre, cargo, salarioDia, tipo, activo !== undefined ? activo : true]
         );
         res.json({ success: true });
@@ -561,8 +564,8 @@ app.post('/api/liquidaciones', async (req, res) => {
         const { id, empleadoId, periodo, diasTrabajados, horasExtra, valorHoraExtra,
             deduccionSalud, deduccionPension, fondoSolidaridad, bonificaciones, estado } = req.body;
         await pool.query(
-            `INSERT INTO liquidaciones (id,empleado_id,periodo,dias_trabajados,horas_extra,valor_hora_extra,deduccion_salud,deduccion_pension,fondo_solidaridad,bonificaciones,estado)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            `INSERT INTO liquidaciones(id, empleado_id, periodo, dias_trabajados, horas_extra, valor_hora_extra, deduccion_salud, deduccion_pension, fondo_solidaridad, bonificaciones, estado)
+       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
             [id, empleadoId, periodo, diasTrabajados, horasExtra, valorHoraExtra,
                 deduccionSalud, deduccionPension, fondoSolidaridad, bonificaciones, estado]
         );
@@ -575,7 +578,7 @@ app.put('/api/liquidaciones/:id', async (req, res) => {
         const { empleadoId, periodo, diasTrabajados, horasExtra, valorHoraExtra,
             deduccionSalud, deduccionPension, fondoSolidaridad, bonificaciones, estado } = req.body;
         await pool.query(
-            `UPDATE liquidaciones SET empleado_id=$1,periodo=$2,dias_trabajados=$3,horas_extra=$4,valor_hora_extra=$5,deduccion_salud=$6,deduccion_pension=$7,fondo_solidaridad=$8,bonificaciones=$9,estado=$10 WHERE id=$11`,
+            `UPDATE liquidaciones SET empleado_id = $1, periodo = $2, dias_trabajados = $3, horas_extra = $4, valor_hora_extra = $5, deduccion_salud = $6, deduccion_pension = $7, fondo_solidaridad = $8, bonificaciones = $9, estado = $10 WHERE id = $11`,
             [empleadoId, periodo, diasTrabajados, horasExtra, valorHoraExtra,
                 deduccionSalud, deduccionPension, fondoSolidaridad, bonificaciones, estado, req.params.id]
         );
