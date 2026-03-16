@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { format, eachDayOfInterval, isSunday, isSaturday } from 'date-fns';
 import {
     FilePlus, CheckCircle, X, ChevronRight, Plus,
     MapPin, Package, Truck, CreditCard, Clock
@@ -20,17 +21,36 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
     const [selProd, setSelProd] = useState('');
     const [selCant, setSelCant] = useState(1);
     const [selDias, setSelDias] = useState(1);
+    const [fInicio, setFInicio] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [fFin, setFFin] = useState(format(new Date(), 'yyyy-MM-dd'));
 
     const selectedClient = clients.find(c => c.id === clientId);
     const obras = selectedClient?.obras || [];
 
+    const calculateBillableDays = (start, end, scheme) => {
+        try {
+            const days = eachDayOfInterval({ start: new Date(start), end: new Date(end) });
+            if (scheme === 'Lunes-Sábado') return days.filter(d => !isSunday(d)).length;
+            if (scheme === 'Lunes-Viernes') return days.filter(d => !isSunday(d) && !isSaturday(d)).length;
+            return days.length;
+        } catch (e) { return 1; }
+    };
+
+    useEffect(() => {
+        if (selProd && fInicio && fFin) {
+            const prod = products.find(p => p.id === selProd);
+            const scheme = prod?.esquemaCobro || 'Calendario';
+            setSelDias(calculateBillableDays(fInicio, fFin, scheme));
+        }
+    }, [selProd, fInicio, fFin, products]);
+
     // Cálculos con protección total contra NaN/undefined
     const subtotal = items.reduce((s, i) => s + (Number(i.cantidad) || 0) * (Number(i.dias) || 0) * (Number(i.tarifaDia) || 0), 0);
-    const porcIVA = Number(selectedClient?.porcIVA) || 0;
+    const porcIVA = selectedClient?.responsableIVA ? (Number(selectedClient?.porcIVA) || 0) : 0;
     const porcRet = Number(selectedClient?.porcRetencion) || 0;
     const iva = Math.round(subtotal * porcIVA / 100);
     const ret = Math.round(subtotal * porcRet / 100);
-    const total = subtotal + iva - ret + (Number(transporte) || 0);
+    const total = subtotal + iva + ret + (Number(transporte) || 0);
 
     const addItem = () => {
         if (!selProd) return;
@@ -170,28 +190,34 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                 <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <Package size={16} color="#3b82f6" /> Agregar Equipo
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px auto', gap: '1rem', alignItems: 'end' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 125px 125px 55px 55px auto', gap: '0.6rem', alignItems: 'end' }}>
                                     <div>
                                         <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Equipo</label>
                                         <select value={selProd} onChange={e => setSelProd(e.target.value)} style={SS}>
-                                            <option value="">Seleccionar…</option>
+                                            <option value="">Selección…</option>
                                             {productosActivos.map(p => (
-                                                <option key={p.id} value={p.id}>
-                                                    {p.name} — {fmtCOP(Number(p.value) || 0)}/día
-                                                </option>
+                                                <option key={p.id} value={p.id}>{p.name}</option>
                                             ))}
                                         </select>
                                     </div>
                                     <div>
+                                        <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Desde</label>
+                                        <input type="date" value={fInicio} onChange={e => setFInicio(e.target.value)} style={{ ...IS, padding: '0.6rem 0.5rem' }} />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Hasta</label>
+                                        <input type="date" value={fFin} onChange={e => setFFin(e.target.value)} style={{ ...IS, padding: '0.6rem 0.5rem' }} />
+                                    </div>
+                                    <div>
                                         <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Cant.</label>
-                                        <input type="number" min="1" value={selCant} onChange={e => setSelCant(Number(e.target.value) || 1)} style={IS} />
+                                        <input type="number" min="1" value={selCant} onChange={e => setSelCant(Number(e.target.value) || 1)} style={{ ...IS, padding: '0.6rem 0.4rem' }} />
                                     </div>
                                     <div>
                                         <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Días</label>
-                                        <input type="number" min="1" value={selDias} onChange={e => setSelDias(Number(e.target.value) || 1)} style={IS} />
+                                        <input type="number" min="1" value={selDias} onChange={e => setSelDias(Number(e.target.value) || 1)} style={{ ...IS, padding: '0.6rem 0.4rem' }} />
                                     </div>
                                     <button onClick={addItem} disabled={!selProd}
-                                        style={{ height: 42, padding: '0 1rem', background: selProd ? '#3b82f6' : '#e2e8f0', color: selProd ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, cursor: selProd ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                                        style={{ height: 42, padding: '0 0.8rem', background: selProd ? '#3b82f6' : '#e2e8f0', color: selProd ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, cursor: selProd ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
                                         <Plus size={18} />
                                     </button>
                                 </div>
@@ -332,7 +358,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', fontSize: '0.9rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>Subtotal alquiler</span><span style={{ fontWeight: 600 }}>{fmtCOP(subtotal)}</span></div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>+ IVA {porcIVA}%</span><span style={{ fontWeight: 600 }}>{fmtCOP(iva)}</span></div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>— Retención {porcRet}%</span><span style={{ fontWeight: 600, color: '#ef4444' }}>-{fmtCOP(ret)}</span></div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>+ Retención {porcRet}%</span><span style={{ fontWeight: 600 }}>{fmtCOP(ret)}</span></div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#64748b' }}>+ Transporte</span><span style={{ fontWeight: 600 }}>{fmtCOP(Number(transporte) || 0)}</span></div>
                                 </div>
                                 <div style={{ background: 'linear-gradient(135deg,#10b981,#059669)', borderRadius: 12, padding: '1.25rem 2rem', textAlign: 'center', boxShadow: '0 4px 14px rgba(16,185,129,0.3)' }}>

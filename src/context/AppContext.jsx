@@ -51,32 +51,40 @@ export const AppProvider = ({ children }) => {
   const [empleados, setEmpleados] = useState([]);
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [settings, setSettings] = useState({ companyName: '', nit: '', phone: '', email: '', logo: '', address: '' });
 
   // ── Carga inicial desde la API ───────────────────────────────────────────
   const reloadAll = useCallback(async () => {
     try {
-      const [p, c, inv, cot, rem, maint, g, emp, liq] = await Promise.all([
-        api.get('/api/products'),
-        api.get('/api/clients'),
-        api.get('/api/invoices'),
-        api.get('/api/cotizaciones'),
-        api.get('/api/remisiones'),
-        api.get('/api/maintenances'),
-        api.get('/api/gastos'),
-        api.get('/api/empleados'),
-        api.get('/api/liquidaciones'),
+      const fetchSafe = (url, fallback) => api.get(url).catch(e => { console.error(`Error fetching ${url}:`, e); return fallback; });
+      
+      const [p, c, inv, cot, rem, maint, g, emp, liq, s] = await Promise.all([
+        fetchSafe('/api/products', []),
+        fetchSafe('/api/clients', []),
+        fetchSafe('/api/invoices', []),
+        fetchSafe('/api/cotizaciones', []),
+        fetchSafe('/api/remisiones', []),
+        fetchSafe('/api/maintenances', []),
+        fetchSafe('/api/gastos', []),
+        fetchSafe('/api/empleados', []),
+        fetchSafe('/api/liquidaciones', []),
+        fetchSafe('/api/settings', { companyName: 'CIELO', logo: '' }),
       ]);
-      if (Array.isArray(p)) setProducts(p);
-      if (Array.isArray(c)) setClients(c);
-      if (Array.isArray(inv)) setInvoices(inv);
-      if (Array.isArray(cot)) setCotizaciones(cot);
-      if (Array.isArray(rem)) setRemisiones(rem);
-      if (Array.isArray(maint)) setMaintenances(maint);
-      if (Array.isArray(g)) setGastos(g);
-      if (Array.isArray(emp)) setEmpleados(emp);
-      if (Array.isArray(liq)) setLiquidaciones(liq);
+      
+      console.log('API Data loaded:', { products: p.length, clients: c.length, settings: s });
+      
+      setProducts(Array.isArray(p) ? p : []);
+      setClients(Array.isArray(c) ? c : []);
+      setInvoices(Array.isArray(inv) ? inv : []);
+      setCotizaciones(Array.isArray(cot) ? cot : []);
+      setRemisiones(Array.isArray(rem) ? rem : []);
+      setMaintenances(Array.isArray(maint) ? maint : []);
+      setGastos(Array.isArray(g) ? g : []);
+      setEmpleados(Array.isArray(emp) ? emp : []);
+      setLiquidaciones(Array.isArray(liq) ? liq : []);
+      if (s && !s.error) setSettings(s);
     } catch (err) {
-      console.error('Error cargando datos desde la API:', err);
+      console.error('Error crítico en reloadAll:', err);
     }
   }, []);
 
@@ -186,7 +194,12 @@ export const AppProvider = ({ children }) => {
 
   // ─── INVOICES CRUD ────────────────────────────────────────────────────────
   const createInvoice = async (invoiceDetails) => {
-    const amount = invoiceDetails.items.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
+    const subtotal = invoiceDetails.items.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
+    const client = clients.find(c => c.id === invoiceDetails.clientId);
+    const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
+    const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
+    const amount = subtotal + iva + ret;
+
     const newInvoice = {
       ...invoiceDetails,
       id: nextId(invoices, 'INV'),
@@ -199,7 +212,6 @@ export const AppProvider = ({ children }) => {
     await api.post('/api/invoices', newInvoice);
 
     // Actualizar deuda del cliente
-    const client = clients.find(c => c.id === invoiceDetails.clientId);
     if (client) {
       await api.put(`/api/clients/${client.id}`, { ...client, debt: client.debt + amount });
     }
@@ -220,7 +232,11 @@ export const AppProvider = ({ children }) => {
       days: i.dias,
       price: i.tarifaDia,
     }));
-    const amount = items.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
+    const subtotal = items.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
+    const client = clients.find(c => c.id === cot.clientId);
+    const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
+    const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
+    const amount = subtotal + iva + ret + (Number(cot.transporte) || 0);
 
     const newInvoice = {
       clientId: cot.clientId,
@@ -237,7 +253,6 @@ export const AppProvider = ({ children }) => {
     await api.post('/api/invoices', newInvoice);
 
     // Actualizar deuda del cliente
-    const client = clients.find(c => c.id === cot.clientId);
     if (client) {
       await api.put(`/api/clients/${client.id}`, { ...client, debt: client.debt + amount });
     }
@@ -432,6 +447,12 @@ export const AppProvider = ({ children }) => {
     logAction('Nómina Pagada', id, '', 'system');
   };
 
+  const updateSettings = async (data) => {
+    await api.put('/api/settings', data);
+    await reloadAll();
+    logAction('Configuración Actualizada', 'Empresa', currentUser?.name, 'system');
+  };
+
   const sendEmail = (email, invoice) => {
     console.log(`[Email] To: ${email} | Invoice: ${invoice.id} | Amount: $${invoice.amount}`);
     logAction('Auto-Email Sent', `Invoice ${invoice.id}`, email, 'system');
@@ -457,6 +478,8 @@ export const AppProvider = ({ children }) => {
       gastos, addGasto, pagarGasto,
       empleados, addEmpleado,
       liquidaciones, addLiquidacion, pagarLiquidacion,
+      // Settings
+      settings, updateSettings,
     }}>
       {children}
     </AppContext.Provider>

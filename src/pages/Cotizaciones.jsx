@@ -202,12 +202,12 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
 }
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
-function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenApproval, onFacturar }) {
+function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, onOpenApproval, onFacturar }) {
     const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
     const subtotal = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0);
-    const iva = Math.round(subtotal * (client?.porcIVA || 0) / 100);
+    const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
     const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
-    const total = subtotal + iva - ret + (cot.transporte || 0);
+    const total = subtotal + iva + ret + (cot.transporte || 0);
 
     return (
         <>
@@ -253,7 +253,7 @@ function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenAppr
 
                     {/* Totals */}
                     <div style={{ background: '#3b82f6', borderRadius: 10, padding: '1rem 1.25rem' }}>
-                        {[['Subtotal', fmtCOP(subtotal)], ['+ IVA', fmtCOP(iva)], ['— Ret.', `-${fmtCOP(ret)}`], ['+ Transporte', fmtCOP(cot.transporte || 0)]].map(([k, v]) => (
+                        {[['Subtotal', fmtCOP(subtotal)], ['+ IVA', fmtCOP(iva)], ['+ Ret.', fmtCOP(ret)], ['+ Transporte', fmtCOP(cot.transporte || 0)]].map(([k, v]) => (
                             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>
                                 <span>{k}</span><span style={{ fontWeight: 700, color: 'white' }}>{v}</span>
                             </div>
@@ -289,7 +289,7 @@ function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenAppr
 
                         {/* Botón Imprimir Cotización — SIEMPRE visible */}
                         <button
-                            onClick={() => generateCotizacionPDF(cot, client, obra)}
+                            onClick={() => generateCotizacionPDF(cot, client, obra, settings)}
                             style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: 'linear-gradient(135deg,#3b82f6,#2563eb)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 4px 12px rgba(59,130,246,0.35)' }}>
                             <Download size={15} /> Imprimir / PDF Cotización
                         </button>
@@ -317,10 +317,14 @@ function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenAppr
                             </button>
                         )}
 
-                        {cot.estado === 'Aprobada' && (
+                        {(cot.estado === 'Aprobada' || cot.estado === 'Facturada') && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981', textAlign: 'center' }}>Documentos Legales:</p>
-                                {[['Contrato de Alquiler', () => generateContratoPDF(cot, client, obra)], ['Pagaré', () => generatePagarePDF(cot, client)], ['Carta de Instrucciones', () => generateCartaPDF(cot, client)]].map(([label, fn]) => (
+                                {[
+                                    ['Contrato de Alquiler', () => generateContratoPDF(cot, client, obra, settings)],
+                                    ['Pagaré', () => generatePagarePDF(cot, client, settings)],
+                                    ['Carta de Instrucciones', () => generateCartaPDF(cot, client, settings)]
+                                ].map(([label, fn]) => (
                                     <button key={label} onClick={fn} style={{ width: '100%', padding: '0.6rem', borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.25)', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                                         <Download size={14} /> {label}
                                     </button>
@@ -349,7 +353,7 @@ function CotDetailPanel({ cot, client, obra, onClose, onUpdateEstado, onOpenAppr
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function Cotizaciones() {
-    const { clients, products, cotizaciones, addCotizacion, actualizarEstadoCotizacion, createInvoiceFromCotizacion } = useAppContext();
+    const { clients, products, cotizaciones, settings, addCotizacion, actualizarEstadoCotizacion, createInvoiceFromCotizacion } = useAppContext();
     const [search, setSearch] = useState('');
     const [filterE, setFilterE] = useState('Todos');
     const [showNew, setShowNew] = useState(false);
@@ -463,7 +467,7 @@ export default function Cotizaciones() {
                                                 </button>
                                             )}
                                             {cot.estado === 'Aprobada' && cot.facturaId && (
-                                                <button onClick={() => generateContratoPDF(cot, getClient(cot.clientId), getObra(cot))} className="btn btn-sm" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.75rem', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                <button onClick={() => generateContratoPDF(cot, getClient(cot.clientId), getObra(cot), settings)} className="btn btn-sm" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.75rem', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
                                                     <Download size={12} /> PDF
                                                 </button>
                                             )}
@@ -488,6 +492,7 @@ export default function Cotizaciones() {
                     cot={selectedCot}
                     client={getClient(selectedCot.clientId)}
                     obra={getObra(selectedCot)}
+                    settings={settings}
                     onClose={() => setSelected(null)}
                     onUpdateEstado={actualizarEstadoCotizacion}
                     onOpenApproval={() => { setApproving(selectedCot.id); setSelected(null); }}

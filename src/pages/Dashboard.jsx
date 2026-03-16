@@ -62,7 +62,7 @@ const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent
 };
 
 export default function Dashboard() {
-  const { clients, products, invoices, maintenances = [] } = useAppContext();
+  const { clients, products, invoices, settings, maintenances = [] } = useAppContext();
   const dashboardRef = useRef(null);
 
   // ── Derived KPIs ────────────────────────────────────────────────────────────
@@ -152,7 +152,7 @@ export default function Dashboard() {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text('CIELO – Panel de Control', 40, 38);
+    doc.text(`${settings?.companyName || 'CIELO'} – Panel de Control`, 40, 38);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(148, 163, 184);
@@ -225,7 +225,7 @@ export default function Dashboard() {
       );
     }
 
-    doc.save(`Dashboard_CIELO_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
+    doc.save(`Dashboard_${settings?.companyName || 'CIELO'}_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
   };
 
   // ── Export to Excel ───────────────────────────────────────────────────────

@@ -192,6 +192,7 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
                                 ['Fecha de Compra', product.fechaCompra || 'N/A'],
                                 ['Costo Adquisición', product.costoAdquisicion ? `$${Number(product.costoAdquisicion).toLocaleString()}` : 'N/A'],
                                 ['Tarifa Alquiler', `$${(product.value || 0).toLocaleString()} / ${product.tipoCobro || 'Día'}`],
+                                ['Esquema Cobro', product.esquemaCobro || 'Calendario'],
                             ].map(([k, v]) => (
                                 <div key={k}>
                                     <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>{k}</div>
@@ -352,7 +353,7 @@ export default function Products() {
     const [hojaProduct, setHojaProduct] = useState(null);
     const [bajaProduct, setBajaProduct] = useState(null);
     const [deleteProduct_, setDeleteProduct] = useState(null);
-    const [newProduct, setNewProduct] = useState({ name: '', category: '', value: '', tipoCobro: 'Día', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
+    const [newProduct, setNewProduct] = useState({ name: '', category: '', value: '', tipoCobro: 'Día', esquemaCobro: 'Calendario', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
     const fileInputRef = useRef(null);
 
     const hasPendingMaint = (productId) =>
@@ -362,7 +363,7 @@ export default function Products() {
         if (newProduct.name) {
             addProduct({ ...newProduct, value: Number(newProduct.value), totalStock: Number(newProduct.totalStock), image: newProduct.image || 'https://placehold.co/150x150/e2e8f0/475569?text=Equipo' });
             setShowAddModal(false);
-            setNewProduct({ name: '', category: '', value: '', tipoCobro: 'Día', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
+            setNewProduct({ name: '', category: '', value: '', tipoCobro: 'Día', esquemaCobro: 'Calendario', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
         }
     };
 
@@ -420,7 +421,12 @@ export default function Products() {
                                             <div style={{ fontWeight: 600 }}>Total: {p.totalStock}</div>
                                             <div className="text-muted" style={{ fontSize: '0.8rem' }}>Disp: {p.availableStock}</div>
                                         </td>
-                                        <td>${p.value.toLocaleString()} / {p.tipoCobro || 'Día'}</td>
+                                        <td>
+                                            <div style={{ fontWeight: 600 }}>${p.value.toLocaleString()} / {p.tipoCobro || 'Día'}</div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
+                                                {p.esquemaCobro === 'Lunes-Sábado' ? 'Lun-Sáb' : p.esquemaCobro === 'Lunes-Viernes' ? 'Lun-Vie' : 'Calendario'}
+                                            </div>
+                                        </td>
                                         <td>
                                             {isBaja ? (
                                                 <div className="badge" style={{ background: 'rgba(249,115,22,0.15)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)', fontSize: '0.72rem' }}>Dado de baja</div>
@@ -486,8 +492,8 @@ export default function Products() {
 
             {/* Add Modal */}
             {showAddModal && (
-                <div className="modal-overlay">
-                    <div className="modal-content fadeIn" style={{ maxWidth: 580, maxHeight: '90vh', overflowY: 'auto', marginTop: '40vh' }}>
+                <div className="modal-overlay" style={{ alignItems: 'flex-start', padding: '2rem 1rem' }}>
+                    <div className="modal-content fadeIn" style={{ maxWidth: 580, maxHeight: '80vh', overflowY: 'auto', marginTop: '2vh' }}>
                         <h3 className="modal-title">Agregar Nuevo Equipo</h3>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
@@ -522,6 +528,15 @@ export default function Products() {
                                 </div>
                             </div>
                             <div className="input-group" style={{ margin: 0 }}>
+                                <label className="input-label">Esquema de Cobro</label>
+                                <select className="input-base" value={newProduct.esquemaCobro || 'Calendario'}
+                                    onChange={e => setNewProduct(prev => ({ ...prev, esquemaCobro: e.target.value }))}>
+                                    <option value="Calendario">Días Calendario (Todos)</option>
+                                    <option value="Lunes-Sábado">Lunes a Sábado</option>
+                                    <option value="Lunes-Viernes">Lunes a Viernes</option>
+                                </select>
+                            </div>
+                            <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Stock Total</label>
                                 <input type="number" min="1" className="input-base" value={newProduct.totalStock}
                                     onChange={e => setNewProduct(prev => ({ ...prev, totalStock: parseInt(e.target.value) || 1 }))} />
@@ -540,8 +555,8 @@ export default function Products() {
 
             {/* Edit Modal */}
             {showEditModal && editingProduct && (
-                <div className="modal-overlay">
-                    <div className="modal-content fadeIn" style={{ maxWidth: 580, maxHeight: '90vh', overflowY: 'auto', marginTop: '40vh' }}>
+                <div className="modal-overlay" style={{ alignItems: 'flex-start', padding: '2rem 1rem' }}>
+                    <div className="modal-content fadeIn" style={{ maxWidth: 580, maxHeight: '80vh', overflowY: 'auto', marginTop: '2vh' }}>
                         <h3 className="modal-title">Editar Equipo — {editingProduct.id}</h3>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
@@ -574,6 +589,15 @@ export default function Products() {
                                         <option value="Servicio">Servicio</option>
                                     </select>
                                 </div>
+                            </div>
+                            <div className="input-group" style={{ margin: 0 }}>
+                                <label className="input-label">Esquema de Cobro</label>
+                                <select className="input-base" value={editingProduct.esquemaCobro || 'Calendario'}
+                                    onChange={e => setEditingProduct(prev => ({ ...prev, esquemaCobro: e.target.value }))}>
+                                    <option value="Calendario">Días Calendario (Todos)</option>
+                                    <option value="Lunes-Sábado">Lunes a Sábado</option>
+                                    <option value="Lunes-Viernes">Lunes a Viernes</option>
+                                </select>
                             </div>
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Stock Total</label>

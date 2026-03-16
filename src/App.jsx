@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Package, FileText, Activity,
-  Wrench, LogOut, ShieldAlert, Truck, Calculator, FileSignature, DollarSign
+  Wrench, LogOut, ShieldAlert, Truck, Calculator, FileSignature, DollarSign, Settings
 } from 'lucide-react';
 import clsx from 'clsx';
 import { AppProvider, useAppContext } from './context/AppContext';
@@ -16,9 +16,10 @@ import Trazability from './pages/Trazability';
 import Maintenance from './pages/Maintenance';
 import Remisiones from './pages/Remisiones';
 import CortesObra from './pages/CortesObra';
-import Cotizaciones from './pages/Cotizaciones';
 import Financiero from './pages/Financiero';
+import Cotizaciones from './pages/Cotizaciones';
 import Login from './pages/Login';
+import SettingsPage from './pages/Settings';
 
 // ─── Route Guard – only admin/gerente can see Dashboard ──────────────────────
 function ProtectedRoute({ children, requireDashboard }) {
@@ -43,8 +44,9 @@ function AccessDenied() {
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 function Sidebar() {
   const location = useLocation();
-  const { currentUser, logout, canViewDashboard } = useAppContext();
-
+  const { currentUser, logout, canViewDashboard, settings } = useAppContext();
+  console.log('Sidebar render. Settings:', settings);
+  
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/', restricted: true },
     { icon: Package, label: 'Inventario & Alquiler', path: '/products', restricted: false },
@@ -56,6 +58,7 @@ function Sidebar() {
     { icon: DollarSign, label: 'Financiero', path: '/financiero', restricted: false },
     { icon: Wrench, label: 'Mantenimientos', path: '/maintenance', restricted: false },
     { icon: Activity, label: 'Trazabilidad', path: '/trazability', restricted: false },
+    { icon: Settings, label: 'Ajustes App', path: '/settings', restricted: true },
   ].filter(item => !item.restricted || canViewDashboard);
 
   const roleColors = { admin: '#3b82f6', gerente: '#10b981', operativo: '#f97316' };
@@ -64,16 +67,17 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <div className="logo-icon" style={{ background: 'transparent', boxShadow: 'none', padding: 0 }}>
-          <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="19" cy="19" r="17" stroke="white" strokeWidth="1.5" fill="none" />
-            <circle cx="19" cy="19" r="12" stroke="white" strokeWidth="1.5" fill="none" />
-            <circle cx="19" cy="19" r="7" stroke="white" strokeWidth="1.5" fill="none" />
-            <circle cx="19" cy="19" r="2.5" fill="white" />
-          </svg>
+        <div className="logo-icon" style={{ background: 'transparent' }}>
+          {settings?.logo ? (
+            <img src={settings.logo} alt="L" style={{ width: 32, height: 32, objectFit: 'contain' }} />
+          ) : (
+             <Package size={24} color="white" />
+          )}
         </div>
         <div>
-          <h1 className="logo-title">CIELO</h1>
+          <h1 className="logo-title" style={{ fontSize: '1.1rem' }}>
+            {settings?.companyName || 'CIELO'}
+          </h1>
           <p className="logo-subtitle">ALQUILER DE EQUIPOS</p>
         </div>
       </div>
@@ -155,6 +159,7 @@ function AppShell() {
         <Route path="/financiero" element={<ProtectedRoute><Financiero /></ProtectedRoute>} />
         <Route path="/maintenance" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
         <Route path="/trazability" element={<ProtectedRoute><Trazability /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute requireDashboard><SettingsPage /></ProtectedRoute>} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

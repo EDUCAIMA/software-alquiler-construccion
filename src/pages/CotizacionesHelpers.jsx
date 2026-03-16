@@ -9,6 +9,7 @@ import { useAppContext } from '../context/AppContext';
 import { format, addDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { applyStandardLayout } from './pdfTheme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ESTADO_CFG = {
@@ -22,27 +23,12 @@ const ESTADO_CFG = {
 const fmtCOP = n => `$${(Number(n) || 0).toLocaleString('es-CO')}`;
 
 // ─── PDF Cotización al Cliente ───────────────────────────────────────────────
-function generateCotizacionPDF(cot, client, obra) {
+function generateCotizacionPDF(cot, client, obra, settings) {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
     const fmtN = n => (Number(n) || 0).toLocaleString('es-CO');
 
-    // Header gradient
-    doc.setFillColor(30, 41, 59); doc.rect(0, 0, W, 42, 'F');
-    doc.setFillColor(59, 130, 246); doc.rect(0, 42, W, 4, 'F');
-
-    // Logo / Title
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(255, 255, 255);
-    doc.text('CIELO', 14, 20);
-    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-    doc.text('Alquiler de Equipos y Herramientas de Construcción', 14, 28);
-    doc.text('NIT: 900.XXX.XXX-X  |  Tel: (601) 000-0000  |  cielo@empresa.co', 14, 35);
-
-    doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
-    doc.text('COTIZACIÓN', W - 14, 20, { align: 'right' });
-    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-    doc.text(cot.id, W - 14, 28, { align: 'right' });
-    doc.text(`Fecha: ${cot.fecha || '—'}`, W - 14, 35, { align: 'right' });
+    applyStandardLayout(doc, 'Cotización', settings);
 
     // Client info box
     let y = 54;
@@ -64,11 +50,11 @@ function generateCotizacionPDF(cot, client, obra) {
 
     // Items table
     const subtotal = cot.items.reduce((s, i) => s + (Number(i.cantidad) * Number(i.dias) * Number(i.tarifaDia)), 0);
-    const porcIVA = client?.porcIVA || 0;
+    const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
     const porcRet = client?.porcRetencion || 0;
     const iva = Math.round(subtotal * porcIVA / 100);
     const ret = Math.round(subtotal * porcRet / 100);
-    const total = subtotal + iva - ret + Number(cot.transporte || 0);
+    const total = subtotal + iva + ret + Number(cot.transporte || 0);
 
     y += 38;
     autoTable(doc, {
@@ -92,8 +78,8 @@ function generateCotizacionPDF(cot, client, obra) {
     y = doc.lastAutoTable.finalY + 6;
     const totals = [
         ['Subtotal', `$${fmtN(subtotal)}`],
-        ...(porcIVA > 0 ? [[`+ IVA (${porcIVA}%)`, `$${fmtN(iva)}`]] : []),
-        ...(porcRet > 0 ? [[`\u2014 Retención (${porcRet}%)`, `-$${fmtN(ret)}`]] : []),
+        [`+ IVA (${porcIVA}%)`, `$${fmtN(iva)}`],
+        ...(porcRet > 0 ? [[`+ Retención (${porcRet}%)`, `$${fmtN(ret)}`]] : []),
         ...(Number(cot.transporte) > 0 ? [['+ Transporte', `$${fmtN(cot.transporte)}`]] : []),
     ];
     const totW = 80;
@@ -125,30 +111,21 @@ function generateCotizacionPDF(cot, client, obra) {
     ].filter(Boolean);
     conds.forEach((line, idx) => doc.text(doc.splitTextToSize(line, W - 40), 20, y + 14 + idx * 7));
 
-    // Footer
-    const pageH = doc.internal.pageSize.getHeight();
-    doc.setFillColor(30, 41, 59); doc.rect(0, pageH - 14, W, 14, 'F');
-    doc.setFont('helvetica', 'italic'); doc.setFontSize(7.5); doc.setTextColor(148, 163, 184);
-    doc.text(`Cotización ${cot.id} — CIELO Alquiler de Equipos — Generado el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, W / 2, pageH - 5, { align: 'center' });
+    // doc.save handled below
 
     doc.save(`Cotizacion_${cot.id}.pdf`);
 }
 
 // ─── PDF generators ───────────────────────────────────────────────────────────
-function generateContratoPDF(cot, client, obra) {
+function generateContratoPDF(cot, client, obra, settings) {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    doc.setFillColor(30, 41, 59); doc.rect(0, 0, W, 38, 'F');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(255, 255, 255);
-    doc.text('CONTRATO DE ALQUILER DE EQUIPOS', W / 2, 18, { align: 'center' });
-    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-    doc.text(`CIELO — Alquiler de Equipos y Herramientas | ${cot.id}`, W / 2, 28, { align: 'center' });
-    doc.text(`Fecha: ${cot.fecha}`, W / 2, 35, { align: 'center' });
+    applyStandardLayout(doc, 'Contrato de Alquiler', settings);
 
     doc.setTextColor(30, 41, 59); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
     doc.text('PARTES DEL CONTRATO', 14, 50);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-    doc.text(`ARRENDADOR: CIELO — Alquiler de Equipos y Herramientas | NIT: 900.XXX.XXX-X`, 14, 58);
+    doc.text(`ARRENDADOR: ${settings?.companyName || 'CIELO'} — Alquiler de Equipos y Herramientas | NIT: ${settings?.nit || '900.XXX.XXX-X'}`, 14, 58);
     doc.text(`ARRENDATARIO: ${client?.name || '—'} | NIT/CC: ${client?.nit || '—'} | ${client?.type || ''}`, 14, 65);
     doc.text(`Obra Destino: ${obra?.nombre || '—'} — ${obra?.ubicacion || '—'}`, 14, 72);
 
@@ -194,17 +171,15 @@ function generateContratoPDF(cot, client, obra) {
     doc.save(`Contrato_${cot.id}.pdf`);
 }
 
-function generatePagarePDF(cot, client) {
+function generatePagarePDF(cot, client, settings) {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    doc.setFillColor(30, 41, 59); doc.rect(0, 0, W, 30, 'F');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.setTextColor(255, 255, 255);
-    doc.text('PAGARÉ', W / 2, 20, { align: 'center' });
+    applyStandardLayout(doc, 'Pagaré', settings);
 
     doc.setTextColor(30, 41, 59); doc.setFontSize(10); doc.setFont('helvetica', 'normal');
     const total = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + cot.transporte;
-    const texto = `Yo, ${client?.name || '—'}, identificado con NIT/CC ${client?.nit || '—'}, actuando en nombre de la empresa ${client?.name || '—'}, me comprometo incondicionalmente a pagar a la orden de CIELO — Alquiler de Equipos y Herramientas, la suma de ${fmtCOP(total)} (${total.toLocaleString()} pesos colombianos), más los intereses de mora pactados, en los plazos y condiciones establecidos en el Contrato de Alquiler ${cot.id} suscrito en la misma fecha.`;
-    doc.text(doc.splitTextToSize(texto, W - 28), 14, 50);
+    const texto = `Yo, ${client?.name || '—'}, identificado con NIT/CC ${client?.nit || '—'}, actuando en nombre de la empresa ${client?.name || '—'}, me comprometo incondicionalmente a pagar a la orden de ${settings?.companyName || 'CIELO'} — Alquiler de Equipos y Herramientas, la suma de ${fmtCOP(total)} (${total.toLocaleString()} pesos colombianos), más los intereses de mora pactados, en los plazos y condiciones establecidos en el Contrato de Alquiler ${cot.id} suscrito en la misma fecha.`;
+    doc.text(doc.splitTextToSize(texto, W - 28), 14, 60);
 
     doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
     doc.text('Datos del Deudor:', 14, 95);
@@ -222,16 +197,14 @@ function generatePagarePDF(cot, client) {
     doc.save(`Pagare_${cot.id}.pdf`);
 }
 
-function generateCartaPDF(cot, client) {
+function generateCartaPDF(cot, client, settings) {
     const doc = new jsPDF();
     const W = doc.internal.pageSize.getWidth();
-    doc.setFillColor(30, 41, 59); doc.rect(0, 0, W, 30, 'F');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(255, 255, 255);
-    doc.text('CARTA DE INSTRUCCIONES DEL PAGARÉ', W / 2, 20, { align: 'center' });
+    applyStandardLayout(doc, 'Carta de Instrucciones', settings);
     doc.setTextColor(30, 41, 59); doc.setFontSize(10); doc.setFont('helvetica', 'normal');
     const total = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + cot.transporte;
-    const texto = `Señores CIELO — Alquiler de Equipos y Herramientas.\n\nPor medio de la presente, yo ${client?.name || '—'}, identificado con NIT/CC ${client?.nit || '—'}, autorizo de manera irrevocable a diligenciar el pagaré suscrito en la misma fecha correspondiente al Contrato ${cot.id} bajo las siguientes instrucciones:\n\n1. El pagaré podrá ser llenado por el valor total adeudado más los intereses de mora causados.\n2. Podrá ser cobrado a partir del vencimiento del plazo pactado: ${cot.metodoPago}.\n3. Si el pago no se realiza en la fecha acordada, CIELO queda autorizada para iniciar cobro judicial de inmediato.\n4. El deudor renuncia expresamente al beneficio de excusión.\n\nEl presente pagaré ha sido suscrito en condición de ser llenado (pagaré en blanco) conforme a la presente carta de instrucciones, la cual tiene plena validez jurídica conforme a la ley colombiana.`;
-    doc.text(doc.splitTextToSize(texto, W - 28), 14, 45);
+    const texto = `Señores ${settings?.companyName || 'CIELO'} — Alquiler de Equipos y Herramientas.\n\nPor medio de la presente, yo ${client?.name || '—'}, identificado con NIT/CC ${client?.nit || '—'}, autorizo de manera irrevocable a diligenciar el pagaré suscrito en la misma fecha correspondiente al Contrato ${cot.id} bajo las siguientes instrucciones:\n\n1. El pagaré podrá ser llenado por el valor total adeudado más los intereses de mora causados.\n2. Podrá ser cobrado a partir del vencimiento del plazo pactado: ${cot.metodoPago}.\n3. Si el pago no se realiza en la fecha acordada, ${settings?.companyName || 'CIELO'} queda autorizada para iniciar cobro judicial de inmediato.\n4. El deudor renuncia expresamente al beneficio de excusión.\n\nEl presente pagaré ha sido suscrito en condición de ser llenado (pagaré en blanco) conforme a la presente carta de instrucciones, la cual tiene plena validez jurídica conforme a la ley colombiana.`;
+    doc.text(doc.splitTextToSize(texto, W - 28), 14, 60);
 
     doc.line(14, 220, 95, 220); doc.line(115, 220, W - 14, 220);
     doc.setFontSize(8);

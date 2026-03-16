@@ -47,8 +47,9 @@ async function initDB() {
         proximo_mantenimiento DATE
       )
     `);
-        // Migración: agregar columna tipo_cobro si no existe
+        // Migración: agregar columna tipo_cobro y esquema_cobro si no existen
         await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS tipo_cobro VARCHAR(50) DEFAULT 'Día'`);
+        await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS esquema_cobro VARCHAR(50) DEFAULT 'Calendario'`);
 
         // --- Clientes (obras guardadas como JSONB para mantener la estructura actual) ---
         await client.query(`
@@ -187,6 +188,28 @@ async function initDB() {
             )
             `);
 
+        // --- Ajustes de Empresa ---
+        await client.query(`
+      CREATE TABLE IF NOT EXISTS settings(
+                id VARCHAR(50) PRIMARY KEY,
+                company_name VARCHAR(255),
+                nit VARCHAR(50),
+                phone VARCHAR(50),
+                email VARCHAR(255),
+                logo TEXT,
+                address TEXT
+            )
+            `);
+
+        // Seed inicial de settings si está vacío
+        const { rows: sRows } = await client.query('SELECT COUNT(*) FROM settings');
+        if (parseInt(sRows[0].count) === 0) {
+            await client.query(`
+        INSERT INTO settings(id, company_name, nit, phone, email, logo, address) VALUES
+            ('main', 'CIELO - ALQUILER DE EQUIPOS', '900.000.000-1', '300 123 4567', 'gerencia@cielo.com', null, 'Calle 123 #45-67')
+                `);
+        }
+
         // --- Seed inicial de products si está vacío ---
         const { rows: pRows } = await client.query('SELECT COUNT(*) FROM products');
         if (parseInt(pRows[0].count) === 0) {
@@ -219,7 +242,8 @@ const mapProduct = r => ({
     fechaCompra: r.fecha_compra ? r.fecha_compra.toISOString().split('T')[0] : '',
     costoAdquisicion: r.costo_adquisicion ? Number(r.costo_adquisicion) : '',
     proximoMantenimiento: r.proximo_mantenimiento ? r.proximo_mantenimiento.toISOString().split('T')[0] : '',
-    tipoCobro: r.tipo_cobro || 'Día'
+    tipoCobro: r.tipo_cobro || 'Día',
+    esquemaCobro: r.esquema_cobro || 'Calendario'
 });
 
 const mapClient = r => ({
@@ -290,6 +314,16 @@ const mapLiq = r => ({
     estado: r.estado
 });
 
+const mapSettings = r => ({
+    id: r.id,
+    companyName: r.company_name,
+    nit: r.nit,
+    phone: r.phone,
+    email: r.email,
+    logo: r.logo,
+    address: r.address
+});
+
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
 app.get('/api/products', async (req, res) => {
     try {
@@ -300,12 +334,13 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
     try {
-        const { id, name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento, tipoCobro } = req.body;
+        const {
+            id, name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento, tipoCobro, esquemaCobro
+        } = req.body;
         await pool.query(
-            `INSERT INTO products(id, name, category, value, total_stock, available_stock, image, proveedor, fecha_compra, costo_adquisicion, proximo_mantenimiento, tipo_cobro)
-       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-            [id, name, category, value, totalStock, availableStock, image, proveedor,
-                fechaCompra || null, costoAdquisicion || null, proximoMantenimiento || null, tipoCobro || 'Día']
+            `INSERT INTO products(id, name, category, value, total_stock, available_stock, image, proveedor, fecha_compra, costo_adquisicion, proximo_mantenimiento, tipo_cobro, esquema_cobro)
+       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            [id, name, category, value, totalStock, availableStock, image, proveedor, fechaCompra || null, costoAdquisicion || 0, proximoMantenimiento || null, tipoCobro || 'Día', esquemaCobro || 'Calendario']
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -313,11 +348,12 @@ app.post('/api/products', async (req, res) => {
 
 app.put('/api/products/:id', async (req, res) => {
     try {
-        const { name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento, tipoCobro } = req.body;
+        const {
+            name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento, tipoCobro, esquemaCobro
+        } = req.body;
         await pool.query(
-            `UPDATE products SET name = $1, category = $2, value = $3, total_stock = $4, available_stock = $5, image = $6, proveedor = $7, fecha_compra = $8, costo_adquisicion = $9, proximo_mantenimiento = $10, tipo_cobro = $11 WHERE id = $12`,
-            [name, category, value, totalStock, availableStock, image, proveedor,
-                fechaCompra || null, costoAdquisicion || null, proximoMantenimiento || null, tipoCobro || 'Día', req.params.id]
+            `UPDATE products SET name=$1, category=$2, value=$3, total_stock=$4, available_stock=$5, image=$6, proveedor=$7, fecha_compra=$8, costo_adquisicion=$9, proximo_mantenimiento=$10, tipo_cobro=$11, esquema_cobro=$12 WHERE id=$13`,
+            [name, category, value, totalStock, availableStock, image, proveedor, fechaCompra || null, costoAdquisicion || 0, proximoMantenimiento || null, tipoCobro || 'Día', esquemaCobro || 'Calendario', req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -581,6 +617,26 @@ app.put('/api/liquidaciones/:id', async (req, res) => {
             `UPDATE liquidaciones SET empleado_id = $1, periodo = $2, dias_trabajados = $3, horas_extra = $4, valor_hora_extra = $5, deduccion_salud = $6, deduccion_pension = $7, fondo_solidaridad = $8, bonificaciones = $9, estado = $10 WHERE id = $11`,
             [empleadoId, periodo, diasTrabajados, horasExtra, valorHoraExtra,
                 deduccionSalud, deduccionPension, fondoSolidaridad, bonificaciones, estado, req.params.id]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── SETTINGS ──────────────────────────────────────────────────────────────
+app.get('/api/settings', async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT * FROM settings WHERE id = $1', ['main']);
+        if (rows.length === 0) return res.json({ companyName: 'CIELO', nit: '', phone: '', email: '', logo: '', address: '' });
+        res.json(mapSettings(rows[0]));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/settings', async (req, res) => {
+    try {
+        const { companyName, nit, phone, email, logo, address } = req.body;
+        await pool.query(
+            `UPDATE settings SET company_name = $1, nit = $2, phone = $3, email = $4, logo = $5, address = $6 WHERE id = $7`,
+            [companyName, nit, phone, email, logo, address, 'main']
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }

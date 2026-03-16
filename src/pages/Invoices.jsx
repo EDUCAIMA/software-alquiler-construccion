@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { applyStandardLayout } from './pdfTheme';
 
 export default function Invoices() {
-    const { invoices, clients, products, createInvoice, payInvoice } = useAppContext();
+    const { invoices, clients, products, settings, createInvoice, payInvoice } = useAppContext();
     const navigate = useNavigate();
 
     // New Invoice Modal
@@ -32,8 +33,11 @@ export default function Invoices() {
     const [filterObra, setFilterObra] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
 
-    const currentTotal = cart.reduce((acc, item) => acc + (item.quantity * item.days * item.price), 0);
+    const subtotal = cart.reduce((acc, item) => acc + (item.quantity * item.days * item.price), 0);
     const selectedClientData = clients.find(c => c.id === clientId);
+    const iva = selectedClientData?.responsableIVA ? Math.round(subtotal * (selectedClientData?.porcIVA || 0) / 100) : 0;
+    const ret = Math.round(subtotal * (selectedClientData?.porcRetencion || 0) / 100);
+    const currentTotal = subtotal + iva + ret;
 
     const filteredInvoices = invoices.filter(invoice => {
         const client = clients.find(c => c.id === invoice.clientId);
@@ -115,81 +119,59 @@ export default function Invoices() {
 
     const generatePDF = (invoice) => {
         const client = clients.find(c => c.id === invoice.clientId);
-        // Letter size in points: 612 x 792
-        const doc = new jsPDF('p', 'pt', 'letter');
+        const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 50;
+        const margin = 14;
 
-        // --- Header ---
-        doc.setFillColor(59, 130, 246);
-        doc.rect(0, 0, pageWidth, 80, 'F');
+        applyStandardLayout(doc, 'Factura', settings);
 
-        doc.setFontSize(26);
-        doc.setTextColor(255, 255, 255);
-        doc.setFont(undefined, 'bold');
-        doc.text('CIELO', margin, 40);
+        // Client Info Box
+        let y = 54;
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(margin, y, pageWidth - margin * 2, 40, 3, 3, 'F');
+        doc.setDrawColor(226, 232, 240);
+        doc.roundedRect(margin, y, pageWidth - margin * 2, 40, 3, 3, 'S');
 
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'normal');
-        doc.text('Alquiler de Equipos y Herramientas', margin, 58);
-
-        // Invoice number top right
-        doc.setFontSize(13);
-        doc.setFont(undefined, 'bold');
-        doc.text(`FACTURA ${invoice.id}`, pageWidth - margin, 35, { align: 'right' });
-        doc.setFontSize(10);
-        doc.setFont(undefined, 'normal');
-        doc.text(`Fecha: ${invoice.date}`, pageWidth - margin, 52, { align: 'right' });
-        doc.text(`Estado: ${invoice.status === 'Paid' ? 'Pagada' : 'Pendiente'}`, pageWidth - margin, 66, { align: 'right' });
-
-        // --- Client Info ---
-        let y = 110;
-        doc.setFillColor(241, 245, 249);
-        doc.roundedRect(margin, y - 12, pageWidth - margin * 2, 80, 6, 6, 'F');
-
-        doc.setFontSize(11);
-        doc.setTextColor(100, 116, 139);
-        doc.setFont(undefined, 'bold');
-        doc.text('DATOS DEL CLIENTE', margin + 12, y + 6);
-
-        doc.setFont(undefined, 'normal');
-        doc.setFontSize(11);
         doc.setTextColor(30, 41, 59);
-        doc.text(`Nombre / Empresa: ${client?.name || 'N/A'}`, margin + 12, y + 24);
-        doc.text(`Obra / Proyecto: ${client?.obra || 'N/A'}`, margin + 12, y + 40);
-        doc.text(`Correo: ${client?.email || 'N/A'}   |   Tel: ${client?.phone || 'N/A'}`, margin + 12, y + 56);
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'bold');
+        doc.text('FACTURAR A:', margin + 10, y + 12);
+        doc.setFont(undefined, 'normal');
+        doc.setFontSize(11);
+        doc.text(client?.name || '—', margin + 10, y + 25);
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`NIT: ${client?.nit || '—'} | Tel: ${client?.phone || '—'}`, margin + 10, y + 35);
 
-        // --- Items Table ---
-        y += 100;
-        const tableBody = invoice.items.map(item => {
-            const prod = products.find(p => p.id === item.productId);
-            const subtotal = item.quantity * item.days * item.price;
-            return [
-                prod ? prod.name : item.productId,
-                item.quantity,
-                item.days,
-                `$${item.price.toLocaleString()}`,
-                `$${subtotal.toLocaleString()}`
-            ];
-        });
+        // Right side: Invoice basic details
+        doc.setTextColor(100, 116, 139);
+        doc.text('FACTURA N°:', pageWidth - margin - 80, y + 12);
+        doc.text('FECHA:', pageWidth - margin - 80, y + 23);
+        doc.text('ESTADO:', pageWidth - margin - 80, y + 34);
 
-        const tableResult = autoTable(doc, {
+        doc.setTextColor(30, 41, 59);
+        doc.setFont(undefined, 'bold');
+        doc.text(invoice.id, pageWidth - margin - 10, y + 12, { align: 'right' });
+        doc.setFont(undefined, 'normal');
+        doc.text(invoice.date, pageWidth - margin - 10, y + 23, { align: 'right' });
+        doc.text(invoice.status === 'Paid' ? 'PAGADA' : 'PENDIENTE', pageWidth - margin - 10, y + 34, { align: 'right' });
+
+        y += 50;
+
+        autoTable(doc, {
             startY: y,
-            margin: { left: margin, right: margin },
-            headStyles: {
-                fillColor: [59, 130, 246],
-                textColor: 255,
-                fontStyle: 'bold',
-                fontSize: 11,
-                halign: 'center'
-            },
-            head: [['Equipo / Herramienta', 'Cant.', 'Días', 'Precio / Día', 'Subtotal']],
-            body: tableBody,
-            bodyStyles: { fontSize: 10, textColor: [30, 41, 59] },
+            head: [['Descripción', 'Cant.', 'Días', 'Precio Unit.', 'Subtotal']],
+            body: invoice.items.map(item => [
+                item.nombre,
+                item.quantity,
+                item.days || 1,
+                `$${item.price.toLocaleString()}`,
+                `$${(item.quantity * (item.days || 1) * item.price).toLocaleString()}`
+            ]),
+            headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+            styles: { fontSize: 8, cellPadding: 4 },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             columnStyles: {
-                0: { halign: 'left' },
                 1: { halign: 'center' },
                 2: { halign: 'center' },
                 3: { halign: 'right' },
@@ -197,56 +179,61 @@ export default function Invoices() {
             }
         });
 
-        // --- Total ---
-        const afterTable = (tableResult?.finalY ?? doc.lastAutoTable?.finalY ?? y + 80) + 16;
-        doc.setFillColor(59, 130, 246);
-        doc.rect(pageWidth - margin - 200, afterTable, 200, 36, 'F');
+        // --- Total Breakdown ---
+        const subtotal = invoice.items.reduce((s, item) => s + (item.quantity * (item.days || 1) * item.price), 0);
+        const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
+        const iva = Math.round(subtotal * porcIVA / 100);
+        const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
+
+        y = doc.lastAutoTable.finalY + 10;
+        const totW = 80;
+        const totX = pageWidth - margin - totW;
+
+        const summaryItems = [
+            ['Subtotal:', `$${subtotal.toLocaleString()}`],
+            [`IVA (${porcIVA}%):`, `$${iva.toLocaleString()}`],
+            [`Retención (${client?.porcRetencion || 0}%):`, `$${ret.toLocaleString()}`],
+            ['Transporte:', `$${(invoice.transporte || 0).toLocaleString()}`]
+        ];
+
+        summaryItems.forEach(([label, value]) => {
+            doc.setFontSize(8.5);
+            doc.setTextColor(100, 116, 139);
+            doc.setFont(undefined, 'normal');
+            doc.text(label, totX, y);
+            doc.setTextColor(30, 41, 59);
+            doc.setFont(undefined, 'bold');
+            doc.text(value, pageWidth - margin, y, { align: 'right' });
+            y += 8;
+        });
+
+        // Total
+        y += 4;
+        doc.setFillColor(30, 41, 59);
+        doc.rect(totX - 10, y - 6, totW + 10, 10, 'F');
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(14);
-        doc.setFont(undefined, 'bold');
-        doc.text('TOTAL:', pageWidth - margin - 180, afterTable + 23);
-        doc.text(`$${invoice.amount.toLocaleString()}`, pageWidth - margin - 10, afterTable + 23, { align: 'right' });
-
-        // --- Terms ---
-        const termsY = afterTable + 60;
-        doc.setFontSize(9);
-        doc.setTextColor(100, 116, 139);
-        doc.setFont(undefined, 'italic');
-        doc.text('Los equipos alquilados deben devolverse en las mismas condiciones en que fueron entregados.', margin, termsY);
-        doc.text('El arrendatario asume la responsabilidad por daños o pérdidas durante el período de alquiler.', margin, termsY + 14);
-
-        // --- Signature Section ---
-        const signatureY = Math.max(pageHeight - 120, afterTable + 120);
-
-        doc.setDrawColor(200, 213, 225);
-        doc.setLineWidth(0.5);
-        doc.line(margin, signatureY - 10, pageWidth - margin, signatureY - 10);
-
-        // Left: Company rep
         doc.setFontSize(10);
-        doc.setTextColor(30, 41, 59);
-        doc.setFont(undefined, 'normal');
-        doc.setDrawColor(30, 41, 59);
-        doc.setLineWidth(1);
-        doc.line(margin, signatureY + 40, margin + 180, signatureY + 40);
-        doc.setFontSize(9);
-        doc.setTextColor(100, 116, 139);
-        doc.text('Firma del Representante', margin, signatureY + 55);
-        doc.text('CIELO', margin, signatureY + 68);
+        doc.text('TOTAL:', totX, y + 1);
+        doc.text(`$${(invoice.amount || 0).toLocaleString()}`, pageWidth - margin, y + 1, { align: 'right' });
 
-        // Right: Renter
-        doc.setLineWidth(1);
-        doc.line(pageWidth - margin - 180, signatureY + 40, pageWidth - margin, signatureY + 40);
-        doc.setFontSize(9);
-        doc.setTextColor(100, 116, 139);
-        doc.text('Firma del Arrendatario', pageWidth - margin - 180, signatureY + 55);
-        doc.text('Nombre: _______________________', pageWidth - margin - 180, signatureY + 68);
-        doc.text('C.C. / NIT: _____________________', pageWidth - margin - 180, signatureY + 81);
+        // --- Signature / Stamp ---
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const signatureY = Math.max(pageHeight - 50, y + 30);
 
-        // Footer
+        if (invoice.status === 'Paid') {
+            doc.setFontSize(22);
+            doc.setTextColor(16, 185, 129);
+            doc.setFont(undefined, 'bold');
+            doc.setGState(new doc.GState({ opacity: 0.2 }));
+            doc.text('PAGADA', margin, y + 10);
+            doc.setGState(new doc.GState({ opacity: 1 }));
+        }
+
         doc.setFontSize(8);
-        doc.setTextColor(150, 163, 175);
-        doc.text(`CIELO | Factura ${invoice.id} | Generado el ${new Date().toLocaleDateString('es-CO')}`, pageWidth / 2, pageHeight - 20, { align: 'center' });
+        doc.setTextColor(100, 116, 139);
+        doc.setFont(undefined, 'normal');
+        doc.text('Firma Recibido:', margin, signatureY);
+        doc.line(margin, signatureY + 2, margin + 50, signatureY + 2);
 
         doc.save(`Factura_${invoice.id}.pdf`);
     };
@@ -261,7 +248,7 @@ export default function Invoices() {
         doc.setFontSize(22);
         doc.setTextColor(255, 255, 255);
         doc.setFont(undefined, 'bold');
-        doc.text('CIELO', margin, 35);
+        doc.text(settings?.companyName || 'CIELO', margin, 35);
         doc.setFontSize(11);
         doc.setFont(undefined, 'normal');
         doc.text('Reporte de Facturación', margin, 52);
@@ -566,6 +553,28 @@ export default function Invoices() {
                                     ) : (
                                         <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)', background: 'var(--background)', borderRadius: 12, marginBottom: '1rem', border: '1px dashed var(--surface-border)', fontSize: '0.875rem' }}>
                                             Aún no hay equipos en la orden. Agrega al menos uno.
+                                        </div>
+                                    )}
+
+                                    {/* Taxes breakdown */}
+                                    {cart.length > 0 && selectedClientData && (
+                                        <div style={{ padding: '0 1rem', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <span style={{ color: 'var(--text-muted)' }}>Subtotal</span>
+                                                <span style={{ fontWeight: 600 }}>${subtotal.toLocaleString()}</span>
+                                            </div>
+                                            {iva > 0 && (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span style={{ color: 'var(--text-muted)' }}>+ IVA ({selectedClientData.porcIVA}%)</span>
+                                                    <span style={{ fontWeight: 600 }}>${iva.toLocaleString()}</span>
+                                                </div>
+                                            )}
+                                            {ret > 0 && (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span style={{ color: 'var(--text-muted)' }}>+ Retención ({selectedClientData.porcRetencion}%)</span>
+                                                    <span style={{ fontWeight: 600 }}>${ret.toLocaleString()}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 

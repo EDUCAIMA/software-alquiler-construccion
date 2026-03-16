@@ -4,26 +4,27 @@ import {
     Building2, Truck, ChevronRight, CheckCircle, AlertTriangle, Percent
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { differenceInDays, format } from 'date-fns';
+import { differenceInDays, format, eachDayOfInterval, isSunday, isSaturday } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { applyStandardLayout } from './pdfTheme';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtCOP = n => `$${(n || 0).toLocaleString('es-CO')}`;
+const calculateBillableDays = (start, end, scheme) => {
+    try {
+        const days = eachDayOfInterval({ start, end });
+        if (scheme === 'Lunes-Sábado') return days.filter(d => !isSunday(d)).length;
+        if (scheme === 'Lunes-Viernes') return days.filter(d => !isSunday(d) && !isSaturday(d)).length;
+        return days.length; // Calendario
+    } catch (e) { return 1; }
+};
 
-function generateCortePDF(resultado, client, obra, productos) {
+function generateCortePDF(resultado, client, obra, settings) {
     const doc = new jsPDF();
     const pageW = doc.internal.pageSize.getWidth();
 
-    // Header gradient simulation
-    doc.setFillColor(59, 130, 246);
-    doc.rect(0, 0, pageW, 40, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(20); doc.setTextColor(255, 255, 255);
-    doc.text('CIELO', 14, 18);
-    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-    doc.text('Alquiler de Equipos y Herramientas', 14, 26);
-    doc.text(`CORTE DE OBRA — ${format(new Date(), 'dd/MM/yyyy')}`, 14, 34);
+    applyStandardLayout(doc, 'Corte de Obra', settings);
 
     // Client info box
     doc.setFillColor(248, 250, 252);
@@ -40,8 +41,8 @@ function generateCortePDF(resultado, client, obra, productos) {
     // Items table
     autoTable(doc, {
         startY: 85,
-        head: [['Remisión', 'Equipo', 'Cant.', 'Días', 'Tarifa/día', 'Subtotal']],
-        body: resultado.lineas.map(l => [l.remId, l.equipo, l.cantidad, l.dias, fmtCOP(l.tarifaDia), fmtCOP(l.subtotal)]),
+        head: [['Remisión', 'Equipo', 'Esquema', 'Cant.', 'Días', 'Tarifa/día', 'Subtotal']],
+        body: resultado.lineas.map(l => [l.remId, l.equipo, l.esquema || 'Calen.', l.cantidad, l.dias, fmtCOP(l.tarifaDia), fmtCOP(l.subtotal)]),
         headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold', fontSize: 9 },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         styles: { fontSize: 9 },
@@ -54,10 +55,10 @@ function generateCortePDF(resultado, client, obra, productos) {
     doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
     doc.text('Subtotal:', pageW - 95, y + 10);
     doc.text(fmtCOP(resultado.subtotal), pageW - 20, y + 10, { align: 'right' });
-    doc.text(`IVA (${client?.porcIVA || 0}%):`, pageW - 95, y + 20);
+    doc.text(`IVA (${resultado.porcIVA || 0}%):`, pageW - 95, y + 20);
     doc.text(fmtCOP(resultado.iva), pageW - 20, y + 20, { align: 'right' });
     doc.text(`Ret. (${client?.porcRetencion || 0}%):`, pageW - 95, y + 30);
-    doc.text(`-${fmtCOP(resultado.retencion)}`, pageW - 20, y + 30, { align: 'right' });
+    doc.text(fmtCOP(resultado.retencion), pageW - 20, y + 30, { align: 'right' });
     doc.text('Transporte:', pageW - 95, y + 38);
     doc.text(fmtCOP(resultado.transporte), pageW - 20, y + 38, { align: 'right' });
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
@@ -69,7 +70,7 @@ function generateCortePDF(resultado, client, obra, productos) {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function CortesObra() {
-    const { clients, remisiones, products, createInvoice } = useAppContext();
+    const { clients, remisiones, products, createInvoice, settings } = useAppContext();
 
     const [clientId, setClientId] = useState('');
     const [obraId, setObraId] = useState('');
@@ -99,9 +100,10 @@ export default function CortesObra() {
             rem.items.forEach(item => {
                 const prod = products.find(p => p.id === item.productId);
                 if (!item.cantidad || !item.cantidadDevuelta !== undefined) {
-                    // For closed items: dias = fechaDevolucion (estimate: we use fCorte for open)
-                    const diasRaw = differenceInDays(fCorte, new Date(rem.fecha));
-                    const dias = Math.max(1, diasRaw);
+                    const startDate = new Date(rem.fecha);
+                    const endDate = fCorte;
+                    const scheme = prod?.esquemaCobro || 'Calendario';
+                    const dias = calculateBillableDays(startDate, endDate, scheme);
                     const tarifa = prod?.value || 0;
                     const sub = item.cantidad * dias * tarifa;
                     subtotal += sub;
@@ -114,16 +116,17 @@ export default function CortesObra() {
                         tarifaDia: tarifa,
                         subtotal: sub,
                         estado: rem.estado,
+                        esquema: scheme,
                     });
                 }
             });
         });
 
-        const porcIVA = selectedClient?.porcIVA || 0;
+        const porcIVA = selectedClient?.responsableIVA ? (selectedClient?.porcIVA || 0) : 0;
         const porcRet = selectedClient?.porcRetencion || 0;
         const iva = Math.round(subtotal * porcIVA / 100);
         const retencion = Math.round(subtotal * porcRet / 100);
-        const totalNeto = subtotal + iva - retencion + totalTransporte;
+        const totalNeto = subtotal + iva + retencion + totalTransporte;
 
         return { lineas, subtotal, iva, retencion, transporte: totalTransporte, totalNeto, porcIVA, porcRet };
     }, [clientId, obraId, fechaCorte, remisiones, products, selectedClient]);
@@ -307,7 +310,7 @@ export default function CortesObra() {
                                     {[
                                         ['Subtotal Alquiler', fmtCOP(resultado.subtotal), '#1e293b', null],
                                         [`IVA ${resultado.porcIVA}%`, `+ ${fmtCOP(resultado.iva)}`, '#3b82f6', 'rgba(59,130,246,0.1)'],
-                                        [`Ret. Fuente ${resultado.porcRet}%`, `- ${fmtCOP(resultado.retencion)}`, '#ef4444', 'rgba(239,68,68,0.1)'],
+                                        [`Ret. Fuente ${resultado.porcRet}%`, `+ ${fmtCOP(resultado.retencion)}`, '#ef4444', 'rgba(239,68,68,0.1)'],
                                         ['Transporte', `+ ${fmtCOP(resultado.transporte)}`, '#f97316', 'rgba(249,115,22,0.1)'],
                                     ].map(([k, v, c, bg]) => (
                                         <div key={k} style={{ background: bg || '#f8fafc', border: '1px solid #e2e8f0', padding: '1rem 1.25rem', borderRadius: '12px' }}>
@@ -325,7 +328,7 @@ export default function CortesObra() {
 
                             {/* Actions */}
                             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                                <button className="btn btn-secondary" onClick={() => generateCortePDF(resultado, selectedClient, selectedObra, products)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', background: '#ffffff', color: '#475569', border: '1px solid #cbd5e1' }}>
+                                <button className="btn btn-secondary" onClick={() => generateCortePDF(resultado, selectedClient, selectedObra, settings)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', background: '#ffffff', color: '#475569', border: '1px solid #cbd5e1' }}>
                                     <Download size={18} /> Exportar PDF
                                 </button>
                                 <button className="btn btn-primary" disabled={saved || resultado.lineas.length === 0} onClick={handleSaveInvoice}
