@@ -5,7 +5,7 @@ import { useAppContext } from '../context/AppContext';
 import { format, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { applyStandardLayout } from './pdfTheme';
+import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
 
 export default function Invoices() {
     const { invoices, clients, products, settings, createInvoice, payInvoice, deleteInvoice } = useAppContext();
@@ -174,36 +174,17 @@ export default function Invoices() {
 
         let y = applyStandardLayout(doc, 'Factura', settings, invoice.id);
 
-        // Client Info Box
-        doc.setFillColor(248, 250, 252);
-        doc.roundedRect(margin, y, pageWidth - margin * 2, 35, 3, 3, 'F');
-        doc.setDrawColor(226, 232, 240);
-        doc.roundedRect(margin, y, pageWidth - margin * 2, 35, 3, 3, 'S');
-
-        doc.setTextColor(30, 41, 59);
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-        doc.text('FACTURAR A:', margin + 6, y + 8);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10.5);
-        doc.text(client?.name || '—', margin + 6, y + 16);
-        doc.setFontSize(8);
-        doc.setTextColor(100, 116, 139);
-        doc.text(`NIT: ${client?.nit || '—'} | Tel: ${client?.phone || '—'}`, margin + 6, y + 24);
-        doc.text(`Obra: ${client?.obra || '—'}`, margin + 6, y + 29);
-
-        // Right side: Invoice basic details (already in header, but we can add secondary info if needed)
-        doc.setTextColor(100, 116, 139);
-        doc.setFontSize(8);
-        doc.text('FECHA EMISIÓN:', pageWidth - margin - 70, y + 12);
-        doc.text('ESTADO PAGO:', pageWidth - margin - 70, y + 20);
-
-        doc.setTextColor(30, 41, 59);
-        doc.setFont('helvetica', 'bold');
-        doc.text(invoice.date, pageWidth - margin - 6, y + 12, { align: 'right' });
-        doc.text(invoice.status === 'Paid' ? 'PAGADA' : 'PENDIENTE', pageWidth - margin - 6, y + 20, { align: 'right' });
-
-        y += 42;
+        y = drawInfoGrid(doc, y, client, {
+            valTopLeft: invoice.date,
+            valTopRight: invoice.status === 'Paid' ? 'PAGADA' : 'PENDIENTE',
+            labelTopLeft: 'Fecha Emisión',
+            labelTopRight: 'Estado Pago',
+            valMidLeft: client?.obra || '—',
+            valMidRight: 'CONTADO',
+            valBottom: (Number(invoice.transporte) || 0) > 0 ? `$${invoice.transporte.toLocaleString()}` : '0',
+            labelBottom: 'Valor Transporte:',
+            obraDireccion: client?.obraUbicacion || client?.direccion
+        });
 
         autoTable(doc, {
             startY: y,

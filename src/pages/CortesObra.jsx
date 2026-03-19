@@ -7,7 +7,7 @@ import { useAppContext } from '../context/AppContext';
 import { differenceInDays, format, eachDayOfInterval, isSunday, isSaturday } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { applyStandardLayout } from './pdfTheme';
+import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtCOP = n => `$${(n || 0).toLocaleString('es-CO')}`;
@@ -27,21 +27,17 @@ function generateCortePDF(resultado, client, obra, settings) {
 
     let y = applyStandardLayout(doc, 'Corte de Obra', settings);
 
-    // Client info box
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(margin, y, pageW - margin * 2, 30, 2, 2, 'FD');
-    
-    doc.setTextColor(30, 41, 59);
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-    doc.text(client?.name || '—', margin + 6, y + 10);
-    
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`NIT: ${client?.nit || 'N/A'}  |  Obra: ${obra?.nombre || 'Todas las obras'}`, margin + 6, y + 18);
-    doc.text(`IVA: ${client?.porcIVA || 0}%  |  Ret. Fuente: ${client?.porcRetencion || 0}%`, margin + 6, y + 24);
-
-    y += 38;
+    y = drawInfoGrid(doc, y, client, {
+        valTopLeft: format(new Date(), 'yyyy-MM-dd'),
+        valTopRight: 'PENDIENTE',
+        labelTopLeft: 'Fecha de Corte',
+        labelTopRight: 'Estado Corte',
+        valMidLeft: obra?.nombre?.substring(0, 20) || 'TODAS LAS OBRAS',
+        valMidRight: client?.responsableIVA ? 'RESP. IVA' : 'NO RESP.',
+        valBottom: fmtCOP(resultado.totalNeto),
+        labelBottom: 'Valor Total Corte:',
+        obraDireccion: obra?.ubicacion || client?.direccion
+    });
 
     // Items table
     autoTable(doc, {

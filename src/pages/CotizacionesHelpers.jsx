@@ -9,7 +9,7 @@ import { useAppContext } from '../context/AppContext';
 import { format, addDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { applyStandardLayout } from './pdfTheme';
+import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ESTADO_CFG = {
@@ -31,116 +31,24 @@ function generateCotizacionPDF(cot, client, obra, settings) {
         const margin = 10;
         const fmtN = n => (Number(n) || 0).toLocaleString('es-CO');
 
-        // --- ENCABEZADO ESTILO SAMM ---
-        let y = 10;
-        
-        // Logo
-        if (settings?.logo) {
-            try {
-                doc.addImage(settings.logo, 'PNG', margin, y, 35, 18);
-            } catch (e) {
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(14);
-                doc.text(settings?.shortName || 'CIELO', margin, y + 10);
-            }
-        } else {
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(14);
-            doc.text(settings?.shortName || 'CIELO', margin, y + 10);
-        }
+        // --- ENCABEZADO Y GRID ---
+        let y = applyStandardLayout(doc, 'COTIZACIÓN', settings, cot.id);
 
-        // Info Empresa (Centro-Izquierda)
-        doc.setFontSize(7.5);
-        doc.setTextColor(30, 41, 59);
-        doc.setFont('helvetica', 'bold');
-        doc.text(settings?.companyName?.toUpperCase() || 'CIELO COLOMBIA S.A.S.', margin, y + 24);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`NIT. ${settings?.nit || '900.000.000-0'}`, margin, y + 28);
-        doc.text(settings?.address || 'Dirección no configurada', margin, y + 32);
-        doc.text(`Tel: ${settings?.phone || '—'}  |  ${settings?.email || '—'}`, margin, y + 36);
-
-
-        // Recuadro Derecha: Tipo documento y número
-        doc.setDrawColor(0);
-        doc.setLineWidth(0.5);
-        doc.rect(W - margin - 65, y, 65, 20);
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.text('COTIZACIÓN', W - margin - 32.5, y + 8, { align: 'center' });
-        doc.setFontSize(11);
-        doc.text(`Nro - ${cot.id}`, W - margin - 32.5, y + 15, { align: 'center' });
-
-        y += 42;
-
-        // --- CUADRÍCULA DE INFORMACIÓN (CLIENTE Y FECHAS) ---
-        doc.setLineWidth(0.2);
-        doc.setDrawColor(30, 41, 59);
-        
-        // Fila 1 y 2: Cliente info - Fecha Box
-        doc.rect(margin, y, W - (margin * 2), 24); // Contenedor principal
-        doc.line(W - margin - 75, y, W - margin - 75, y + 24); // Separador vertical
-        
-        // Etiquetas Cliente
-        doc.setFontSize(7.5);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Señores :', margin + 2, y + 5);
-        doc.text('Nit :', margin + 2, y + 10);
-        doc.text('Dirección :', margin + 2, y + 15);
-        doc.text('Ciudad :', margin + 2, y + 20);
-        
-        doc.setFont('helvetica', 'normal');
-        doc.text(client?.name?.toUpperCase() || '—', margin + 22, y + 5);
-        doc.text(client?.nit || '—', margin + 22, y + 10);
-        doc.text(obra?.ubicacion || client?.direccion || '—', margin + 22, y + 15);
-        doc.text(client?.ciudad || 'BOGOTÁ', margin + 22, y + 20);
-        
-        doc.setFont('helvetica', 'bold');
-        doc.text('Teléfonos :', margin + 65, y + 20);
-        doc.setFont('helvetica', 'normal');
-        doc.text(client?.phone || '—', margin + 82, y + 20);
-
-        // Sección Fechas (Derecha)
-        const dateBoxX = W - margin - 75;
-        doc.line(dateBoxX, y + 8, W - margin, y + 8); // Línea horizontal 1
-        doc.line(dateBoxX, y + 16, W - margin, y + 16); // Línea horizontal 2
-        doc.line(dateBoxX + 37.5, y, dateBoxX + 37.5, y + 16); // Separador vertical
-        
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Fecha Cotización', dateBoxX + 18.75, y + 3.5, { align: 'center' });
-        doc.text('Fecha Vencimiento', dateBoxX + 56.25, y + 3.5, { align: 'center' });
-        
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
         const fCot = cot.fecha || format(new Date(), 'yyyy-MM-dd');
         const fVen = format(addDays(new Date(fCot), cot.validezDias || 15), 'yyyy-MM-dd');
-        
-        // Desglose fecha cotización
-        const [y1, m1, d1] = fCot.split('-');
-        doc.text(`${d1}   ${m1}   ${y1}`, dateBoxX + 18.75, y + 7, { align: 'center' });
-        
-        // Desglose fecha vencimiento
-        const [y2, m2, d2] = fVen.split('-');
-        doc.text(`${d2}   ${m2}   ${y2}`, dateBoxX + 56.25, y + 7, { align: 'center' });
 
-        // Orden de pedido / Remisión / Forma Pago
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Obra / Proyecto', dateBoxX + 18.75, y + 11.5, { align: 'center' });
-        doc.text('Forma de Pago', dateBoxX + 56.25, y + 11.5, { align: 'center' });
-        
-        doc.setFontSize(7.5);
-        doc.setFont('helvetica', 'normal');
-        doc.text(obra?.nombre?.substring(0, 20) || cot.obraId || '—', dateBoxX + 18.75, y + 14.5, { align: 'center' });
-        doc.text(cot.metodoPago?.toUpperCase() || 'CONTADO', dateBoxX + 56.25, y + 14.5, { align: 'center' });
+        y = drawInfoGrid(doc, y, client, {
+            valTopLeft: fCot,
+            valTopRight: fVen,
+            labelTopLeft: 'Fecha Cotización',
+            labelTopRight: 'Fecha Vencimiento',
+            valMidLeft: obra?.nombre?.substring(0, 20) || cot.obraId || '—',
+            valMidRight: cot.metodoPago?.toUpperCase() || 'CONTADO',
+            valBottom: cot.responsableTransporte?.toUpperCase() || 'CLIENTE',
+            obraDireccion: obra?.ubicacion || client?.direccion
+        });
 
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Transporte a Cargo de:', dateBoxX + 37.5, y + 19.5, { align: 'center' });
-        doc.setFont('helvetica', 'normal');
-        doc.text(cot.responsableTransporte?.toUpperCase() || 'CLIENTE', dateBoxX + 37.5, y + 22.5, { align: 'center' });
-
-        y += 28;
+        // y ya incluye el margen de 10px después del grid
 
         // --- TABLA DE ITEMS ESTILO PROFESIONAL ---
         const subtotal = cot.items.reduce((s, i) => s + (Number(i.cantidad) * Number(i.dias) * Number(i.tarifaDia)), 0);
@@ -289,6 +197,16 @@ function generateContratoPDF(cot, client, obra, settings) {
     let y = applyStandardLayout(doc, 'Contrato de Alquiler', settings, cot.id);
     const margin = 10;
 
+    y = drawInfoGrid(doc, y, client, {
+        valTopLeft: cot.fecha || format(new Date(), 'yyyy-MM-dd'),
+        valTopRight: 'Vigente',
+        labelTopRight: 'Vigencia',
+        valMidLeft: obra?.nombre?.substring(0, 20) || cot.obraId || '—',
+        valMidRight: cot.metodoPago?.toUpperCase() || 'CONTADO',
+        valBottom: cot.responsableTransporte?.toUpperCase() || 'CLIENTE',
+        obraDireccion: obra?.ubicacion || client?.direccion
+    });
+
     doc.setTextColor(30, 41, 59); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
     doc.text('PARTES DEL CONTRATO', margin, y);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
@@ -356,12 +274,22 @@ function generatePagarePDF(cot, client, settings) {
     const margin = 10;
     let y = applyStandardLayout(doc, 'Pagaré', settings, cot.id);
 
+    y = drawInfoGrid(doc, y, client, {
+        valTopLeft: cot.fecha || format(new Date(), 'yyyy-MM-dd'),
+        valTopRight: 'INMEDIATO',
+        labelTopRight: 'Vencimiento',
+        valMidLeft: '—',
+        valMidRight: 'GARANTÍA',
+        valBottom: 'S/N',
+        labelBottom: 'Serie:'
+    });
+
     doc.setTextColor(30, 41, 59); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
     const total = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (Number(cot.transporte) || 0);
     const texto = `Yo, ${client?.name || '—'}, identificado con NIT/CC ${client?.nit || '—'}, actuando en nombre de la empresa ${client?.name || '—'}, me comprometo incondicionalmente a pagar a la orden de ${settings?.companyName || 'CIELO'} — Alquiler de Equipos y Herramientas, la suma de ${fmtCOP(total)} (${total.toLocaleString()} pesos colombianos), más los intereses de mora pactados, en los plazos y condiciones establecidos en el Contrato de Alquiler ${cot.id} suscrito en la misma fecha.`;
-    doc.text(doc.splitTextToSize(texto, W - margin * 2), margin, y + 10);
+    doc.text(doc.splitTextToSize(texto, W - margin * 2), margin, y + 5);
 
-    y += 45;
+    y += 40;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
     doc.text('DATOS DEL DEUDOR:', margin, y);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
@@ -387,9 +315,19 @@ function generateCartaPDF(cot, client, settings) {
     const margin = 10;
     let y = applyStandardLayout(doc, 'Carta de Instrucciones', settings, cot.id);
 
+    y = drawInfoGrid(doc, y, client, {
+        valTopLeft: cot.fecha || format(new Date(), 'yyyy-MM-dd'),
+        valTopRight: 'PERMANENTE',
+        labelTopRight: 'Vigencia Inst.',
+        valMidLeft: '—',
+        valMidRight: 'DILIGENCIAMIENTO',
+        valBottom: 'Garantía de Alquiler',
+        labelBottom: 'Objeto:'
+    });
+
     doc.setTextColor(30, 41, 59); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
     const texto = `Señores ${settings?.companyName || 'CIELO'} — Alquiler de Equipos y Herramientas.\n\nPor medio de la presente, yo ${client?.name || '—'}, identificado con NIT/CC ${client?.nit || '—'}, autorizo de manera irrevocable a diligenciar el pagaré suscrito en la misma fecha correspondiente al Contrato ${cot.id} bajo las siguientes instrucciones:\n\n1. El pagaré podrá ser llenado por el valor total adeudado más los intereses de mora causados.\n2. Podrá ser cobrado a partir del vencimiento del plazo pactado en el contrato.\n3. Si el pago no se realiza en la fecha acordada, ${settings?.companyName || 'CIELO'} queda autorizada para iniciar cobro judicial de inmediato.\n4. El deudor renuncia expresamente al beneficio de excusión.\n\nEl presente pagaré ha sido suscrito en condición de ser llenado (pagaré en blanco) conforme a la presente carta de instrucciones, la cual tiene plena validez jurídica conforme a la ley colombiana.`;
-    doc.text(doc.splitTextToSize(texto, W - margin * 2), margin, y + 10);
+    doc.text(doc.splitTextToSize(texto, W - margin * 2), margin, y + 5);
 
     y += 90;
     doc.setDrawColor(30, 41, 59);

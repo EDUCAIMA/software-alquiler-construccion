@@ -68,3 +68,72 @@ export const applyStandardLayout = (doc, title, settings, number = '') => {
     return y + 42; // Retorna la posición Y donde debe continuar el contenido
 };
 
+/**
+ * Dibuja la cuadrícula de información del cliente y metadatos (fechas, obra, etc.)
+ */
+export const drawInfoGrid = (doc, y, client, meta = {}) => {
+    const W = doc.internal.pageSize.getWidth();
+    const margin = 10;
+    const gridH = 24;
+
+    doc.setLineWidth(0.2);
+    doc.setDrawColor(30, 41, 59);
+    
+    // Contenedor principal
+    doc.rect(margin, y, W - (margin * 2), gridH);
+    // Separador vertical
+    doc.line(W - margin - 75, y, W - margin - 75, y + gridH);
+    
+    // --- Lado Izquierdo: Cliente ---
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Señores :', margin + 2, y + 5);
+    doc.text('Nit :', margin + 2, y + 10);
+    doc.text('Dirección :', margin + 2, y + 15);
+    doc.text('Ciudad :', margin + 2, y + 20);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.text(client?.name?.toUpperCase() || '—', margin + 22, y + 5);
+    doc.text(client?.nit || '—', margin + 22, y + 10);
+    doc.text(meta?.obraDireccion || client?.direccion || '—', margin + 22, y + 15);
+    doc.text(client?.ciudad || 'BOGOTÁ', margin + 22, y + 20);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text('Teléfonos :', margin + 65, y + 20);
+    doc.setFont('helvetica', 'normal');
+    doc.text(client?.phone || '—', margin + 82, y + 20);
+
+    // --- Lado Derecho: Metadatos (Fechas, Obra, Pago) ---
+    const dateBoxX = W - margin - 75;
+    doc.line(dateBoxX, y + 8, W - margin, y + 8); // Línea horizontal 1
+    doc.line(dateBoxX, y + 16, W - margin, y + 16); // Línea horizontal 2
+    doc.line(dateBoxX + 37.5, y, dateBoxX + 37.5, y + 16); // Separador vertical
+    
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    doc.text(meta.labelTopLeft || 'Fecha Inicio', dateBoxX + 18.75, y + 3.5, { align: 'center' });
+    doc.text(meta.labelTopRight || 'Fecha Fin', dateBoxX + 56.25, y + 3.5, { align: 'center' });
+    
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(meta.valTopLeft || '—', dateBoxX + 18.75, y + 7, { align: 'center' });
+    doc.text(meta.valTopRight || '—', dateBoxX + 56.25, y + 7, { align: 'center' });
+
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    doc.text(meta.labelMidLeft || 'Obra / Proyecto', dateBoxX + 18.75, y + 11.5, { align: 'center' });
+    doc.text(meta.labelMidRight || 'Forma de Pago', dateBoxX + 56.25, y + 11.5, { align: 'center' });
+    
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(meta.valMidLeft || '—', dateBoxX + 18.75, y + 14.5, { align: 'center' });
+    doc.text(meta.valMidRight || 'CONTADO', dateBoxX + 56.25, y + 14.5, { align: 'center' });
+
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    doc.text(meta.labelBottom || 'Transporte:', dateBoxX + 37.5, y + 19.5, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(meta.valBottom || 'CLIENTE', dateBoxX + 37.5, y + 22.5, { align: 'center' });
+
+    return y + gridH + 10;
+};
