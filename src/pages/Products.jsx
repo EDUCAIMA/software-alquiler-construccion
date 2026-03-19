@@ -2,14 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
     PackagePlus, UploadCloud, QrCode,
     AlertTriangle, X, Wrench, Trash2, ArrowDownCircle,
-    ShieldCheck, ShieldAlert, Download, Factory
+    ShieldCheck, ShieldAlert, Download, Factory, Pencil
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import QRCode from 'qrcode';
 
 // ─── QR Util ─────────────────────────────────────────────────────────────────
 async function generateQRDataURL(text) {
-    return await QRCode.toDataURL(text, { width: 256, margin: 2, color: { dark: '#1e293b', light: '#ffffff' } });
+    return await QRCode.toDataURL(text, { width: 256, margin: 2, color: { dark: '#104166', light: '#ffffff' } });
 }
 
 // ─── DropZone – definido FUERA del componente para evitar re-montaje ─────────
@@ -30,7 +30,7 @@ function DropZone({ state, setter, fileInputRef }) {
                 style={{
                     border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--surface-border)'}`,
                     borderRadius: 12, padding: '1.5rem', textAlign: 'center',
-                    backgroundColor: isDragging ? 'rgba(59,130,246,0.05)' : '#fafafa',
+                    backgroundColor: isDragging ? 'rgba(35, 101, 171,0.05)' : '#fafafa',
                     cursor: 'pointer', transition: 'all 0.3s ease',
                     display: 'flex', flexDirection: 'column', alignItems: 'center',
                     justifyContent: 'center', gap: '0.75rem', minHeight: 120
@@ -45,7 +45,7 @@ function DropZone({ state, setter, fileInputRef }) {
                     </div>
                 ) : (
                     <>
-                        <div style={{ padding: '0.75rem', background: 'rgba(59,130,246,0.1)', borderRadius: '50%', color: 'var(--primary)' }}><UploadCloud size={26} /></div>
+                        <div style={{ padding: '0.75rem', background: 'rgba(35, 101, 171,0.1)', borderRadius: '50%', color: 'var(--primary)' }}><UploadCloud size={26} /></div>
                         <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.85rem' }}>Arrastra o haz clic</p>
                     </>
                 )}
@@ -125,6 +125,7 @@ function handleImageUpload(file, setter) {
 
 // ─── Hoja de Vida Panel ───────────────────────────────────────────────────────
 function HojaDeVidaPanel({ product, maintenances, onClose }) {
+    const { settings } = useAppContext();
     const [qrUrl, setQrUrl] = useState('');
     const hasPending = maintenances.some(
         m => m.productId === product.id && (m.status === 'Pendiente' || m.status === 'En Proceso')
@@ -132,13 +133,13 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
     const prodMantenimientos = maintenances.filter(m => m.productId === product.id);
 
     useEffect(() => {
-        generateQRDataURL(`CIELO|EQUIPO|${product.id}|${product.name}`).then(setQrUrl);
+        generateQRDataURL(`${settings?.shortName || 'CIELO'}|EQUIPO|${product.id}|${product.name}`).then(setQrUrl);
     }, [product.id, product.name]);
 
     const handlePrintQR = () => {
         const win = window.open('', '_blank');
         win.document.write(`<html><body style="text-align:center;padding:2rem;font-family:monospace">
-      <h2 style="color:#1e293b">CIELO — Alquiler de Equipos</h2>
+      <h2 style="color:#104166">CIELO — Alquiler de Equipos</h2>
       <img src="${qrUrl}" style="width:200px;height:200px" />
       <h3>${product.id}</h3><p>${product.name}</p>
       <p style="font-size:11px;color:#64748b">Escanea para ver hoja de vida</p>
@@ -152,10 +153,10 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
         <>
             <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 480, zIndex: 900, background: '#ffffff', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 40px rgba(0,0,0,0.35)', overflowY: 'auto', animation: 'slideInRight 0.25s ease' }}>
                 {/* Header */}
-                <div style={{ background: 'linear-gradient(135deg, #1e293b, #334155)', padding: '1.5rem 1.75rem', flexShrink: 0 }}>
+                <div style={{ background: 'linear-gradient(135deg, #104166, #154272)', padding: '1.5rem 1.75rem', flexShrink: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white', letterSpacing: '0.05em' }}>CIELO</div>
+                            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white', letterSpacing: '0.05em' }}>{settings?.shortName || 'CIELO'}</div>
                             <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>Hoja de Vida del Equipo</div>
                         </div>
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -196,7 +197,7 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
                             ].map(([k, v]) => (
                                 <div key={k}>
                                     <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>{k}</div>
-                                    <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#1e293b', marginTop: 2 }}>{v}</div>
+                                    <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#104166', marginTop: 2 }}>{v}</div>
                                 </div>
                             ))}
                         </div>
@@ -235,7 +236,7 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
                                 {prodMantenimientos.map((m, idx) => (
                                     <div key={m.id} style={{ padding: '0.75rem 1rem', borderBottom: idx < prodMantenimientos.length - 1 ? '1px solid #f1f5f9' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <div>
-                                            <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#1e293b' }}>{m.type} — {m.description}</div>
+                                            <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#104166' }}>{m.type} — {m.description}</div>
                                             <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 2 }}>{m.date} · Costo: ${(m.cost || 0).toLocaleString()}</div>
                                         </div>
                                         <span style={{ padding: '2px 10px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, background: `${statusColor(m.status)}20`, color: statusColor(m.status), border: `1px solid ${statusColor(m.status)}40`, whiteSpace: 'nowrap' }}>{m.status}</span>
@@ -253,7 +254,7 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
                             <>
                                 <img src={qrUrl} alt="QR" style={{ width: 160, height: 160, borderRadius: 8, border: '1px solid #e2e8f0', display: 'block', margin: '0 auto 0.75rem' }} />
                                 <div style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#64748b', marginBottom: '0.75rem' }}>{product.id} · {product.name}</div>
-                                <button onClick={handlePrintQR} style={{ padding: '0.5rem 1.25rem', borderRadius: 8, background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                <button onClick={handlePrintQR} style={{ padding: '0.5rem 1.25rem', borderRadius: 8, background: '#2365AB', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                                     <Download size={14} /> Imprimir QR
                                 </button>
                             </>
@@ -268,8 +269,20 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
 
 // ─── Modal: Dar de Baja ───────────────────────────────────────────────────────
 function BajaModal({ product, onClose, onConfirm }) {
+    const { verifyPassword } = useAppContext();
     const [motivo, setMotivo] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
     const motivos = ['Pérdida total por siniestro', 'Obsolescencia técnica', 'Robo o hurto', 'Deterioro irreparable', 'Venta del equipo', 'Otro'];
+
+    const handleConfirm = () => {
+        if (!verifyPassword(password)) {
+            setError('Contraseña incorrecta');
+            return;
+        }
+        onConfirm(motivo); 
+        onClose();
+    };
     return (
         <div className="modal-overlay">
             <div className="modal-content fadeIn" style={{ maxWidth: 440, padding: 0, overflow: 'hidden' }}>
@@ -295,12 +308,23 @@ function BajaModal({ product, onClose, onConfirm }) {
                             {motivos.map(m => <option key={m} value={m}>{m}</option>)}
                         </select>
                     </div>
+                    <div className="input-group">
+                        <label className="input-label">Contraseña para confirmar</label>
+                        <input 
+                            type="password" 
+                            className="input-base" 
+                            value={password} 
+                            onChange={e => { setPassword(e.target.value); setError(''); }}
+                            placeholder="********"
+                        />
+                    </div>
+                    {error && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.5rem', fontWeight: 600 }}>{error}</p>}
                     <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
                         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
                         <button
-                            disabled={!motivo}
-                            onClick={() => { onConfirm(motivo); onClose(); }}
-                            style={{ background: motivo ? '#f97316' : '#cbd5e1', color: 'white', border: 'none', borderRadius: 8, padding: '0.6rem 1.5rem', fontWeight: 700, cursor: motivo ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            disabled={!motivo || !password}
+                            onClick={handleConfirm}
+                            style={{ background: (motivo && password) ? '#f97316' : '#cbd5e1', color: 'white', border: 'none', borderRadius: 8, padding: '0.6rem 1.5rem', fontWeight: 700, cursor: (motivo && password) ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: 6 }}>
                             <ArrowDownCircle size={16} /> Confirmar Baja
                         </button>
                     </div>
@@ -312,6 +336,18 @@ function BajaModal({ product, onClose, onConfirm }) {
 
 // ─── Modal: Confirmar Eliminación ─────────────────────────────────────────────
 function DeleteModal({ product, onClose, onConfirm }) {
+    const { verifyPassword } = useAppContext();
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+
+    const handleConfirm = () => {
+        if (!verifyPassword(password)) {
+            setError('Contraseña incorrecta');
+            return;
+        }
+        onConfirm(); 
+        onClose();
+    };
     return (
         <div className="modal-overlay">
             <div className="modal-content fadeIn" style={{ maxWidth: 400, padding: 0, overflow: 'hidden' }}>
@@ -328,13 +364,25 @@ function DeleteModal({ product, onClose, onConfirm }) {
                 </div>
                 <div style={{ padding: '1.5rem 2rem' }}>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', lineHeight: 1.6 }}>
-                        Esta acción <strong>eliminará permanentemente</strong> el equipo del inventario. No podrá deshacerse. Solo elimine equipos que no tengan remisiones activas.
+                        Esta acción <strong>eliminará permanentemente</strong> el equipo del inventario. No podrá deshacerse.
                     </p>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                    <div className="input-group">
+                        <label className="input-label">Contraseña para confirmar</label>
+                        <input 
+                            type="password" 
+                            className="input-base" 
+                            value={password} 
+                            onChange={e => { setPassword(e.target.value); setError(''); }}
+                            placeholder="********"
+                        />
+                    </div>
+                    {error && <p style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '0.5rem', fontWeight: 600 }}>{error}</p>}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
                         <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
                         <button
-                            onClick={() => { onConfirm(); onClose(); }}
-                            style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: 8, padding: '0.6rem 1.5rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            disabled={!password}
+                            onClick={handleConfirm}
+                            style={{ background: password ? '#ef4444' : '#fecaca', color: 'white', border: 'none', borderRadius: 8, padding: '0.6rem 1.5rem', fontWeight: 700, cursor: password ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: 6 }}>
                             <Trash2 size={16} /> Eliminar
                         </button>
                     </div>
@@ -346,7 +394,7 @@ function DeleteModal({ product, onClose, onConfirm }) {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Products() {
-    const { products, addProduct, editProduct, deleteProduct, darDeBajaProduct, maintenances } = useAppContext();
+    const { products, addProduct, editProduct, deleteProduct, darDeBajaProduct, maintenances, settings } = useAppContext();
     const [showAddModal, setShowAddModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
@@ -380,7 +428,7 @@ export default function Products() {
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1>Inventario &amp; Alquiler</h1>
-                    <p className="text-muted">Gestión de maquinaria, hoja de vida y códigos QR</p>
+                    <p className="text-muted">Gestión de maquinaria y hoja de vida</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => setShowAddModal(true)}><PackagePlus size={20} /> Nuevo Equipo</button>
             </div>
@@ -403,15 +451,22 @@ export default function Products() {
                                     <tr key={p.id} style={{ opacity: isBaja ? 0.6 : 1 }}>
                                         <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{p.id}</td>
                                         <td><img src={p.image} alt={p.name} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--surface-border)' }} /></td>
-                                        <td style={{ fontWeight: 600 }}>
-                                            {p.name}
+                                        <td 
+                                            style={{ fontWeight: 600, cursor: 'pointer' }}
+                                            onClick={() => setHojaProduct(p)}
+                                            className="hover:text-primary transition-colors"
+                                        >
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                {p.name}
+                                                <QrCode size={12} style={{ opacity: 0.4 }} />
+                                            </div>
                                             {blocked && (
-                                                <span style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 999, background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: '0.65rem', fontWeight: 700, border: '1px solid rgba(239,68,68,0.25)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                                <span style={{ marginTop: 4, padding: '1px 7px', borderRadius: 999, background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: '0.65rem', fontWeight: 700, border: '1px solid rgba(239,68,68,0.25)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                                                     <AlertTriangle size={9} /> BLOQUEADO
                                                 </span>
                                             )}
                                             {isBaja && (
-                                                <span style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 999, background: 'rgba(249,115,22,0.12)', color: '#f97316', fontSize: '0.65rem', fontWeight: 700, border: '1px solid rgba(249,115,22,0.25)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                                <span style={{ marginTop: 4, padding: '1px 7px', borderRadius: 999, background: 'rgba(249,115,22,0.12)', color: '#f97316', fontSize: '0.65rem', fontWeight: 700, border: '1px solid rgba(249,115,22,0.25)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                                                     <ArrowDownCircle size={9} /> BAJA
                                                 </span>
                                             )}
@@ -438,26 +493,31 @@ export default function Products() {
                                             )}
                                         </td>
                                         <td>
-                                            <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+                                            <div className="flex gap-2">
                                                 {!isBaja && (
-                                                    <button className="btn btn-sm btn-primary" onClick={() => { setEditingProduct({ ...p }); setShowEditModal(true); }}>Editar</button>
+                                                    <button 
+                                                        className="btn-action-standard btn-edit" 
+                                                        onClick={() => { setEditingProduct({ ...p }); setShowEditModal(true); }}
+                                                        title="Editar"
+                                                    >
+                                                        <Pencil size={14} /> <span>Editar</span>
+                                                    </button>
                                                 )}
-                                                <button className="btn btn-sm btn-secondary" onClick={() => setHojaProduct(p)} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                                                    <QrCode size={13} /> HV / QR
-                                                </button>
                                                 {!isBaja && (
                                                     <button
+                                                        className="btn-action-standard btn-baja"
                                                         onClick={() => setBajaProduct(p)}
                                                         title="Dar de Baja"
-                                                        style={{ padding: '0.35rem 0.65rem', borderRadius: 6, background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.75rem', fontWeight: 600 }}>
-                                                        <ArrowDownCircle size={13} /> Baja
+                                                    >
+                                                        <ArrowDownCircle size={14} /> <span>Baja</span>
                                                     </button>
                                                 )}
                                                 <button
+                                                    className="btn-action-standard btn-delete"
                                                     onClick={() => setDeleteProduct(p)}
-                                                    title="Eliminar equipo"
-                                                    style={{ padding: '0.35rem 0.65rem', borderRadius: 6, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.75rem', fontWeight: 600 }}>
-                                                    <Trash2 size={13} /> Eliminar
+                                                    title="Eliminar"
+                                                >
+                                                    <Trash2 size={14} /> <span>Eliminar</span>
                                                 </button>
                                             </div>
                                         </td>

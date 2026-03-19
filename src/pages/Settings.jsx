@@ -6,11 +6,14 @@ export default function Settings() {
   const { settings, updateSettings, isAdmin } = useAppContext();
   const [formData, setFormData] = useState({
     companyName: '',
+    shortName: '',
+    nameComplement: '',
     nit: '',
     phone: '',
     email: '',
     address: '',
-    logo: ''
+    logo: '',
+    headerExtra: ''
   });
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -61,9 +64,9 @@ export default function Settings() {
       <header style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
         <div style={{
           padding: '0.75rem',
-          background: 'rgba(59, 130, 246, 0.1)',
+          background: 'rgba(35, 101, 171, 0.1)',
           borderRadius: '12px',
-          color: '#3b82f6'
+          color: '#2365AB'
         }}>
           <SettingsIcon size={24} />
         </div>
@@ -114,7 +117,32 @@ export default function Settings() {
           {/* Form Fields */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
             <div className="input-group">
-              <label><Building2 size={14} /> Nombre Completo / Razón Social</label>
+              <label><Building2 size={14} /> Nombre Corto / Identificador</label>
+              <input 
+                type="text" 
+                value={formData.shortName} 
+                onChange={e => {
+                  const val = e.target.value;
+                  setFormData({...formData, shortName: val, companyName: `${val} ${formData.nameComplement}`.trim()});
+                }}
+                placeholder="Ej: CIELO"
+                required
+              />
+            </div>
+            <div className="input-group">
+              <label><Building2 size={14} /> Complemento de Razón Social</label>
+              <input 
+                type="text" 
+                value={formData.nameComplement} 
+                onChange={e => {
+                  const val = e.target.value;
+                  setFormData({...formData, nameComplement: val, companyName: `${formData.shortName} ${val}`.trim()});
+                }}
+                placeholder="Ej: ALQUILER DE EQUIPOS"
+              />
+            </div>
+            <div className="input-group" style={{ gridColumn: 'span 2' }}>
+              <label><Building2 size={14} /> Razón Social Completa (como aparecerá en documentos)</label>
               <input 
                 type="text" 
                 value={formData.companyName} 
@@ -156,6 +184,15 @@ export default function Settings() {
                 value={formData.address} 
                 onChange={e => setFormData({...formData, address: e.target.value})}
                 required
+              />
+            </div>
+            <div className="input-group" style={{ gridColumn: 'span 2' }}>
+              <label><FileText size={14} /> Información Adicional en Cabezote (Ej: Resolución, Régimen, Slogan)</label>
+              <input 
+                type="text" 
+                value={formData.headerExtra || ''} 
+                onChange={e => setFormData({...formData, headerExtra: e.target.value})}
+                placeholder="Aparecerá debajo del complemento de nombre en los documentos"
               />
             </div>
           </div>

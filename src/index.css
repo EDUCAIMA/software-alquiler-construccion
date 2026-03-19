@@ -4,12 +4,15 @@
 :root {
   --background: #f1f5f9;
   --surface: rgba(255, 255, 255, 0.9);
-  --surface-border: rgba(226, 232, 240, 0.8);
-  --surface-hover: rgba(248, 250, 252, 0.9);
+  --surface-border: rgba(35, 101, 171, 0.2);
+  --surface-hover: rgba(118, 177, 224, 0.1);
 
-  --primary: #3b82f6;
-  --primary-glow: rgba(59, 130, 246, 0.3);
-  --primary-hover: #2563eb;
+  --primary: #2365AB;
+  --primary-light: #76B1E0;
+  --primary-dark: #154272;
+  --primary-accent: #263777;
+  --primary-glow: rgba(35, 101, 171, 0.3);
+  --primary-hover: var(--primary-dark);
 
   --success: #10b981;
   --success-glow: rgba(16, 185, 129, 0.3);
@@ -19,8 +22,8 @@
   --danger: #ef4444;
   --danger-glow: rgba(239, 68, 68, 0.3);
 
-  --text-primary: #1e293b;
-  --text-secondary: #475569;
+  --text-primary: #104166;
+  --text-secondary: var(--primary-accent);
   --text-muted: #64748b;
 
   --sidebar-width: 280px;
@@ -39,7 +42,6 @@ body {
   background-color: var(--background);
   color: var(--text-primary);
   min-height: 100vh;
-  overflow-x: hidden;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -67,13 +69,14 @@ body {
   top: 0;
   bottom: 0;
   width: var(--sidebar-width);
-  background: var(--surface);
-  border-right: 1px solid var(--surface-border);
+  background: #104166;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 50;
-  padding: 1.5rem;
+  padding: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 0.5rem;
+  color: white;
 }
 
 .main-content {
@@ -90,36 +93,47 @@ body {
 
 .sidebar-header {
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0 0.5rem;
+  padding: 0;
+  margin-bottom: 0.5rem;
 }
 
 .logo-icon {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 0.75rem;
-  background: linear-gradient(135deg, var(--primary), #60a5fa);
+  width: 9.5rem;
+  height: 9.5rem;
+  border-radius: 2rem;
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 15px var(--primary-glow);
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 1.2rem;
 }
 
 .logo-title {
-  font-size: 1.125rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #60a5fa, #3b82f6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  line-height: 1.2;
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: white;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
 }
 
 .logo-subtitle {
-  font-size: 0.65rem;
-  color: var(--text-secondary);
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
+  margin-top: 0.2rem;
 }
 
 .nav-menu {
@@ -139,36 +153,39 @@ body {
   transition: all 0.3s ease;
   text-decoration: none;
   border: 1px solid transparent;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .nav-item:hover {
-  color: var(--primary);
-  background: rgba(59, 130, 246, 0.05);
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .nav-item.active {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
-  border-color: rgba(59, 130, 246, 0.2);
-  box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.1);
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
 .nav-item.active svg {
-  color: #60a5fa;
+  color: white;
 }
 
 .nav-item svg {
   transition: color 0.3s ease;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.nav-item:hover svg {
+  color: white;
 }
 
 .user-profile {
   margin-top: auto;
   padding: 0.75rem 1rem;
   border-radius: 0.75rem;
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -177,21 +194,25 @@ body {
 }
 
 .user-profile:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.user-profile .text-muted {
+  color: rgba(255, 255, 255, 0.5) !important;
 }
 
 .avatar {
   width: 2rem;
   height: 2rem;
   border-radius: 50%;
-  background: #334155;
+  background: var(--primary-dark);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.875rem;
   font-weight: 700;
   color: white;
-  border: 1px solid #475569;
+  border: 1px solid var(--primary-accent);
 }
 
 /* Grid Layouts */
@@ -366,8 +387,9 @@ h3 {
 }
 
 .text-gradient {
-  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  background: linear-gradient(135deg, var(--primary-light), var(--primary));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -380,12 +402,17 @@ h3 {
 .glass-table-container {
   overflow-x: auto;
   border-radius: 12px;
+  width: 100%;
+  position: relative;
+  -webkit-overflow-scrolling: touch; /* Suavidad en Mac/iOS */
 }
 
 .glass-table {
   width: 100%;
+  min-width: 1000px; /* Forzamos el ancho para que aparezca el scroll horizontal */
   border-collapse: collapse;
   text-align: left;
+  table-layout: auto;
 }
 
 .glass-table th {
@@ -451,9 +478,9 @@ h3 {
 }
 
 .badge-primary {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(35, 101, 171, 0.2);
+  color: var(--primary);
+  border: 1px solid rgba(35, 101, 171, 0.3);
 }
 
 /* Animations */
@@ -585,8 +612,8 @@ h3 {
 }
 
 .icon-wrapper.blue {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
+  background: rgba(35, 101, 171, 0.15);
+  color: var(--primary);
 }
 
 .icon-wrapper.green {
@@ -602,4 +629,127 @@ h3 {
 .icon-wrapper.red {
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
+}
+
+/* New Standard Action Buttons for Inventory/Products */
+.btn-action-standard {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  min-width: 90px;
+  height: 32px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.btn-action-standard:hover {
+  transform: translateY(-1px);
+}
+
+.btn-action-standard:active {
+  transform: translateY(0);
+}
+
+.btn-edit {
+  background: rgba(35, 101, 171, 0.08);
+  color: var(--primary);
+  border-color: rgba(35, 101, 171, 0.15);
+}
+
+.btn-edit:hover {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 4px 12px var(--primary-glow);
+  border-color: transparent;
+}
+
+.btn-baja {
+  background: rgba(249, 115, 22, 0.08);
+  color: #f97316;
+  border-color: rgba(249, 115, 22, 0.15);
+}
+
+.btn-baja:hover {
+  background: #f97316;
+  color: white;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+  border-color: transparent;
+}
+
+.btn-delete {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.15);
+}
+
+.btn-delete:hover {
+  background: var(--danger);
+  color: white;
+  box-shadow: 0 4px 12px var(--danger-glow);
+  border-color: transparent;
+}
+
+/* Mini KPI Cards for Cotizaciones */
+.mini-kpi-card {
+  background: white;
+  border-radius: 12px;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--surface-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.mini-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+}
+
+.mini-kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+}
+
+.mini-kpi-card.blue::before { background: var(--primary); }
+.mini-kpi-card.orange::before { background: var(--warning); }
+.mini-kpi-card.green::before { background: var(--success); }
+.mini-kpi-card.red::before { background: var(--danger); }
+
+.mini-kpi-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.mini-kpi-value {
+  font-size: 1.6rem;
+  font-weight: 850;
+  color: var(--text-primary);
+}
+
+.mini-kpi-label {
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  text-align: center;
 }

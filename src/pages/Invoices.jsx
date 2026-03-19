@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
-import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight, ArrowUp, ArrowDown, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import { format, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout } from './pdfTheme';
 
 export default function Invoices() {
-    const { invoices, clients, products, settings, createInvoice, payInvoice } = useAppContext();
+    const { invoices, clients, products, settings, createInvoice, payInvoice, deleteInvoice } = useAppContext();
     const navigate = useNavigate();
 
     // New Invoice Modal
@@ -32,6 +33,9 @@ export default function Invoices() {
     const [filterClient, setFilterClient] = useState('');
     const [filterObra, setFilterObra] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
+    const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
 
     const subtotal = cart.reduce((acc, item) => acc + (item.quantity * item.days * item.price), 0);
     const selectedClientData = clients.find(c => c.id === clientId);
@@ -39,14 +43,59 @@ export default function Invoices() {
     const ret = Math.round(subtotal * (selectedClientData?.porcRetencion || 0) / 100);
     const currentTotal = subtotal + iva + ret;
 
-    const filteredInvoices = invoices.filter(invoice => {
-        const client = clients.find(c => c.id === invoice.clientId);
-        if (!client) return false;
-        const matchClient = filterClient ? client.id === filterClient : true;
-        const matchObra = filterObra ? client.obra === filterObra : true;
-        const matchStatus = filterStatus ? invoice.status === filterStatus : true;
-        return matchClient && matchObra && matchStatus;
-    });
+    const filteredInvoices = useMemo(() => {
+        return invoices.filter(invoice => {
+            const client = clients.find(c => c.id === invoice.clientId);
+            if (!client) return false;
+            const matchClient = filterClient ? client.id === filterClient : true;
+            const matchObra = filterObra ? client.obra === filterObra : true;
+            const matchStatus = filterStatus ? invoice.status === filterStatus : true;
+            return matchClient && matchObra && matchStatus;
+        });
+    }, [invoices, clients, filterClient, filterObra, filterStatus]);
+
+    const sortedInvoices = useMemo(() => {
+        let sortable = [...filteredInvoices];
+        if (sortConfig.key) {
+            sortable.sort((a, b) => {
+                let vA, vB;
+                const clientA = clients.find(c => c.id === a.clientId);
+                const clientB = clients.find(c => c.id === b.clientId);
+
+                switch (sortConfig.key) {
+                    case 'id': vA = a.id; vB = b.id; break;
+                    case 'origin': vA = a.cotizacionId || 'Manual'; vB = b.cotizacionId || 'Manual'; break;
+                    case 'client': vA = clientA?.name || ''; vB = clientB?.name || ''; break;
+                    case 'obra': vA = clientA?.obra || ''; vB = clientB?.obra || ''; break;
+                    case 'amount': vA = a.amount; vB = b.amount; break;
+                    case 'date': vA = a.date; vB = b.date; break;
+                    case 'status': vA = a.status; vB = b.status; break;
+                    default: vA = a[sortConfig.key]; vB = b[sortConfig.key];
+                }
+
+                if (vA < vB) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (vA > vB) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return sortable;
+    }, [filteredInvoices, sortConfig, clients]);
+
+    const paginatedInvoices = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return sortedInvoices.slice(start, start + itemsPerPage);
+    }, [sortedInvoices, currentPage, itemsPerPage]);
+
+    const totalPages = Math.ceil(sortedInvoices.length / itemsPerPage);
+
+    const requestSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+        setCurrentPage(1);
+    };
 
     const uniqueObras = [...new Set(clients.map(c => c.obra).filter(Boolean))];
 
@@ -121,42 +170,40 @@ export default function Invoices() {
         const client = clients.find(c => c.id === invoice.clientId);
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 14;
+        const margin = 10;
 
-        applyStandardLayout(doc, 'Factura', settings);
+        let y = applyStandardLayout(doc, 'Factura', settings, invoice.id);
 
         // Client Info Box
-        let y = 54;
         doc.setFillColor(248, 250, 252);
-        doc.roundedRect(margin, y, pageWidth - margin * 2, 40, 3, 3, 'F');
+        doc.roundedRect(margin, y, pageWidth - margin * 2, 35, 3, 3, 'F');
         doc.setDrawColor(226, 232, 240);
-        doc.roundedRect(margin, y, pageWidth - margin * 2, 40, 3, 3, 'S');
+        doc.roundedRect(margin, y, pageWidth - margin * 2, 35, 3, 3, 'S');
 
         doc.setTextColor(30, 41, 59);
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'bold');
-        doc.text('FACTURAR A:', margin + 10, y + 12);
-        doc.setFont(undefined, 'normal');
-        doc.setFontSize(11);
-        doc.text(client?.name || '—', margin + 10, y + 25);
-        doc.setFontSize(9);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text('FACTURAR A:', margin + 6, y + 8);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10.5);
+        doc.text(client?.name || '—', margin + 6, y + 16);
+        doc.setFontSize(8);
         doc.setTextColor(100, 116, 139);
-        doc.text(`NIT: ${client?.nit || '—'} | Tel: ${client?.phone || '—'}`, margin + 10, y + 35);
+        doc.text(`NIT: ${client?.nit || '—'} | Tel: ${client?.phone || '—'}`, margin + 6, y + 24);
+        doc.text(`Obra: ${client?.obra || '—'}`, margin + 6, y + 29);
 
-        // Right side: Invoice basic details
+        // Right side: Invoice basic details (already in header, but we can add secondary info if needed)
         doc.setTextColor(100, 116, 139);
-        doc.text('FACTURA N°:', pageWidth - margin - 80, y + 12);
-        doc.text('FECHA:', pageWidth - margin - 80, y + 23);
-        doc.text('ESTADO:', pageWidth - margin - 80, y + 34);
+        doc.setFontSize(8);
+        doc.text('FECHA EMISIÓN:', pageWidth - margin - 70, y + 12);
+        doc.text('ESTADO PAGO:', pageWidth - margin - 70, y + 20);
 
         doc.setTextColor(30, 41, 59);
-        doc.setFont(undefined, 'bold');
-        doc.text(invoice.id, pageWidth - margin - 10, y + 12, { align: 'right' });
-        doc.setFont(undefined, 'normal');
-        doc.text(invoice.date, pageWidth - margin - 10, y + 23, { align: 'right' });
-        doc.text(invoice.status === 'Paid' ? 'PAGADA' : 'PENDIENTE', pageWidth - margin - 10, y + 34, { align: 'right' });
+        doc.setFont('helvetica', 'bold');
+        doc.text(invoice.date, pageWidth - margin - 6, y + 12, { align: 'right' });
+        doc.text(invoice.status === 'Paid' ? 'PAGADA' : 'PENDIENTE', pageWidth - margin - 6, y + 20, { align: 'right' });
 
-        y += 50;
+        y += 42;
 
         autoTable(doc, {
             startY: y,
@@ -179,42 +226,48 @@ export default function Invoices() {
             }
         });
 
-        // --- Total Breakdown ---
-        const subtotal = invoice.items.reduce((s, item) => s + (item.quantity * (item.days || 1) * item.price), 0);
-        const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
-        const iva = Math.round(subtotal * porcIVA / 100);
-        const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
+        try {
+            // --- Total Breakdown ---
+            const subtotal = invoice.items.reduce((s, item) => s + (item.quantity * (item.days || 1) * item.price), 0);
+            const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
+            const iva = Math.round(subtotal * porcIVA / 100);
+            const porcRet = client?.porcRetencion || 0;
+            const ret = Math.round(subtotal * porcRet / 100);
+            const total = subtotal + iva + ret + (Number(invoice.transporte) || 0);
 
-        y = doc.lastAutoTable.finalY + 10;
-        const totW = 80;
-        const totX = pageWidth - margin - totW;
+            y = (doc).lastAutoTable.finalY + 10;
+            const totW = 80;
+            const totX = pageWidth - margin - totW;
 
-        const summaryItems = [
-            ['Subtotal:', `$${subtotal.toLocaleString()}`],
-            [`IVA (${porcIVA}%):`, `$${iva.toLocaleString()}`],
-            [`Retención (${client?.porcRetencion || 0}%):`, `$${ret.toLocaleString()}`],
-            ['Transporte:', `$${(invoice.transporte || 0).toLocaleString()}`]
-        ];
+            const summaryItems = [
+                ['Subtotal:', `$${subtotal.toLocaleString()}`],
+                ...(porcIVA > 0 ? [[`+ IVA (${porcIVA}%):`, `$${iva.toLocaleString()}`]] : []),
+                ...(porcRet > 0 ? [[`+ Retención (${porcRet}%):`, `$${ret.toLocaleString()}`]] : []),
+                ...(Number(invoice.transporte) > 0 ? [['+ Transporte:', `$${(Number(invoice.transporte) || 0).toLocaleString()}`]] : [])
+            ];
 
-        summaryItems.forEach(([label, value]) => {
-            doc.setFontSize(8.5);
-            doc.setTextColor(100, 116, 139);
-            doc.setFont(undefined, 'normal');
-            doc.text(label, totX, y);
-            doc.setTextColor(30, 41, 59);
-            doc.setFont(undefined, 'bold');
-            doc.text(value, pageWidth - margin, y, { align: 'right' });
-            y += 8;
-        });
+            summaryItems.forEach(([label, value]) => {
+                doc.setFontSize(8.5);
+                doc.setTextColor(100, 116, 139);
+                doc.setFont(undefined, 'normal');
+                doc.text(label, totX, y);
+                doc.setTextColor(30, 41, 59);
+                doc.setFont(undefined, 'bold');
+                doc.text(value, pageWidth - margin, y, { align: 'right' });
+                y += 8;
+            });
 
-        // Total
-        y += 4;
-        doc.setFillColor(30, 41, 59);
-        doc.rect(totX - 10, y - 6, totW + 10, 10, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(10);
-        doc.text('TOTAL:', totX, y + 1);
-        doc.text(`$${(invoice.amount || 0).toLocaleString()}`, pageWidth - margin, y + 1, { align: 'right' });
+            // Total
+            y += 4;
+            doc.setFillColor(30, 41, 59);
+            doc.rect(totX - 10, y - 6, totW + 10, 10, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(10);
+            doc.text('TOTAL:', totX, y + 1);
+            doc.text(`$${total.toLocaleString()}`, pageWidth - margin, y + 1, { align: 'right' });
+        } catch (err) {
+            console.error('Error in total calculation or summary:', err);
+        }
 
         // --- Signature / Stamp ---
         const pageHeight = doc.internal.pageSize.getHeight();
@@ -241,17 +294,9 @@ export default function Invoices() {
     const handleGenerateReport = () => {
         const doc = new jsPDF('p', 'pt', 'letter');
         const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 50;
+        const margin = 40;
 
-        doc.setFillColor(59, 130, 246);
-        doc.rect(0, 0, pageWidth, 70, 'F');
-        doc.setFontSize(22);
-        doc.setTextColor(255, 255, 255);
-        doc.setFont(undefined, 'bold');
-        doc.text(settings?.companyName || 'CIELO', margin, 35);
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'normal');
-        doc.text('Reporte de Facturación', margin, 52);
+        let y = applyStandardLayout(doc, 'Reporte de Facturación', settings);
 
         const tableData = filteredInvoices.map(inv => {
             const client = clients.find(c => c.id === inv.clientId);
@@ -272,7 +317,7 @@ export default function Invoices() {
             footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold' }
         });
 
-        doc.save(`Reporte_Facturacion.pdf`);
+        doc.save(`Reporte_Facturacion_${settings?.shortName || 'CIELO'}.pdf`);
     };
 
     return (
@@ -322,35 +367,46 @@ export default function Invoices() {
                     <table className="glass-table">
                         <thead>
                             <tr>
-                                <th>No. Factura</th>
-                                <th>Origen</th>
-                                <th>Cliente</th>
-                                <th>Obra/Proyecto</th>
-                                <th>Monto Total</th>
-                                <th>Fecha Emisión</th>
-                                <th>Estado</th>
-                                <th style={{ textAlign: 'center' }}>Acciones</th>
+                                {[
+                                    { label: 'No. Factura', key: 'id' },
+                                    { label: 'Cliente', key: 'client' },
+                                    { label: 'Obra/Proyecto', key: 'obra' },
+                                    { label: 'Monto Total', key: 'amount' },
+                                    { label: 'Fecha Emisión', key: 'date' },
+                                    { label: 'Estado', key: 'status' }
+                                ].map(head => (
+                                    <th 
+                                        key={head.key} 
+                                        onClick={() => requestSort(head.key)}
+                                        style={{ cursor: 'pointer', userSelect: 'none' }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            {head.label}
+                                            {sortConfig.key === head.key ? (
+                                                sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />
+                                            ) : (
+                                                <div style={{ width: 14, height: 14, opacity: 0.2 }}>
+                                                    <ArrowUp size={14} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </th>
+                                ))}
+                                <th style={{ textAlign: 'center', whiteSpace: 'nowrap', width: '320px' }}>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredInvoices.map(invoice => {
+                            {paginatedInvoices.map(invoice => {
                                 const client = clients.find(c => c.id === invoice.clientId);
                                 return (
                                     <tr key={invoice.id}>
                                         <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{invoice.id}</td>
-                                        <td>
-                                            {invoice.cotizacionId ? (
-                                                <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(99,102,241,0.12)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.3)' }}>
-                                                    📋 {invoice.cotizacionId}
-                                                </span>
-                                            ) : (
-                                                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Manual</span>
-                                            )}
-                                        </td>
                                         <td style={{ fontWeight: 600 }}>{client?.name || 'N/A'}</td>
                                         <td className="text-muted">{client?.obra || '-'}</td>
                                         <td style={{ fontWeight: 700 }}>${invoice.amount.toLocaleString()}</td>
-                                        <td className="text-muted">{invoice.date}</td>
+                                        <td className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                            {invoice.date ? format(parseISO(invoice.date), 'dd/MM/yy') : '—'}
+                                        </td>
                                         <td>
                                             <span className={`badge ${invoice.status === 'Paid' ? 'badge-success' : 'badge-warning'}`}
                                                 style={invoice.status === 'Pending' ? { background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' } : {}}>
@@ -358,7 +414,7 @@ export default function Invoices() {
                                             </span>
                                         </td>
                                         <td>
-                                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', whiteSpace: 'nowrap' }}>
                                                 <button className="btn btn-secondary btn-sm" onClick={() => handleViewInvoice(invoice)} title="Ver Factura">
                                                     <Eye size={15} /> Ver
                                                 </button>
@@ -395,6 +451,88 @@ export default function Invoices() {
                             })}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Pagination */}
+                <div className="flex justify-between items-center mt-6 py-4 px-2" style={{ borderTop: '1px solid var(--surface-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>Mostrar:</span>
+                            <div style={{ position: 'relative' }}>
+                                <select 
+                                    value={itemsPerPage} 
+                                    onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                                    className="input-base"
+                                    style={{ padding: '0.3rem 1.8rem 0.3rem 0.6rem', fontSize: '0.8rem', width: 'auto', minWidth: '70px', height: '32px' }}
+                                >
+                                    {[5, 10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                                <ChevronDown size={14} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+                            </div>
+                            <span>por página</span>
+                        </div>
+                        <div style={{ width: '1px', height: '16px', background: 'var(--surface-border)' }}></div>
+                        <div>
+                            Mostrando {sortedInvoices.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, sortedInvoices.length)} de {sortedInvoices.length} registros
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(1)}
+                            title="Primera página"
+                        >
+                            <ChevronsLeft size={16} />
+                        </button>
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(prev => prev - 1)}
+                            title="Página anterior"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        
+                        <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                let pageNum;
+                                if (totalPages <= 5) pageNum = i + 1;
+                                else if (currentPage <= 3) pageNum = i + 1;
+                                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                else pageNum = currentPage - 2 + i;
+                                
+                                return (
+                                    <button 
+                                        key={pageNum}
+                                        onClick={() => setCurrentPage(pageNum)}
+                                        className={`btn btn-sm ${currentPage === pageNum ? 'btn-primary' : 'btn-secondary'}`}
+                                        style={{ minWidth: '32px', height: '32px', padding: 0 }}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(prev => prev + 1)}
+                            title="Siguiente página"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(totalPages)}
+                            title="Última página"
+                        >
+                            <ChevronsRight size={16} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -448,9 +586,9 @@ export default function Invoices() {
                                     </div>
 
                                     {selectedClientData && (
-                                        <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 12, padding: '1.25rem', marginTop: '0.5rem' }}>
+                                        <div style={{ background: 'rgba(35, 101, 171,0.06)', border: '1px solid rgba(35, 101, 171,0.2)', borderRadius: 12, padding: '1.25rem', marginTop: '0.5rem' }}>
                                             <div className="flex items-center gap-3 mb-3">
-                                                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                                                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(35, 101, 171,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
                                                     <User size={20} />
                                                 </div>
                                                 <div>
@@ -485,7 +623,7 @@ export default function Invoices() {
                             {step === 2 && (
                                 <div>
                                     {/* Client Summary Bar */}
-                                    <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    <div style={{ background: 'rgba(35, 101, 171,0.06)', border: '1px solid rgba(35, 101, 171,0.2)', borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                         <User size={16} style={{ color: 'var(--primary)' }} />
                                         <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>{selectedClientData?.name}</span>
                                         <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>— {selectedClientData?.obra || 'Sin obra'}</span>
@@ -579,7 +717,7 @@ export default function Invoices() {
                                     )}
 
                                     {/* Total */}
-                                    <div style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 12, padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <div style={{ background: 'rgba(35, 101, 171,0.08)', border: '1px solid rgba(35, 101, 171,0.2)', borderRadius: 12, padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                                         <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Total de la Orden</span>
                                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>${currentTotal.toLocaleString()}</span>
                                     </div>
@@ -606,12 +744,12 @@ export default function Invoices() {
                     <div className="modal-overlay">
                         <div className="modal-content fadeIn" style={{ maxWidth: '720px', padding: 0 }}>
                             {/* Invoice Header */}
-                            <div style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', padding: '2rem', borderRadius: '16px 16px 0 0' }}>
+                            <div style={{ background: 'linear-gradient(135deg, #2365AB, #154272)', padding: '2rem', borderRadius: '16px 16px 0 0' }}>
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white' }}>CIELO</div>
-                                        <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>Alquiler de Equipos y Herramientas</div>
-                                    </div>
+                                         <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white' }}>{settings?.shortName || 'CIELO'}</div>
+                                         <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>{settings?.nameComplement || 'Alquiler de Equipos y Herramientas'}</div>
+                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>{inv.id}</div>
                                         <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>Fecha: {inv.date}</div>
@@ -674,12 +812,12 @@ export default function Invoices() {
                                     <div style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>Sección de Firma (incluida en PDF)</div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
                                         <div>
-                                            <div style={{ borderBottom: '1px solid #334155', marginBottom: '0.4rem', height: 32 }}></div>
+                                            <div style={{ borderBottom: '1px solid #154272', marginBottom: '0.4rem', height: 32 }}></div>
                                             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Firma Representante</div>
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>CIELO</div>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{settings?.shortName || 'CIELO'}</div>
                                         </div>
                                         <div>
-                                            <div style={{ borderBottom: '1px solid #334155', marginBottom: '0.4rem', height: 32 }}></div>
+                                            <div style={{ borderBottom: '1px solid #154272', marginBottom: '0.4rem', height: 32 }}></div>
                                             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Firma del Arrendatario</div>
                                             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>C.C. / NIT: _________________</div>
                                         </div>
@@ -699,7 +837,19 @@ export default function Invoices() {
                                             <CreditCard size={18} /> Registrar Pago
                                         </button>
                                     )}
-                                    <button className="btn btn-primary" onClick={() => generatePDF(inv)}>
+                                    <button
+                                        className="btn btn-sm"
+                                        style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer', padding: '0.6rem 1.25rem', fontSize: '0.95rem' }}
+                                        onClick={() => {
+                                            if (window.confirm(`¿Estás seguro de que deseas eliminar la factura ${inv.id}? Esta acción no se puede deshacer.`)) {
+                                                deleteInvoice(inv.id);
+                                                setShowViewModal(false);
+                                            }
+                                        }}
+                                    >
+                                        <Trash2 size={18} /> Eliminar
+                                    </button>
+                                    <button className="btn btn-primary" style={{ padding: '0.6rem 1.25rem', fontSize: '0.95rem' }} onClick={() => generatePDF(inv)}>
                                         <Download size={18} /> Descargar PDF
                                     </button>
                                 </div>

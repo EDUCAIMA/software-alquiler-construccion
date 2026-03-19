@@ -113,7 +113,8 @@ async function initDB() {
                 habeas_data BOOLEAN DEFAULT false,
                 habeas_data_timestamp TIMESTAMPTZ,
                 firma TEXT,
-                foto TEXT
+                foto TEXT,
+                clausulas JSONB DEFAULT '[]'
             )
             `);
 
@@ -193,6 +194,8 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS settings(
                 id VARCHAR(50) PRIMARY KEY,
                 company_name VARCHAR(255),
+                short_name VARCHAR(100),
+                name_complement VARCHAR(255),
                 nit VARCHAR(50),
                 phone VARCHAR(50),
                 email VARCHAR(255),
@@ -200,13 +203,17 @@ async function initDB() {
                 address TEXT
             )
             `);
+        // Migración: agregar columnas si no existen
+        await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS short_name VARCHAR(100)`);
+        await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS name_complement VARCHAR(255)`);
+        await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS header_extra TEXT`);
 
         // Seed inicial de settings si está vacío
         const { rows: sRows } = await client.query('SELECT COUNT(*) FROM settings');
         if (parseInt(sRows[0].count) === 0) {
             await client.query(`
-        INSERT INTO settings(id, company_name, nit, phone, email, logo, address) VALUES
-            ('main', 'CIELO - ALQUILER DE EQUIPOS', '900.000.000-1', '300 123 4567', 'gerencia@cielo.com', null, 'Calle 123 #45-67')
+        INSERT INTO settings(id, company_name, short_name, name_complement, nit, phone, email, logo, address) VALUES
+            ('main', 'CIELO - ALQUILER DE EQUIPOS', 'CIELO', 'ALQUILER DE EQUIPOS', '900.000.000-1', '300 123 4567', 'gerencia@cielo.com', null, 'Calle 123 #45-67')
                 `);
         }
 
@@ -277,7 +284,8 @@ const mapCot = r => ({
     transporte: Number(r.transporte), notas: r.notas, estado: r.estado,
     items: r.items || [],
     habeasData: r.habeas_data, habeasDataTimestamp: r.habeas_data_timestamp,
-    firma: r.firma, foto: r.foto
+    firma: r.firma, foto: r.foto,
+    clausulas: r.clausulas || []
 });
 
 const mapRem = r => ({
@@ -317,11 +325,14 @@ const mapLiq = r => ({
 const mapSettings = r => ({
     id: r.id,
     companyName: r.company_name,
+    shortName: r.short_name || '',
+    nameComplement: r.name_complement || '',
     nit: r.nit,
     phone: r.phone,
     email: r.email,
     logo: r.logo,
-    address: r.address
+    address: r.address,
+    headerExtra: r.header_extra || ''
 });
 
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
@@ -441,6 +452,13 @@ app.put('/api/invoices/:id', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.delete('/api/invoices/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM invoices WHERE id=$1', [req.params.id]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── COTIZACIONES ────────────────────────────────────────────────────────────
 app.get('/api/cotizaciones', async (req, res) => {
     try {
@@ -452,13 +470,13 @@ app.get('/api/cotizaciones', async (req, res) => {
 app.post('/api/cotizaciones', async (req, res) => {
     try {
         const { id, clientId, obraId, fecha, validezDias, metodoPago, responsableTransporte,
-            plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto } = req.body;
+            plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto, clausulas } = req.body;
         await pool.query(
-            `INSERT INTO cotizaciones(id, client_id, obra_id, fecha, validez_dias, metodo_pago, responsable_transporte, plazo_entrega, transporte, notas, estado, items, habeas_data, habeas_data_timestamp, firma, foto)
-       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+            `INSERT INTO cotizaciones(id, client_id, obra_id, fecha, validez_dias, metodo_pago, responsable_transporte, plazo_entrega, transporte, notas, estado, items, habeas_data, habeas_data_timestamp, firma, foto, clausulas)
+       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
             [id, clientId, obraId, fecha || null, validezDias, metodoPago, responsableTransporte,
                 plazoEntrega, transporte, notas, estado, JSON.stringify(items || []),
-                habeasData || false, habeasDataTimestamp || null, firma || null, foto || null]
+                habeasData || false, habeasDataTimestamp || null, firma || null, foto || null, JSON.stringify(clausulas || [])]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -467,15 +485,50 @@ app.post('/api/cotizaciones', async (req, res) => {
 app.put('/api/cotizaciones/:id', async (req, res) => {
     try {
         const { clientId, obraId, fecha, validezDias, metodoPago, responsableTransporte,
-            plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto } = req.body;
+            plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto, clausulas } = req.body;
         await pool.query(
-            `UPDATE cotizaciones SET client_id = $1, obra_id = $2, fecha = $3, validez_dias = $4, metodo_pago = $5, responsable_transporte = $6, plazo_entrega = $7, transporte = $8, notas = $9, estado = $10, items = $11, habeas_data = $12, habeas_data_timestamp = $13, firma = $14, foto = $15 WHERE id = $16`,
+            `UPDATE cotizaciones SET client_id = $1, obra_id = $2, fecha = $3, validez_dias = $4, metodo_pago = $5, responsable_transporte = $6, plazo_entrega = $7, transporte = $8, notas = $9, estado = $10, items = $11, habeas_data = $12, habeas_data_timestamp = $13, firma = $14, foto = $15, clausulas = $16 WHERE id = $17`,
             [clientId, obraId, fecha || null, validezDias, metodoPago, responsableTransporte,
                 plazoEntrega, transporte, notas, estado, JSON.stringify(items || []),
-                habeasData || false, habeasDataTimestamp || null, firma || null, foto || null, req.params.id]
+                habeasData || false, habeasDataTimestamp || null, firma || null, foto || null, JSON.stringify(clausulas || []), req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── PUBLIC COTIZACIONES (Sin Auth) ──────────────────────────────────────────
+app.get('/api/public/cotizaciones/:id', async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT * FROM cotizaciones WHERE id = $1', [req.params.id]);
+        if (rows.length === 0) return res.status(404).json({ error: 'Cotización no encontrada' });
+        
+        const cot = mapCot(rows[0]);
+        const { rows: clientRows } = await pool.query('SELECT name, nit, direccion, email, obras FROM clients WHERE id = $1', [cot.clientId]);
+        const { rows: settingsRows } = await pool.query('SELECT * FROM settings WHERE id = $1', ['main']);
+        
+        res.json({ 
+            cot, 
+            client: clientRows[0] || null, 
+            settings: settingsRows.length > 0 ? mapSettings(settingsRows[0]) : null
+        });
+    } catch (e) { 
+        console.error('SERVER ERROR PUBLIC GET:', e.message);
+        res.status(500).json({ error: e.message }); 
+    }
+});
+
+app.post('/api/public/cotizaciones/:id/approve', async (req, res) => {
+    try {
+        const { firma, foto, habeasData, habeasDataTimestamp } = req.body;
+        await pool.query(
+            `UPDATE cotizaciones SET estado = 'Aprobada', firma = $1, foto = $2, habeas_data = $3, habeas_data_timestamp = $4 WHERE id = $5`,
+            [firma, foto, habeasData !== undefined ? habeasData : true, habeasDataTimestamp || new Date(), req.params.id]
+        );
+        res.json({ success: true });
+    } catch (e) { 
+        console.error('SERVER ERROR PUBLIC POST APPROVE:', e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 // ─── REMISIONES ──────────────────────────────────────────────────────────────
@@ -626,20 +679,30 @@ app.put('/api/liquidaciones/:id', async (req, res) => {
 app.get('/api/settings', async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM settings WHERE id = $1', ['main']);
-        if (rows.length === 0) return res.json({ companyName: 'CIELO', nit: '', phone: '', email: '', logo: '', address: '' });
+        if (rows.length === 0) return res.json({ companyName: 'CIELO', shortName: 'CIELO', nameComplement: '', nit: '', phone: '', email: '', logo: '', address: '' });
         res.json(mapSettings(rows[0]));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/settings', async (req, res) => {
     try {
-        const { companyName, nit, phone, email, logo, address } = req.body;
+        const { companyName, shortName, nameComplement, nit, phone, email, logo, address, headerExtra } = req.body;
+        
+        // Identificar el ID único de settings
+        const { rows: currentRows } = await pool.query('SELECT id FROM settings LIMIT 1');
+        const targetId = currentRows.length > 0 ? currentRows[0].id : 'main';
+
         await pool.query(
-            `UPDATE settings SET company_name = $1, nit = $2, phone = $3, email = $4, logo = $5, address = $6 WHERE id = $7`,
-            [companyName, nit, phone, email, logo, address, 'main']
+            `UPDATE settings SET 
+             company_name = $1, short_name = $2, name_complement = $3, nit = $4, phone = $5, email = $6, logo = $7, address = $8, header_extra = $9 
+             WHERE id = $10`,
+            [companyName, shortName, nameComplement, nit, phone, email, logo, address, headerExtra || '', targetId]
         );
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        console.error('ERROR UPDATING SETTINGS:', e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 // ─── Serve React en Producción ───────────────────────────────────────────────

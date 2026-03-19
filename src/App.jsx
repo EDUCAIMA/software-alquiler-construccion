@@ -20,6 +20,7 @@ import Financiero from './pages/Financiero';
 import Cotizaciones from './pages/Cotizaciones';
 import Login from './pages/Login';
 import SettingsPage from './pages/Settings';
+import PublicCotizacionApproval from './pages/PublicCotizacionApproval';
 
 // ─── Route Guard – only admin/gerente can see Dashboard ──────────────────────
 function ProtectedRoute({ children, requireDashboard }) {
@@ -61,24 +62,18 @@ function Sidebar() {
     { icon: Settings, label: 'Ajustes App', path: '/settings', restricted: true },
   ].filter(item => !item.restricted || canViewDashboard);
 
-  const roleColors = { admin: '#3b82f6', gerente: '#10b981', operativo: '#f97316' };
+  const roleColors = { admin: '#2365AB', gerente: '#10b981', operativo: '#f97316' };
   const roleLabels = { admin: 'Administrador', gerente: 'Gerente', operativo: 'Operativo' };
 
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <div className="logo-icon" style={{ background: 'transparent' }}>
+        <div className="logo-icon">
           {settings?.logo ? (
-            <img src={settings.logo} alt="L" style={{ width: 32, height: 32, objectFit: 'contain' }} />
+            <img src={settings.logo} alt="Logo" className="sidebar-logo-img" />
           ) : (
-             <Package size={24} color="white" />
+            <Package size={54} color="white" />
           )}
-        </div>
-        <div>
-          <h1 className="logo-title" style={{ fontSize: '1.1rem' }}>
-            {settings?.companyName || 'CIELO'}
-          </h1>
-          <p className="logo-subtitle">ALQUILER DE EQUIPOS</p>
         </div>
       </div>
 
@@ -101,10 +96,10 @@ function Sidebar() {
             {currentUser?.avatar || '?'}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {currentUser?.name || 'Usuario'}
             </p>
-            <p style={{ fontSize: '0.7rem', color: roleColors[currentUser?.role] || '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <p style={{ fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.8)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {roleLabels[currentUser?.role] || currentUser?.role}
             </p>
           </div>
@@ -143,6 +138,17 @@ function Layout({ children }) {
 // ─── App shell – decides whether to show Login or main app ───────────────────
 function AppShell() {
   const { currentUser } = useAppContext();
+  const location = useLocation();
+
+  const isPublicRoute = location.pathname.startsWith('/public/');
+
+  if (isPublicRoute) {
+    return (
+      <Routes>
+        <Route path="/public/cotizacion/:id" element={<PublicCotizacionApproval />} />
+      </Routes>
+    );
+  }
 
   if (!currentUser) return <Login />;
 

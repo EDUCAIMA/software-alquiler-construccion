@@ -3,7 +3,7 @@ import { useAppContext } from '../context/AppContext';
 import { Lock, User, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export default function Login() {
-    const { login } = useAppContext();
+    const { login, settings } = useAppContext();
     const [form, setForm] = useState({ username: '', password: '' });
     const [showPw, setShowPw] = useState(false);
     const [error, setError] = useState('');
@@ -21,31 +21,21 @@ export default function Login() {
 
     return (
         <div style={{
-            minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'radial-gradient(ellipse at 60% 20%, #1e3a5f 0%, #09090b 60%)',
-            padding: '1rem'
+            minHeight: '100vh', display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+            background: 'linear-gradient(135deg, #263777 0%, #2365AB 50%, #104166 100%)',
+            padding: '1rem', paddingTop: '10vh'
         }}>
-            <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
                 {/* Logo */}
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                        <svg width="40" height="40" viewBox="0 0 38 38" fill="none">
-                            <circle cx="19" cy="19" r="17" stroke="white" strokeWidth="1.5" fill="none" />
-                            <circle cx="19" cy="19" r="12" stroke="white" strokeWidth="1.5" fill="none" />
-                            <circle cx="19" cy="19" r="7" stroke="white" strokeWidth="1.5" fill="none" />
-                            <circle cx="19" cy="19" r="2.5" fill="white" />
-                        </svg>
-                        <div style={{ textAlign: 'left' }}>
-                            <div style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '0.15em', color: '#fff' }}>CIELO</div>
-                            <div style={{ fontSize: '0.65rem', letterSpacing: '0.2em', color: '#94a3b8' }}>ALQUILER DE EQUIPOS</div>
-                        </div>
+                {settings?.logo && (
+                    <div style={{ textAlign: 'center' }}>
+                        <img src={settings.logo} alt="Logo" style={{ maxHeight: 220, width: 'auto', filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.3))' }} />
                     </div>
-                    <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginTop: 4 }}>Ingrese sus credenciales para continuar</p>
-                </div>
+                )}
 
                 {/* Card */}
-                <div className="glass-panel" style={{ padding: '2rem' }}>
+                <div className="glass-panel" style={{ padding: '2rem', background: 'rgba(255, 255, 255, 0.8)', backdropFilter: 'blur(20px)' }}>
                     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                         {/* Username */}
                         <div>
@@ -67,7 +57,7 @@ export default function Login() {
                                         outline: 'none', boxSizing: 'border-box',
                                         transition: 'border-color 0.2s',
                                     }}
-                                    onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                                    onFocus={e => e.target.style.borderColor = '#2365AB'}
                                     onBlur={e => e.target.style.borderColor = 'var(--surface-border)'}
                                 />
                             </div>
@@ -93,7 +83,7 @@ export default function Login() {
                                         outline: 'none', boxSizing: 'border-box',
                                         transition: 'border-color 0.2s',
                                     }}
-                                    onFocus={e => e.target.style.borderColor = '#3b82f6'}
+                                    onFocus={e => e.target.style.borderColor = '#2365AB'}
                                     onBlur={e => e.target.style.borderColor = 'var(--surface-border)'}
                                 />
                                 <button type="button" onClick={() => setShowPw(v => !v)}

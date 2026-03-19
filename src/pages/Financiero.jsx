@@ -10,6 +10,7 @@ import { format, parseISO, isWithinInterval, startOfMonth, endOfMonth, startOfYe
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { applyStandardLayout } from './pdfTheme';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtCOP = n => `$${Math.round(n || 0).toLocaleString('es-CO')}`;
@@ -17,7 +18,7 @@ const fmtCOP = n => `$${Math.round(n || 0).toLocaleString('es-CO')}`;
 const CAT_CFG = {
     'Arriendo': { color: '#8b5cf6', icon: Home },
     'Transporte': { color: '#f97316', icon: Truck },
-    'Mantenimiento': { color: '#3b82f6', icon: Wrench },
+    'Mantenimiento': { color: '#2365AB', icon: Wrench },
     'Servicio': { color: '#06b6d4', icon: Zap },
     'Insumo': { color: '#10b981', icon: ShoppingBag },
     'Nómina': { color: '#ec4899', icon: Users },
@@ -40,14 +41,10 @@ const calcLiquidacion = (liq, emp) => {
 };
 
 // ─── PDF liquidación ──────────────────────────────────────────────────────────
-function generateLiquidacionPDF(liq, emp) {
+function generateLiquidacionPDF(liq, emp, settings) {
     const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    doc.setFillColor(30, 41, 59); doc.rect(0, 0, W, 36, 'F');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(255, 255, 255);
-    doc.text('COMPROBANTE DE NÓMINA', W / 2, 18, { align: 'center' });
-    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-    doc.text(`CIELO — Alquiler de Equipos  |  ${liq.id}`, W / 2, 28, { align: 'center' });
+    const margin = 10;
+    let y = applyStandardLayout(doc, 'Comprobante de Nómina', settings, liq.id);
 
     const salario = emp.salarioDia * liq.diasTrabajados;
     const horas = (liq.horasExtra || 0) * (liq.valorHoraExtra || 0);
@@ -58,15 +55,14 @@ function generateLiquidacionPDF(liq, emp) {
     const fondo = Math.round(bruto * (liq.fondoSolidaridad || 0) / 100);
     const neto = bruto - salud - pension - fondo;
 
-    doc.setTextColor(30, 41, 59); doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-    const info = [['Empleado', emp.nombre], ['Cargo', emp.cargo], ['Período', liq.periodo], ['Días trabajados', liq.diasTrabajados], ['Horas extra', liq.horasExtra || 0]];
-    info.forEach(([k, v], i) => {
-        doc.setFont('helvetica', 'bold'); doc.text(`${k}:`, 14, 50 + i * 8);
-        doc.setFont('helvetica', 'normal'); doc.text(String(v), 70, 50 + i * 8);
-    });
+    doc.setTextColor(30, 41, 59); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+    doc.text(`Empleado: ${emp.nombre}`, margin, y + 8);
+    doc.text(`Cargo: ${emp.cargo}`, margin, y + 14);
+    doc.text(`Período: ${liq.periodo}`, margin, y + 20);
+    doc.text(`Días trabajados: ${liq.diasTrabajados}`, margin, y + 26);
 
     autoTable(doc, {
-        startY: 98,
+        startY: y + 35,
         head: [['Concepto', 'Valor']],
         body: [
             ['Salario devengado', fmtCOP(salario)],
@@ -78,10 +74,12 @@ function generateLiquidacionPDF(liq, emp) {
             [`— Fondo Solidaridad (${liq.fondoSolidaridad || 0}%)`, `– ${fmtCOP(fondo)}`],
             ['= SALARIO NETO A PAGAR', fmtCOP(neto)],
         ],
-        headStyles: { fillColor: [30, 41, 59] },
-        styles: { fontSize: 10 },
-        bodyStyles: (row) => row.rowIndex === 7 ? { fontStyle: 'bold' } : {},
+        headStyles: { fillColor: [30, 41, 59], textColor: 255 },
+        styles: { fontSize: 8.5, cellPadding: 3.5 },
+        bodyStyles: (row) => row.rowIndex === 7 ? { fontStyle: 'bold', fillColor: [248, 250, 252] } : {},
+        margin: { left: margin, right: margin },
     });
+    
     doc.save(`Nomina_${liq.id}.pdf`);
 }
 
@@ -164,7 +162,7 @@ function GastosTab() {
                                 const CatIcon = cfg.icon;
                                 return (
                                     <tr key={g.id} style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                        <td style={{ padding: '0.75rem 0.8rem', fontFamily: 'monospace', color: '#3b82f6', fontSize: '0.8rem', fontWeight: 700 }}>{g.id}</td>
+                                        <td style={{ padding: '0.75rem 0.8rem', fontFamily: 'monospace', color: '#2365AB', fontSize: '0.8rem', fontWeight: 700 }}>{g.id}</td>
                                         <td style={{ padding: '0.75rem 0.8rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>{g.fecha}</td>
                                         <td style={{ padding: '0.75rem 0.8rem', fontWeight: 600 }}>{g.concepto}</td>
                                         <td style={{ padding: '0.75rem 0.8rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>{g.proveedor}</td>
@@ -199,8 +197,8 @@ function GastosTab() {
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
                     <div style={{ background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#1e293b', fontSize: '1.1rem' }}>
-                                <div style={{ background: '#eff6ff', padding: '0.4rem', borderRadius: '8px', display: 'flex' }}><Plus size={18} style={{ color: '#3b82f6' }} /></div>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#104166', fontSize: '1.1rem' }}>
+                                <div style={{ background: '#eff6ff', padding: '0.4rem', borderRadius: '8px', display: 'flex' }}><Plus size={18} style={{ color: '#2365AB' }} /></div>
                                 Registrar Gasto
                             </h3>
                             <button onClick={() => setShowModal(false)} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={16} /></button>
@@ -208,29 +206,29 @@ function GastosTab() {
                         <div style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             {[['Concepto *', 'concepto', 'text', 'Ej. Arriendo bodega'], ['Proveedor', 'proveedor', 'text', 'Nombre proveedor'], ['Fecha', 'fecha', 'date', ''], ['Monto ($)', 'monto', 'number', '0'], ['IVA ($)', 'iva', 'number', '0']].map(([label, key, type, ph]) => (
                                 <div key={key} style={{ margin: 0 }}>
-                                    <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>{label}</label>
-                                    <input type={type} style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none', transition: 'border-color 0.2s' }} value={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} placeholder={ph} />
+                                    <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>{label}</label>
+                                    <input type={type} style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', transition: 'border-color 0.2s' }} value={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} placeholder={ph} />
                                 </div>
                             ))}
                             <div style={{ margin: 0 }}>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Categoría</label>
-                                <select style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }} value={form.categoria} onChange={e => setForm(p => ({ ...p, categoria: e.target.value }))}>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Categoría</label>
+                                <select style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }} value={form.categoria} onChange={e => setForm(p => ({ ...p, categoria: e.target.value }))}>
                                     {Object.keys(CAT_CFG).map(k => <option key={k}>{k}</option>)}
                                 </select>
                             </div>
                             <div style={{ margin: 0 }}>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Estado</label>
-                                <select style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }} value={form.estado} onChange={e => setForm(p => ({ ...p, estado: e.target.value }))}>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Estado</label>
+                                <select style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }} value={form.estado} onChange={e => setForm(p => ({ ...p, estado: e.target.value }))}>
                                     <option>Pendiente</option><option>Pagado</option>
                                 </select>
                             </div>
                             <div style={{ margin: 0, gridColumn: '1/-1' }}>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Notas</label>
-                                <textarea style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }} value={form.notas} onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} rows={2} />
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Notas</label>
+                                <textarea style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }} value={form.notas} onChange={e => setForm(p => ({ ...p, notas: e.target.value }))} rows={2} />
                             </div>
                         </div>
                         <div style={{ padding: '1rem 1.5rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderRadius: '0 0 16px 16px', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowModal(false)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#475569' }}>Cancelar</button>
+                            <button className="btn btn-secondary" onClick={() => setShowModal(false)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#263777' }}>Cancelar</button>
                             <button className="btn btn-primary" onClick={handleAdd}>Registrar</button>
                         </div>
                     </div>
@@ -317,7 +315,7 @@ function NominaTab() {
                             return (
                                 <div key={liq.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.7rem 0.85rem', background: 'rgba(255,255,255,0.04)', borderRadius: 10, border: '1px solid var(--surface-border)' }}>
                                     <div>
-                                        <div style={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: 'monospace', color: '#3b82f6' }}>{liq.id}</div>
+                                        <div style={{ fontWeight: 700, fontSize: '0.85rem', fontFamily: 'monospace', color: '#2365AB' }}>{liq.id}</div>
                                         <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{emp?.nombre}</div>
                                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{liq.periodo} · {liq.diasTrabajados}d</div>
                                     </div>
@@ -326,7 +324,7 @@ function NominaTab() {
                                         <span style={{ fontSize: '0.65rem', padding: '1px 7px', borderRadius: 999, background: liq.estado === 'Pagado' ? 'rgba(16,185,129,0.12)' : 'rgba(249,115,22,0.12)', color: liq.estado === 'Pagado' ? '#10b981' : '#f97316', fontWeight: 700 }}>{liq.estado}</span>
                                         <div style={{ display: 'flex', gap: '0.4rem' }}>
                                             {liq.estado === 'Pendiente' && <button onClick={() => pagarLiquidacion(liq.id)} style={{ padding: '0.2rem 0.6rem', borderRadius: 6, background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700 }}>Pagar</button>}
-                                            <button onClick={() => emp && generateLiquidacionPDF(liq, emp)} style={{ padding: '0.2rem 0.6rem', borderRadius: 6, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.25)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}><Download size={10} />PDF</button>
+                                            <button onClick={() => emp && generateLiquidacionPDF(liq, emp, settings)} style={{ padding: '0.2rem 0.6rem', borderRadius: 6, background: 'rgba(35, 101, 171,0.1)', color: '#2365AB', border: '1px solid rgba(35, 101, 171,0.25)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}><Download size={10} />PDF</button>
                                         </div>
                                     </div>
                                 </div>
@@ -341,32 +339,32 @@ function NominaTab() {
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
                     <div style={{ background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', width: '100%', maxWidth: 440, display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#1e293b', fontSize: '1.1rem' }}>
-                                <div style={{ background: '#eff6ff', padding: '0.4rem', borderRadius: '8px', display: 'flex' }}><Users size={18} style={{ color: '#3b82f6' }} /></div>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#104166', fontSize: '1.1rem' }}>
+                                <div style={{ background: '#eff6ff', padding: '0.4rem', borderRadius: '8px', display: 'flex' }}><Users size={18} style={{ color: '#2365AB' }} /></div>
                                 Nuevo Empleado
                             </h3>
                             <button onClick={() => setShowEmpModal(false)} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={16} /></button>
                         </div>
                         <div style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div style={{ margin: 0, gridColumn: '1/-1' }}>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Nombre Completo</label>
-                                <input type="text" style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none' }} value={empForm.nombre} onChange={e => setEmpForm(p => ({ ...p, nombre: e.target.value }))} />
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Nombre Completo</label>
+                                <input type="text" style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none' }} value={empForm.nombre} onChange={e => setEmpForm(p => ({ ...p, nombre: e.target.value }))} />
                             </div>
                             <div style={{ margin: 0 }}>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Cargo</label>
-                                <input type="text" style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none' }} value={empForm.cargo} onChange={e => setEmpForm(p => ({ ...p, cargo: e.target.value }))} />
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Cargo</label>
+                                <input type="text" style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none' }} value={empForm.cargo} onChange={e => setEmpForm(p => ({ ...p, cargo: e.target.value }))} />
                             </div>
                             <div style={{ margin: 0 }}>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Tipo</label>
-                                <select style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }} value={empForm.tipo} onChange={e => setEmpForm(p => ({ ...p, tipo: e.target.value }))}><option>Fijo</option><option>Temporal</option></select>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Tipo</label>
+                                <select style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }} value={empForm.tipo} onChange={e => setEmpForm(p => ({ ...p, tipo: e.target.value }))}><option>Fijo</option><option>Temporal</option></select>
                             </div>
                             <div style={{ margin: 0, gridColumn: '1/-1' }}>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Salario por Día ($)</label>
-                                <input type="number" style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none' }} value={empForm.salarioDia} onChange={e => setEmpForm(p => ({ ...p, salarioDia: e.target.value }))} placeholder="Ej. 66667" />
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Salario por Día ($)</label>
+                                <input type="number" style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none' }} value={empForm.salarioDia} onChange={e => setEmpForm(p => ({ ...p, salarioDia: e.target.value }))} placeholder="Ej. 66667" />
                             </div>
                         </div>
                         <div style={{ padding: '1rem 1.5rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderRadius: '0 0 16px 16px', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowEmpModal(false)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#475569' }}>Cancelar</button>
+                            <button className="btn btn-secondary" onClick={() => setShowEmpModal(false)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#263777' }}>Cancelar</button>
                             <button className="btn btn-primary" onClick={() => { if (empForm.nombre) { addEmpleado(empForm); setShowEmpModal(false); setEmpForm({ nombre: '', cargo: '', salarioDia: '', tipo: 'Fijo' }); } }}>Guardar</button>
                         </div>
                     </div>
@@ -378,28 +376,28 @@ function NominaTab() {
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
                     <div style={{ background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', width: '100%', maxWidth: 540, display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#1e293b', fontSize: '1.1rem' }}>
-                                <div style={{ background: '#eff6ff', padding: '0.4rem', borderRadius: '8px', display: 'flex' }}><FileText size={18} style={{ color: '#3b82f6' }} /></div>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#104166', fontSize: '1.1rem' }}>
+                                <div style={{ background: '#eff6ff', padding: '0.4rem', borderRadius: '8px', display: 'flex' }}><FileText size={18} style={{ color: '#2365AB' }} /></div>
                                 Nueva Liquidación de Nómina
                             </h3>
                             <button onClick={() => setShowLiqModal(false)} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={16} /></button>
                         </div>
                         <div style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                             <div style={{ margin: 0 }}>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Empleado</label>
-                                <select style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }} value={liqForm.empleadoId} onChange={e => setLiqForm(p => ({ ...p, empleadoId: e.target.value }))}>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Empleado</label>
+                                <select style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }} value={liqForm.empleadoId} onChange={e => setLiqForm(p => ({ ...p, empleadoId: e.target.value }))}>
                                     <option value="">— Seleccionar —</option>
                                     {empleados.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                                 </select>
                             </div>
                             <div style={{ margin: 0 }}>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Período (ej. 2024-01-01 / 2024-01-31)</label>
-                                <input type="text" style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none' }} value={liqForm.periodo} onChange={e => setLiqForm(p => ({ ...p, periodo: e.target.value }))} placeholder="YYYY-MM-DD / YYYY-MM-DD" />
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Período (ej. 2024-01-01 / 2024-01-31)</label>
+                                <input type="text" style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none' }} value={liqForm.periodo} onChange={e => setLiqForm(p => ({ ...p, periodo: e.target.value }))} placeholder="YYYY-MM-DD / YYYY-MM-DD" />
                             </div>
                             {[['Días Trabajados', 'diasTrabajados'], ['Horas Extra', 'horasExtra'], ['Valor Hora Extra ($)', 'valorHoraExtra'], ['Bonificaciones ($)', 'bonificaciones'], ['Deduc. Salud (%)', 'deduccionSalud'], ['Deduc. Pensión (%)', 'deduccionPension'], ['Fondo Solidaridad (%)', 'fondoSolidaridad']].map(([label, key]) => (
                                 <div key={key} style={{ margin: 0 }}>
-                                    <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>{label}</label>
-                                    <input type="number" style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none' }} min={0} value={liqForm[key]} onChange={e => setLiqForm(p => ({ ...p, [key]: Number(e.target.value) }))} />
+                                    <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>{label}</label>
+                                    <input type="number" style={{ width: '100%', padding: '0.6rem 0.75rem', boxSizing: 'border-box', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none' }} min={0} value={liqForm[key]} onChange={e => setLiqForm(p => ({ ...p, [key]: Number(e.target.value) }))} />
                                 </div>
                             ))}
                         </div>
@@ -408,8 +406,8 @@ function NominaTab() {
                                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Vista Previa</div>
                                 {[['Salario Bruto', preview.bruto], ['— Salud', -preview.salud], ['— Pensión', -preview.pension], ['— Fondo Solidaridad', -preview.fondo]].map(([k, v]) => (
                                     <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 6 }}>
-                                        <span style={{ color: '#475569', fontWeight: 500 }}>{k}</span>
-                                        <span style={{ fontWeight: 600, color: v < 0 ? '#ef4444' : '#1e293b' }}>{v < 0 ? `-${fmtCOP(-v)}` : fmtCOP(v)}</span>
+                                        <span style={{ color: '#263777', fontWeight: 500 }}>{k}</span>
+                                        <span style={{ fontWeight: 600, color: v < 0 ? '#ef4444' : '#104166' }}>{v < 0 ? `-${fmtCOP(-v)}` : fmtCOP(v)}</span>
                                     </div>
                                 ))}
                                 <div style={{ borderTop: '1px solid #a7f3d0', marginTop: 10, paddingTop: 10, display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1rem' }}>
@@ -418,7 +416,7 @@ function NominaTab() {
                             </div>
                         )}
                         <div style={{ padding: '1rem 1.5rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderRadius: '0 0 16px 16px', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                            <button className="btn btn-secondary" onClick={() => setShowLiqModal(false)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#475569' }}>Cancelar</button>
+                            <button className="btn btn-secondary" onClick={() => setShowLiqModal(false)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#263777' }}>Cancelar</button>
                             <button className="btn btn-primary" disabled={!liqForm.empleadoId || !liqForm.periodo} onClick={() => { addLiquidacion(liqForm); setShowLiqModal(false); }}>Guardar</button>
                         </div>
                     </div>
@@ -454,23 +452,25 @@ function PLTab() {
 
     const exportPLPDF = () => {
         const doc = new jsPDF();
-        const W = doc.internal.pageSize.getWidth();
-        doc.setFillColor(30, 41, 59); doc.rect(0, 0, W, 36, 'F');
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(255, 255, 255);
-        doc.text('ESTADO DE RESULTADOS', W / 2, 20, { align: 'center' });
-        doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-        doc.text(`CIELO — Últimos 6 meses | Generado: ${format(new Date(), 'dd/MM/yyyy')}`, W / 2, 30, { align: 'center' });
+        const margin = 10;
+        let y = applyStandardLayout(doc, 'Estado de Resultados', settings);
+
+        doc.setTextColor(100, 116, 139); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+        doc.text('Resumen consolidado de los últimos 6 meses', margin, y + 8);
+
         autoTable(doc, {
-            startY: 44,
+            startY: y + 15,
             head: [['Período', 'Ingresos', 'Egresos', 'Utilidad']],
             body: [
                 ...chartData.map(r => [r.mes, fmtCOP(r.ingresos), fmtCOP(r.egresos), fmtCOP(r.utilidad)]),
                 ['TOTAL', fmtCOP(totIngresos), fmtCOP(totEgresos), fmtCOP(utilidad)],
             ],
-            headStyles: { fillColor: [30, 41, 59] },
-            footStyles: { fontStyle: 'bold' },
+            headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8.5 },
+            styles: { fontSize: 8, cellPadding: 3.5 },
+            footStyles: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [30, 41, 59] },
+            margin: { left: margin, right: margin },
         });
-        doc.save('EstadoResultados_CIELO.pdf');
+        doc.save(`EstadoResultados_${settings?.shortName || 'CIELO'}.pdf`);
     };
 
     return (
@@ -506,11 +506,11 @@ function PLTab() {
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                         <XAxis dataKey="mes" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
                         <YAxis tickFormatter={v => `$${(v / 1000000).toFixed(1)}M`} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                        <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 10, color: 'white', fontSize: '0.82rem' }} />
+                        <Tooltip formatter={(v) => fmtCOP(v)} contentStyle={{ background: '#104166', border: '1px solid #154272', borderRadius: 10, color: 'white', fontSize: '0.82rem' }} />
                         <Legend wrapperStyle={{ fontSize: '0.82rem', color: '#94a3b8' }} />
                         <Bar dataKey="ingresos" name="Ingresos" fill="#10b981" radius={[4, 4, 0, 0]} />
                         <Bar dataKey="egresos" name="Egresos" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="utilidad" name="Utilidad" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="utilidad" name="Utilidad" fill="#2365AB" radius={[4, 4, 0, 0]} />
                     </BarChart>
                 </ResponsiveContainer>
             </div>
@@ -534,21 +534,21 @@ function PLTab() {
                                     <td style={{ padding: '0.75rem 0.8rem', fontWeight: 600 }}>{r.mes}</td>
                                     <td style={{ padding: '0.75rem 0.8rem', color: '#10b981', fontWeight: 700 }}>{fmtCOP(r.ingresos)}</td>
                                     <td style={{ padding: '0.75rem 0.8rem', color: '#ef4444', fontWeight: 700 }}>{fmtCOP(r.egresos)}</td>
-                                    <td style={{ padding: '0.75rem 0.8rem', fontWeight: 700, color: r.utilidad >= 0 ? '#3b82f6' : '#ef4444' }}>{fmtCOP(r.utilidad)}</td>
+                                    <td style={{ padding: '0.75rem 0.8rem', fontWeight: 700, color: r.utilidad >= 0 ? '#2365AB' : '#ef4444' }}>{fmtCOP(r.utilidad)}</td>
                                     <td style={{ padding: '0.75rem 0.8rem' }}>
-                                        <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700, background: Number(mg) >= 0 ? 'rgba(59,130,246,0.1)' : 'rgba(239,68,68,0.1)', color: Number(mg) >= 0 ? '#3b82f6' : '#ef4444' }}>{mg}%</span>
+                                        <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700, background: Number(mg) >= 0 ? 'rgba(35, 101, 171,0.1)' : 'rgba(239,68,68,0.1)', color: Number(mg) >= 0 ? '#2365AB' : '#ef4444' }}>{mg}%</span>
                                     </td>
                                 </tr>
                             );
                         })}
                         {/* Total row */}
-                        <tr style={{ borderTop: '2px solid var(--surface-border)', background: 'rgba(59,130,246,0.04)' }}>
+                        <tr style={{ borderTop: '2px solid var(--surface-border)', background: 'rgba(35, 101, 171,0.04)' }}>
                             <td style={{ padding: '0.75rem 0.8rem', fontWeight: 800 }}>TOTAL</td>
                             <td style={{ padding: '0.75rem 0.8rem', color: '#10b981', fontWeight: 800 }}>{fmtCOP(totIngresos)}</td>
                             <td style={{ padding: '0.75rem 0.8rem', color: '#ef4444', fontWeight: 800 }}>{fmtCOP(totEgresos)}</td>
-                            <td style={{ padding: '0.75rem 0.8rem', fontWeight: 800, color: utilidad >= 0 ? '#3b82f6' : '#ef4444' }}>{fmtCOP(utilidad)}</td>
+                            <td style={{ padding: '0.75rem 0.8rem', fontWeight: 800, color: utilidad >= 0 ? '#2365AB' : '#ef4444' }}>{fmtCOP(utilidad)}</td>
                             <td style={{ padding: '0.75rem 0.8rem' }}>
-                                <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 800, background: 'rgba(59,130,246,0.15)', color: '#3b82f6' }}>{margen}%</span>
+                                <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 800, background: 'rgba(35, 101, 171,0.15)', color: '#2365AB' }}>{margen}%</span>
                             </td>
                         </tr>
                     </tbody>
@@ -584,7 +584,7 @@ export default function Financiero() {
                     const active = tab === t.id;
                     return (
                         <button key={t.id} onClick={() => setTab(t.id)}
-                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem', padding: '0.6rem 1rem', borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: active ? 700 : 500, fontSize: '0.875rem', background: active ? 'var(--primary)' : 'transparent', color: active ? 'white' : 'var(--text-muted)', transition: 'all 0.2s ease', boxShadow: active ? '0 2px 10px rgba(59,130,246,0.3)' : 'none' }}>
+                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem', padding: '0.6rem 1rem', borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: active ? 700 : 500, fontSize: '0.875rem', background: active ? 'var(--primary)' : 'transparent', color: active ? 'white' : 'var(--text-muted)', transition: 'all 0.2s ease', boxShadow: active ? '0 2px 10px rgba(35, 101, 171,0.3)' : 'none' }}>
                             <Ic size={16} />{t.label}
                         </button>
                     );

@@ -23,47 +23,62 @@ const calculateBillableDays = (start, end, scheme) => {
 function generateCortePDF(resultado, client, obra, settings) {
     const doc = new jsPDF();
     const pageW = doc.internal.pageSize.getWidth();
+    const margin = 10;
 
-    applyStandardLayout(doc, 'Corte de Obra', settings);
+    let y = applyStandardLayout(doc, 'Corte de Obra', settings);
 
     // Client info box
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(14, 46, pageW - 28, 32, 2, 2, 'FD');
+    doc.roundedRect(margin, y, pageW - margin * 2, 30, 2, 2, 'FD');
+    
     doc.setTextColor(30, 41, 59);
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
-    doc.text(client?.name || '—', 20, 57);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+    doc.text(client?.name || '—', margin + 6, y + 10);
+    
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
-    doc.text(`NIT: ${client?.nit || 'N/A'}  |  Obra: ${obra?.nombre || 'Todas las obras'}`, 20, 65);
-    doc.text(`IVA: ${client?.porcIVA || 0}%  |  Ret. Fuente: ${client?.porcRetencion || 0}%`, 20, 71);
+    doc.text(`NIT: ${client?.nit || 'N/A'}  |  Obra: ${obra?.nombre || 'Todas las obras'}`, margin + 6, y + 18);
+    doc.text(`IVA: ${client?.porcIVA || 0}%  |  Ret. Fuente: ${client?.porcRetencion || 0}%`, margin + 6, y + 24);
+
+    y += 38;
 
     // Items table
     autoTable(doc, {
-        startY: 85,
+        startY: y,
         head: [['Remisión', 'Equipo', 'Esquema', 'Cant.', 'Días', 'Tarifa/día', 'Subtotal']],
         body: resultado.lineas.map(l => [l.remId, l.equipo, l.esquema || 'Calen.', l.cantidad, l.dias, fmtCOP(l.tarifaDia), fmtCOP(l.subtotal)]),
-        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 8 },
         alternateRowStyles: { fillColor: [248, 250, 252] },
-        styles: { fontSize: 9 },
+        styles: { fontSize: 7.5, cellPadding: 3 },
+        margin: { left: margin, right: margin },
     });
 
-    const y = doc.lastAutoTable.finalY + 10;
-    // Totals
-    doc.setFillColor(59, 130, 246);
-    doc.roundedRect(pageW - 100, y, 86, 50, 3, 3, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-    doc.text('Subtotal:', pageW - 95, y + 10);
-    doc.text(fmtCOP(resultado.subtotal), pageW - 20, y + 10, { align: 'right' });
-    doc.text(`IVA (${resultado.porcIVA || 0}%):`, pageW - 95, y + 20);
-    doc.text(fmtCOP(resultado.iva), pageW - 20, y + 20, { align: 'right' });
-    doc.text(`Ret. (${client?.porcRetencion || 0}%):`, pageW - 95, y + 30);
-    doc.text(fmtCOP(resultado.retencion), pageW - 20, y + 30, { align: 'right' });
-    doc.text('Transporte:', pageW - 95, y + 38);
-    doc.text(fmtCOP(resultado.transporte), pageW - 20, y + 38, { align: 'right' });
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
-    doc.text('TOTAL NETO:', pageW - 95, y + 49);
-    doc.text(fmtCOP(resultado.totalNeto), pageW - 20, y + 49, { align: 'right' });
+    const finalY = doc.lastAutoTable.finalY + 10;
+    
+    // Totals grid
+    const boxW = 80;
+    const startX = pageW - margin - boxW;
+    
+    doc.setFillColor(30, 41, 59);
+    doc.roundedRect(startX, finalY, boxW, 45, 3, 3, 'F');
+    
+    doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+    const rows = [
+        ['Subtotal:', fmtCOP(resultado.subtotal)],
+        [`IVA (${resultado.porcIVA || 0}%):`, fmtCOP(resultado.iva)],
+        [`Ret. (${client?.porcRetencion || 0}%):`, fmtCOP(resultado.retencion)],
+        ['Transporte:', fmtCOP(resultado.transporte)],
+    ];
+    
+    rows.forEach(([label, val], i) => {
+        doc.text(label, startX + 5, finalY + 8 + (i * 7));
+        doc.text(val, pageW - margin - 5, finalY + 8 + (i * 7), { align: 'right' });
+    });
+    
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+    doc.text('TOTAL NETO:', startX + 5, finalY + 40);
+    doc.text(fmtCOP(resultado.totalNeto), pageW - margin - 5, finalY + 40, { align: 'right' });
 
     doc.save(`Corte_${obra?.nombre?.replace(/\s+/g, '_') || 'Todas_las_obras'}_${format(new Date(), 'yyyyMMdd')}.pdf`);
 }
@@ -145,7 +160,7 @@ export default function CortesObra() {
     const inputStyle = {
         width: '100%', padding: '0.65rem 0.8rem', boxSizing: 'border-box',
         background: '#ffffff', border: '1px solid #e2e8f0',
-        borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none',
+        borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none',
         boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'border-color 0.2s'
     };
     const selectStyle = { ...inputStyle, cursor: 'pointer' };
@@ -155,9 +170,9 @@ export default function CortesObra() {
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <div>
-                    <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#1e293b', margin: 0 }}>
+                    <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#104166', margin: 0 }}>
                         <div style={{ background: '#eff6ff', padding: '0.5rem', borderRadius: '10px', display: 'flex' }}>
-                            <Calculator size={24} style={{ color: '#3b82f6' }} />
+                            <Calculator size={24} style={{ color: '#2365AB' }} />
                         </div>
                         Cortes de Obra
                     </h1>
@@ -169,12 +184,12 @@ export default function CortesObra() {
                 {/* ── Panel izquierdo: Configuración ── */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-                        <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#2365AB', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 6 }}>
                             <FileText size={16} /> Parámetros del Corte
                         </p>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
                             <div>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Cliente</label>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Cliente</label>
                                 <select value={clientId} onChange={e => { setClientId(e.target.value); setObraId(''); setGenerado(false); setSaved(false); }}
                                     style={selectStyle}>
                                     <option value="">— Seleccionar cliente —</option>
@@ -183,7 +198,7 @@ export default function CortesObra() {
                             </div>
                             {selectedClient && (
                                 <div>
-                                    <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Obra</label>
+                                    <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Obra</label>
                                     <select value={obraId} onChange={e => { setObraId(e.target.value); setGenerado(false); setSaved(false); }}
                                         style={selectStyle}>
                                         <option value="">— Seleccionar obra —</option>
@@ -192,7 +207,7 @@ export default function CortesObra() {
                                 </div>
                             )}
                             <div>
-                                <label style={{ fontSize: '0.8rem', color: '#475569', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Fecha de Corte</label>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Fecha de Corte</label>
                                 <input type="date" value={fechaCorte} onChange={e => { setFechaCorte(e.target.value); setGenerado(false); setSaved(false); }} style={inputStyle} />
                             </div>
                             <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem' }}
@@ -205,11 +220,11 @@ export default function CortesObra() {
                     {/* Parametrización tributaria del cliente */}
                     {selectedClient && (
                         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.25rem 1.5rem' }}>
-                            <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#263777', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <Percent size={14} style={{ color: '#64748b' }} /> Parametrización Tributaria
                             </p>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                                {[['IVA', `${selectedClient.porcIVA || 0}%`, '#3b82f6'], ['Retención', `${selectedClient.porcRetencion || 0}%`, '#ef4444'], ['Régimen', selectedClient.regimen || 'N/A', '#f97316'], ['Resp. IVA', selectedClient.responsableIVA ? 'Sí' : 'No', '#10b981']].map(([k, v, c]) => (
+                                {[['IVA', `${selectedClient.porcIVA || 0}%`, '#2365AB'], ['Retención', `${selectedClient.porcRetencion || 0}%`, '#ef4444'], ['Régimen', selectedClient.regimen || 'N/A', '#f97316'], ['Resp. IVA', selectedClient.responsableIVA ? 'Sí' : 'No', '#10b981']].map(([k, v, c]) => (
                                     <div key={k} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '0.65rem 0.85rem' }}>
                                         <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>{k}</div>
                                         <div style={{ fontWeight: 800, color: c, fontSize: '1rem', marginTop: 3 }}>{v}</div>
@@ -228,7 +243,7 @@ export default function CortesObra() {
                                 <Calculator size={32} style={{ color: '#cbd5e1' }} />
                             </div>
                             <h3 style={{ fontSize: '1.1rem', color: '#64748b', marginBottom: '0.5rem', fontWeight: 600 }}>Corte no calculado</h3>
-                            <p style={{ fontSize: '0.9rem', maxWidth: 350 }}>Selecciona un cliente (y opcionalmente una obra) junto con la fecha de corte, luego haz clic en <strong style={{ color: '#475569' }}>Calcular Corte</strong> para ver la liquidación.</p>
+                            <p style={{ fontSize: '0.9rem', maxWidth: 350 }}>Selecciona un cliente (y opcionalmente una obra) junto con la fecha de corte, luego haz clic en <strong style={{ color: '#263777' }}>Calcular Corte</strong> para ver la liquidación.</p>
                         </div>
                     )}
 
@@ -238,12 +253,12 @@ export default function CortesObra() {
                             <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.5rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                     <div style={{ background: '#eff6ff', padding: '0.75rem', borderRadius: '12px' }}>
-                                        <Building2 size={24} style={{ color: '#3b82f6' }} />
+                                        <Building2 size={24} style={{ color: '#2365AB' }} />
                                     </div>
                                     <div>
-                                        <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#1e293b' }}>{selectedClient?.name}</div>
+                                        <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#104166' }}>{selectedClient?.name}</div>
                                         <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 4, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <span style={{ fontWeight: 500, color: '#475569' }}>{obraId ? selectedObra?.nombre : 'Todas las obras'}</span>
+                                            <span style={{ fontWeight: 500, color: '#263777' }}>{obraId ? selectedObra?.nombre : 'Todas las obras'}</span>
                                             <span>•</span>
                                             <span>NIT: {selectedClient?.nit || 'N/A'}</span>
                                         </div>
@@ -251,15 +266,15 @@ export default function CortesObra() {
                                 </div>
                                 <div style={{ textAlign: 'right', background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
                                     <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Fecha de corte</div>
-                                    <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#3b82f6', marginTop: 2 }}>{fechaCorte}</div>
+                                    <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#2365AB', marginTop: 2 }}>{fechaCorte}</div>
                                 </div>
                             </div>
 
                             {/* Lines table */}
                             <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
                                 <div style={{ padding: '1rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <Clock size={16} style={{ color: '#3b82f6' }} />
-                                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    <Clock size={16} style={{ color: '#2365AB' }} />
+                                    <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#104166', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                         Desglose por Remisión
                                     </span>
                                     <span style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#64748b', fontWeight: 500, background: '#e2e8f0', padding: '0.2rem 0.6rem', borderRadius: '20px' }}>{resultado.lineas.length} líneas</span>
@@ -284,14 +299,14 @@ export default function CortesObra() {
 
                                                 return (
                                                     <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#f8fafc' : '#ffffff' }}>
-                                                        <td style={{ padding: '0.85rem 1.5rem', fontFamily: 'monospace', fontWeight: 700, color: '#3b82f6', fontSize: '0.85rem' }}>{l.remId}</td>
-                                                        <td style={{ padding: '0.85rem 1.5rem', fontWeight: 600, color: '#1e293b' }}>{l.equipo}</td>
+                                                        <td style={{ padding: '0.85rem 1.5rem', fontFamily: 'monospace', fontWeight: 700, color: '#2365AB', fontSize: '0.85rem' }}>{l.remId}</td>
+                                                        <td style={{ padding: '0.85rem 1.5rem', fontWeight: 600, color: '#104166' }}>{l.equipo}</td>
                                                         <td style={{ padding: '0.85rem 1.5rem' }}>
                                                             <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '999px', background: badge.bg, color: badge.text, fontWeight: 700 }}>{l.estado}</span>
                                                         </td>
-                                                        <td style={{ padding: '0.85rem 1.5rem', fontWeight: 500, color: '#475569' }}>{l.cantidad}</td>
+                                                        <td style={{ padding: '0.85rem 1.5rem', fontWeight: 500, color: '#263777' }}>{l.cantidad}</td>
                                                         <td style={{ padding: '0.85rem 1.5rem', fontWeight: 700, color: l.dias > 30 ? '#ef4444' : '#f97316' }}>{l.dias}d</td>
-                                                        <td style={{ padding: '0.85rem 1.5rem', color: '#475569' }}>{fmtCOP(l.tarifaDia)}</td>
+                                                        <td style={{ padding: '0.85rem 1.5rem', color: '#263777' }}>{fmtCOP(l.tarifaDia)}</td>
                                                         <td style={{ padding: '0.85rem 1.5rem', fontWeight: 700, color: '#10b981', textAlign: 'right' }}>{fmtCOP(l.subtotal)}</td>
                                                     </tr>
                                                 );
@@ -308,8 +323,8 @@ export default function CortesObra() {
                             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '1.5rem', alignItems: 'stretch' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
                                     {[
-                                        ['Subtotal Alquiler', fmtCOP(resultado.subtotal), '#1e293b', null],
-                                        [`IVA ${resultado.porcIVA}%`, `+ ${fmtCOP(resultado.iva)}`, '#3b82f6', 'rgba(59,130,246,0.1)'],
+                                        ['Subtotal Alquiler', fmtCOP(resultado.subtotal), '#104166', null],
+                                        [`IVA ${resultado.porcIVA}%`, `+ ${fmtCOP(resultado.iva)}`, '#2365AB', 'rgba(35, 101, 171,0.1)'],
                                         [`Ret. Fuente ${resultado.porcRet}%`, `+ ${fmtCOP(resultado.retencion)}`, '#ef4444', 'rgba(239,68,68,0.1)'],
                                         ['Transporte', `+ ${fmtCOP(resultado.transporte)}`, '#f97316', 'rgba(249,115,22,0.1)'],
                                     ].map(([k, v, c, bg]) => (
@@ -328,7 +343,7 @@ export default function CortesObra() {
 
                             {/* Actions */}
                             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                                <button className="btn btn-secondary" onClick={() => generateCortePDF(resultado, selectedClient, selectedObra, settings)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', background: '#ffffff', color: '#475569', border: '1px solid #cbd5e1' }}>
+                                <button className="btn btn-secondary" onClick={() => generateCortePDF(resultado, selectedClient, selectedObra, settings)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', background: '#ffffff', color: '#263777', border: '1px solid #cbd5e1' }}>
                                     <Download size={18} /> Exportar PDF
                                 </button>
                                 <button className="btn btn-primary" disabled={saved || resultado.lineas.length === 0} onClick={handleSaveInvoice}

@@ -5,19 +5,21 @@ import {
     MapPin, Package, Truck, CreditCard, Clock
 } from 'lucide-react';
 import { fmtCOP } from './cotizacionesUtils';
+import { useAppContext } from '../context/AppContext';
 
 // Componente independiente para evitar re-renders en cascada desde Cotizaciones.jsx
-export default function NuevaCotizacionModal({ onClose, onSave, clients, products }) {
+export default function NuevaCotizacionModal({ onClose, onSave, clients, products, initialData }) {
     const [step, setStep] = useState(1);
-    const [clientId, setClientId] = useState('');
-    const [obraId, setObraId] = useState('');
-    const [validez, setValidez] = useState(15);
-    const [metodoPago, setMetodoPago] = useState('Crédito 30 días');
-    const [respTransporte, setRespTransporte] = useState('CIELO');
-    const [plazoEntrega, setPlazoEntrega] = useState('24 horas');
-    const [transporte, setTransporte] = useState(0);
-    const [notas, setNotas] = useState('');
-    const [items, setItems] = useState([]);
+    const [clientId, setClientId] = useState(initialData?.clientId || '');
+    const [obraId, setObraId] = useState(initialData?.obraId || '');
+    const [validez, setValidez] = useState(initialData?.validezDias || 15);
+    const [metodoPago, setMetodoPago] = useState(initialData?.metodoPago || 'Crédito 30 días');
+    const { settings } = useAppContext();
+    const [respTransporte, setRespTransporte] = useState(initialData?.responsableTransporte || settings?.shortName || 'CIELO');
+    const [plazoEntrega, setPlazoEntrega] = useState(initialData?.plazoEntrega || '24 horas');
+    const [transporte, setTransporte] = useState(initialData?.transporte || 0);
+    const [notas, setNotas] = useState(initialData?.notas || '');
+    const [items, setItems] = useState(initialData?.items ? [...initialData.items] : []);
     const [selProd, setSelProd] = useState('');
     const [selCant, setSelCant] = useState(1);
     const [selDias, setSelDias] = useState(1);
@@ -105,20 +107,20 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                 {/* Header */}
                 <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#1e293b', fontSize: '1.2rem', marginBottom: '0.5rem' }}>
-                            <div style={{ background: 'rgba(59,130,246,0.1)', padding: '0.5rem', borderRadius: 10, display: 'flex' }}>
-                                <FilePlus size={20} style={{ color: '#3b82f6' }} />
+                        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#104166', fontSize: '1.2rem', marginBottom: '0.5rem' }}>
+                            <div style={{ background: 'rgba(35, 101, 171,0.1)', padding: '0.5rem', borderRadius: 10, display: 'flex' }}>
+                                <FilePlus size={20} style={{ color: '#2365AB' }} />
                             </div>
-                            Nueva Cotización
+                            {initialData ? `Editar Cotización #${initialData.id}` : 'Nueva Cotización'}
                         </h3>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             {['Comercial', 'Equipos', 'Condiciones', 'Resumen'].map((s, i) => (
                                 <React.Fragment key={s}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: step > i + 1 ? '#10b981' : step === i + 1 ? '#3b82f6' : '#e2e8f0', color: step > i ? 'white' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700 }}>
+                                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: step > i + 1 ? '#10b981' : step === i + 1 ? '#2365AB' : '#e2e8f0', color: step > i ? 'white' : '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700 }}>
                                             {step > i + 1 ? '✓' : i + 1}
                                         </div>
-                                        <span style={{ fontSize: '0.75rem', color: step === i + 1 ? '#3b82f6' : '#64748b', fontWeight: step === i + 1 ? 700 : 500 }}>{s}</span>
+                                        <span style={{ fontSize: '0.75rem', color: step === i + 1 ? '#2365AB' : '#64748b', fontWeight: step === i + 1 ? 700 : 500 }}>{s}</span>
                                     </div>
                                     {i < 3 && <div style={{ width: 24, height: 2, background: step > i + 1 ? '#10b981' : '#e2e8f0', borderRadius: 2 }} />}
                                 </React.Fragment>
@@ -130,7 +132,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                     </button>
                 </div>
 
-                <div style={{ padding: '1.5rem 2rem', overflowY: 'auto' }}>
+                <div style={{ padding: '1.5rem 2rem', overflowY: 'auto', overflowX: 'auto' }}>
 
                     {/* ─── Paso 1: Comercial ─── */}
                     {step === 1 && (
@@ -152,7 +154,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                 </div>
                             </div>
                             {selectedClient && (
-                                <div style={{ background: 'linear-gradient(135deg,#3b82f6,#2563eb)', borderRadius: 12, padding: '1rem 1.25rem', display: 'flex', gap: '2rem', boxShadow: '0 4px 12px rgba(59,130,246,0.2)' }}>
+                                <div style={{ background: 'linear-gradient(135deg,#2365AB,#2563eb)', borderRadius: 12, padding: '1rem 1.25rem', display: 'flex', gap: '2rem', boxShadow: '0 4px 12px rgba(35, 101, 171,0.2)' }}>
                                     {[['IVA', `${selectedClient.porcIVA || 0}%`], ['Retención', `${selectedClient.porcRetencion || 0}%`], ['Régimen', selectedClient.regimen || 'N/A']].map(([k, v]) => (
                                         <div key={k}>
                                             <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.8)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{k}</div>
@@ -176,7 +178,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>
                                 <button style={{ minWidth: 120, padding: '0.65rem 1.25rem', borderRadius: 8, background: '#f1f5f9', border: 'none', cursor: 'pointer', fontWeight: 600, color: '#64748b' }} onClick={onClose}>Cancelar</button>
                                 <button disabled={!clientId || !obraId} onClick={() => setStep(2)}
-                                    style={{ minWidth: 140, padding: '0.65rem 1.25rem', borderRadius: 8, background: '#3b82f6', color: 'white', border: 'none', cursor: (!clientId || !obraId) ? 'not-allowed' : 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', opacity: (!clientId || !obraId) ? 0.5 : 1 }}>
+                                    style={{ minWidth: 140, padding: '0.65rem 1.25rem', borderRadius: 8, background: '#2365AB', color: 'white', border: 'none', cursor: (!clientId || !obraId) ? 'not-allowed' : 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', opacity: (!clientId || !obraId) ? 0.5 : 1 }}>
                                     Equipos <ChevronRight size={16} />
                                 </button>
                             </div>
@@ -187,8 +189,8 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                     {step === 2 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <Package size={16} color="#3b82f6" /> Agregar Equipo
+                                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#104166', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Package size={16} color="#2365AB" /> Agregar Equipo
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 125px 125px 55px 55px auto', gap: '0.6rem', alignItems: 'end' }}>
                                     <div>
@@ -217,7 +219,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                         <input type="number" min="1" value={selDias} onChange={e => setSelDias(Number(e.target.value) || 1)} style={{ ...IS, padding: '0.6rem 0.4rem' }} />
                                     </div>
                                     <button onClick={addItem} disabled={!selProd}
-                                        style={{ height: 42, padding: '0 0.8rem', background: selProd ? '#3b82f6' : '#e2e8f0', color: selProd ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, cursor: selProd ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                                        style={{ height: 42, padding: '0 0.8rem', background: selProd ? '#2365AB' : '#e2e8f0', color: selProd ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, cursor: selProd ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
                                         <Plus size={18} />
                                     </button>
                                 </div>
@@ -236,11 +238,11 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                         <tbody>
                                             {items.map((item, idx) => (
                                                 <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1e293b' }}>{item.nombre}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#104166' }}>{item.nombre}</td>
                                                     <td style={{ padding: '0.75rem 1rem' }}>{item.cantidad}</td>
                                                     <td style={{ padding: '0.75rem 1rem' }}>{item.dias}</td>
                                                     <td style={{ padding: '0.75rem 1rem', color: '#10b981', fontWeight: 500 }}>{fmtCOP(Number(item.tarifaDia) || 0)}</td>
-                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#1e293b' }}>{fmtCOP((Number(item.cantidad) || 0) * (Number(item.dias) || 0) * (Number(item.tarifaDia) || 0))}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 700, color: '#104166' }}>{fmtCOP((Number(item.cantidad) || 0) * (Number(item.dias) || 0) * (Number(item.tarifaDia) || 0))}</td>
                                                     <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                                                         <button onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
                                                             style={{ background: '#fee2e2', border: 'none', cursor: 'pointer', color: '#ef4444', display: 'inline-flex', padding: '0.4rem', borderRadius: 6 }}>
@@ -261,7 +263,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
                                 <button onClick={() => setStep(1)} style={{ minWidth: 120, padding: '0.65rem 1.25rem', borderRadius: 8, background: '#f1f5f9', border: 'none', cursor: 'pointer', fontWeight: 600, color: '#64748b' }}>← Atrás</button>
                                 <button disabled={items.length === 0} onClick={() => setStep(3)}
-                                    style={{ minWidth: 140, padding: '0.65rem 1.25rem', borderRadius: 8, background: '#3b82f6', color: 'white', border: 'none', cursor: items.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', opacity: items.length === 0 ? 0.5 : 1 }}>
+                                    style={{ minWidth: 140, padding: '0.65rem 1.25rem', borderRadius: 8, background: '#2365AB', color: 'white', border: 'none', cursor: items.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', opacity: items.length === 0 ? 0.5 : 1 }}>
                                     Condiciones <ChevronRight size={16} />
                                 </button>
                             </div>
@@ -281,7 +283,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                 <div>
                                     <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Responsable del Transporte</label>
                                     <select value={respTransporte} onChange={e => setRespTransporte(e.target.value)} style={SS}>
-                                        {['CIELO', 'Cliente', 'Tercero / Fletadora'].map(v => <option key={v}>{v}</option>)}
+                                        {[settings?.shortName || 'CIELO', 'Cliente', 'Tercero / Fletadora'].map(v => <option key={v}>{v}</option>)}
                                     </select>
                                 </div>
                             </div>
@@ -295,7 +297,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
                                 <button onClick={() => setStep(2)} style={{ minWidth: 120, padding: '0.65rem 1.25rem', borderRadius: 8, background: '#f1f5f9', border: 'none', cursor: 'pointer', fontWeight: 600, color: '#64748b' }}>← Atrás</button>
-                                <button onClick={() => setStep(4)} style={{ minWidth: 140, padding: '0.65rem 1.25rem', borderRadius: 8, background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                <button onClick={() => setStep(4)} style={{ minWidth: 140, padding: '0.65rem 1.25rem', borderRadius: 8, background: '#2365AB', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                                     Revisar <ChevronRight size={16} />
                                 </button>
                             </div>
@@ -307,7 +309,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
-                                    <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1e293b' }}>{selectedClient?.name}</div>
+                                    <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#104166' }}>{selectedClient?.name}</div>
                                     <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 4, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                         <MapPin size={14} /> {obras.find(o => o.id === obraId)?.nombre || obraId}
                                     </div>
@@ -317,7 +319,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
 
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1rem' }}>
                                 {[
-                                    { k: 'Método Pago', v: metodoPago, c: '#3b82f6', Ic: CreditCard },
+                                    { k: 'Método Pago', v: metodoPago, c: '#2365AB', Ic: CreditCard },
                                     { k: 'Transporte', v: fmtCOP(Number(transporte) || 0), c: '#f97316', Ic: Truck },
                                     { k: 'Entrega', v: plazoEntrega, c: '#10b981', Ic: Clock },
                                 ].map(({ k, v, c, Ic }) => (
@@ -325,7 +327,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                         <div style={{ background: `${c}20`, padding: '0.5rem', borderRadius: 8 }}><Ic size={18} color={c} /></div>
                                         <div>
                                             <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>{k}</div>
-                                            <div style={{ fontWeight: 700, color: '#1e293b', marginTop: 2, fontSize: '0.9rem' }}>{v}</div>
+                                            <div style={{ fontWeight: 700, color: '#104166', marginTop: 2, fontSize: '0.9rem' }}>{v}</div>
                                         </div>
                                     </div>
                                 ))}
@@ -343,7 +345,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                     <tbody>
                                         {items.map((item, idx) => (
                                             <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1e293b' }}>{item.nombre}</td>
+                                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#104166' }}>{item.nombre}</td>
                                                 <td style={{ padding: '0.75rem 1rem' }}>{item.cantidad}</td>
                                                 <td style={{ padding: '0.75rem 1rem' }}>{item.dias}</td>
                                                 <td style={{ padding: '0.75rem 1rem' }}>{fmtCOP(Number(item.tarifaDia) || 0)}</td>
@@ -369,8 +371,8 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
                                 <button onClick={() => setStep(3)} style={{ minWidth: 120, padding: '0.65rem 1.25rem', borderRadius: 8, background: '#f1f5f9', border: 'none', cursor: 'pointer', fontWeight: 600, color: '#64748b' }}>← Atrás</button>
-                                <button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 180, justifyContent: 'center', padding: '0.65rem 1.5rem', borderRadius: 8, background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
-                                    <FilePlus size={18} /> Generar Cotización
+                                <button onClick={handleSave} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 180, justifyContent: 'center', padding: '0.65rem 1.5rem', borderRadius: 8, background: '#2365AB', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+                                    {initialData ? <><CheckCircle size={18} /> Guardar Cambios</> : <><FilePlus size={18} /> Generar Cotización</>}
                                 </button>
                             </div>
                         </div>

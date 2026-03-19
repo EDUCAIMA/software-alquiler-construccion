@@ -2,12 +2,13 @@ import React, { useState, useMemo } from 'react';
 import {
     Plus, Search, Printer, FileText, X, Building2, MapPin,
     Phone, Mail, Edit3, ChevronDown, ChevronRight, CheckCircle,
-    Clock, AlertTriangle, Receipt, Percent, User, Download
+    Clock, AlertTriangle, Receipt, Percent, User, Download, Trash2, ShieldAlert
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
+import { applyStandardLayout } from './pdfTheme';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const OBRA_ESTADO = {
@@ -37,86 +38,79 @@ const SelectField = ({ label, children, ...props }) => (
 );
 
 // ─── PDF Export ───────────────────────────────────────────────────────────────
-function exportClientPDF(client, invoices, products) {
-    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-    const W = doc.internal.pageSize.width;
+function exportClientPDF(client, invoices, products, settings) {
+    const doc = new jsPDF();
+    const W = doc.internal.pageSize.getWidth();
+    const margin = 10;
 
-    // Header band
-    doc.setFillColor(24, 24, 27);
-    doc.rect(0, 0, W, 70, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(18); doc.setFont('helvetica', 'bold');
-    doc.text('CIELO – Ficha de Cliente', 40, 38);
-    doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-    doc.setTextColor(148, 163, 184);
-    doc.text(`Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 40, 52);
-    doc.text(`ID: ${client.id}`, W - 80, 38);
+    let y = applyStandardLayout(doc, 'Ficha de Cliente', settings, client.id);
 
-    // Datos generales
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(13); doc.setFont('helvetica', 'bold');
-    doc.text('1. Datos del Cliente', 40, 95);
+    // Datos generales section
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('1. Datos del Cliente', margin, y);
 
     autoTable(doc, {
-        startY: 108,
+        startY: y + 5,
         body: [
-            ['Razón Social', client.name, 'NIT / CC', client.nit || 'N/A'],
-            ['Tipo Persona', client.tipoPersona || 'N/A', 'Régimen', client.regimen || 'N/A'],
-            ['Resp. IVA', client.responsableIVA ? 'Sí' : 'No', '% IVA', `${client.porcIVA || 0}%`],
-            ['% Retención Fuente', `${client.porcRetencion || 0}%`, 'Contacto', client.contactoPrincipal || 'N/A'],
-            ['Correo', client.email || 'N/A', 'Teléfono', client.phone || 'N/A'],
-            ['Dirección', client.direccion || 'N/A', 'Ciudad', `${client.ciudad || ''} – ${client.departamento || ''}`],
-            ['Deuda Actual', `$${(client.debt || 0).toLocaleString()}`, 'Miembro desde', client.joined || 'N/A'],
+            ['Razón Social', client.name, 'NIT / CC', client.nit || '—'],
+            ['Tipo Persona', client.tipoPersona || '—', 'Régimen', client.regimen || '—'],
+            ['Responsable IVA', client.responsableIVA ? 'Sí' : 'No', '% IVA', `${client.porcIVA || 0}%`],
+            ['% Retención', `${client.porcRetencion || 0}%`, 'Contacto', client.contactoPrincipal || '—'],
+            ['Correo', client.email || '—', 'Teléfono', client.phone || '—'],
+            ['Dirección', client.direccion || '—', 'Ciudad', `${client.ciudad || ''} – ${client.departamento || ''}`],
+            ['Deuda Actual', `$${(client.debt || 0).toLocaleString()}`, 'Desde', client.joined || '—'],
         ],
-        styles: { fillColor: [30, 30, 35], textColor: [240, 240, 240], fontSize: 9, cellPadding: 6 },
-        alternateRowStyles: { fillColor: [40, 40, 45] },
-        columnStyles: { 0: { fontStyle: 'bold', textColor: [148, 163, 184], cellWidth: 100 }, 2: { fontStyle: 'bold', textColor: [148, 163, 184], cellWidth: 100 } },
-        margin: { left: 40, right: 40 },
+        styles: { fontSize: 8, cellPadding: 3 },
+        columnStyles: { 
+            0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 35 }, 
+            2: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 35 } 
+        },
+        margin: { left: margin, right: margin },
     });
 
-    // Obras
-    const afterData = doc.lastAutoTable.finalY + 20;
-    doc.setFontSize(13); doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text('2. Obras / Centros de Costo', 40, afterData);
+    // Obras section
+    let currentY = doc.lastAutoTable.finalY + 12;
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('2. Obras / Proyectos', margin, currentY);
 
     autoTable(doc, {
-        startY: afterData + 14,
+        startY: currentY + 5,
         head: [['ID Obra', 'Nombre', 'Ubicación', 'Estado', 'Presupuesto', 'Inicio']],
         body: (client.obras || []).map(o => [
-            o.id, o.nombre, o.ubicacion || 'N/A', o.estado,
+            o.id, o.nombre, o.ubicacion || '—', o.estado,
             `$${(o.presupuesto || 0).toLocaleString()}`,
-            o.fechaInicio || 'N/A',
+            o.fechaInicio || '—',
         ]),
-        styles: { fillColor: [30, 30, 35], textColor: [240, 240, 240], fontSize: 9 },
-        headStyles: { fillColor: [59, 130, 246] },
-        alternateRowStyles: { fillColor: [40, 40, 45] },
-        margin: { left: 40, right: 40 },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
+        styles: { fontSize: 8, cellPadding: 3 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: margin, right: margin },
     });
 
-    // Facturas
-    const afterObras = doc.lastAutoTable.finalY + 20;
-    doc.setFontSize(13); doc.setFont('helvetica', 'bold');
-    doc.text('3. Historial de Facturación', 40, afterObras);
+    // Facturas section
+    currentY = doc.lastAutoTable.finalY + 12;
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('3. Historial de Facturación', margin, currentY);
 
     const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
     autoTable(doc, {
-        startY: afterObras + 14,
+        startY: currentY + 5,
         head: [['Factura', 'Obra', 'Fecha', 'Equipos', 'Monto', 'Estado']],
         body: clientInvoices.length > 0
             ? clientInvoices.map(inv => {
-                const obraName = (client.obras || []).find(o => o.id === inv.obraId)?.nombre || 'N/A';
-                const items = inv.items.map(item => {
+                const obraName = (client.obras || []).find(o => o.id === inv.obraId)?.nombre || '—';
+                const itemsStr = inv.items.map(item => {
                     const prod = products.find(p => p.id === item.productId);
                     return prod ? `${item.quantity}x ${prod.name}` : item.productId;
                 }).join(', ');
-                return [inv.id, obraName, inv.date, items, `$${inv.amount.toLocaleString()}`, inv.status === 'Paid' ? 'Pagada' : 'Pendiente'];
+                return [inv.id, obraName, inv.date, itemsStr, `$${inv.amount.toLocaleString()}`, inv.status === 'Paid' ? 'PAGADA' : 'PENDIENTE'];
             })
-            : [['—', '—', '—', 'Sin facturas', '—', '—']],
-        styles: { fillColor: [30, 30, 35], textColor: [240, 240, 240], fontSize: 8 },
-        headStyles: { fillColor: [16, 185, 129] },
-        alternateRowStyles: { fillColor: [40, 40, 45] },
-        margin: { left: 40, right: 40 },
+            : [['—', '—', '—', 'Sin facturas registradas', '—', '—']],
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
+        styles: { fontSize: 7.5, cellPadding: 3 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: margin, right: margin },
     });
 
     doc.save(`Ficha_${client.name.replace(/\s+/g, '_')}_${client.id}.pdf`);
@@ -138,9 +132,9 @@ function ClientModal({ initial, onSave, onClose, isEdit }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '2rem 1rem 1rem 1rem' }}>
             <div style={{ background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', width: '100%', maxWidth: 720, maxHeight: '85vh', display: 'flex', flexDirection: 'column', marginTop: '3vh' }}>
                 <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#1e293b', fontSize: '1.2rem' }}>
-                        <div style={{ background: 'rgba(59,130,246,0.1)', padding: '0.5rem', borderRadius: '10px', display: 'flex' }}>
-                            <Building2 size={20} style={{ color: '#3b82f6' }} />
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#104166', fontSize: '1.2rem' }}>
+                        <div style={{ background: 'rgba(35, 101, 171,0.1)', padding: '0.5rem', borderRadius: '10px', display: 'flex' }}>
+                            <Building2 size={20} style={{ color: '#2365AB' }} />
                         </div>
                         {isEdit ? 'Editar Información del Cliente' : 'Registrar Nuevo Cliente'}
                     </h3>
@@ -152,8 +146,8 @@ function ClientModal({ initial, onSave, onClose, isEdit }) {
                         {/* Sección: Datos Generales */}
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                                <User size={16} color="#3b82f6" />
-                                <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#3b82f6', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos Generales</h4>
+                                <User size={16} color="#2365AB" />
+                                <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#2365AB', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Datos Generales</h4>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div style={{ gridColumn: '1 / -1' }}>
@@ -241,7 +235,7 @@ function ObraModal({ onSave, onClose }) {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '2rem 1rem 1rem 1rem' }}>
             <div style={{ background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column', marginTop: '3vh' }}>
                 <div style={{ padding: '1.25rem 1.75rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#1e293b', fontSize: '1.15rem' }}>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#104166', fontSize: '1.15rem' }}>
                         <div style={{ background: 'rgba(249,115,22,0.1)', padding: '0.5rem', borderRadius: '10px', display: 'flex' }}>
                             <MapPin size={18} style={{ color: '#f97316' }} />
                         </div>
@@ -284,8 +278,8 @@ function ObraModal({ onSave, onClose }) {
 const SectionCard = ({ title, icon, children }) => (
     <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
         <div style={{ background: '#f8fafc', padding: '0.85rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ color: '#3b82f6', background: '#eff6ff', padding: '0.35rem', borderRadius: '8px', display: 'flex' }}>{icon}</span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{title}</span>
+            <span style={{ color: '#2365AB', background: '#eff6ff', padding: '0.35rem', borderRadius: '8px', display: 'flex' }}>{icon}</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#104166', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{title}</span>
         </div>
         <div style={{ padding: '1.25rem' }}>{children}</div>
     </div>
@@ -296,13 +290,26 @@ const Grid2 = ({ children }) => (
 const Field = ({ label, children, full }) => (
     <div style={full ? { gridColumn: '1 / -1', background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0' } : { background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
         <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.2rem' }}>{label}</div>
-        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b' }}>{children}</div>
+        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#104166' }}>{children}</div>
     </div>
 );
 
-function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }) {
+function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, onDelete }) {
+    const { settings } = useAppContext();
     const [tab, setTab] = useState('datos');
     const [showObraModal, setShowObraModal] = useState(false);
+
+    const handleDelete = () => {
+        const pass = prompt("POR SEGURIDAD: Ingrese la contraseña de administrador para eliminar este cliente:");
+        if (pass === null) return; // Cancelado
+        if (pass === "admin123") {
+            if (window.confirm(`¿Está seguro de eliminar permanentemente a ${client.name}? Esta acción no se puede deshacer.`)) {
+                onDelete(client.id);
+            }
+        } else {
+            alert("Contraseña incorrecta. No tiene permisos para esta acción.");
+        }
+    };
     const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
     const totalFacturado = clientInvoices.reduce((s, i) => s + i.amount, 0);
     const totalPagado = clientInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
@@ -310,7 +317,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
     const tabStyle = (t) => ({
         padding: '0.45rem 1rem', fontSize: '0.78rem', fontWeight: 700,
         background: tab === t ? '#ffffff' : 'rgba(255,255,255,0.15)',
-        color: tab === t ? '#1e293b' : 'rgba(255,255,255,0.85)',
+        color: tab === t ? '#104166' : 'rgba(255,255,255,0.85)',
         border: 'none', borderRadius: 8, cursor: 'pointer',
         transition: 'all 0.18s', letterSpacing: '0.02em',
     });
@@ -325,10 +332,10 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
                 }}>
 
                     {/* ── HEADER (estilo factura PDF) ── */}
-                    <div style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', padding: '1.5rem 1.75rem', flexShrink: 0 }}>
+                    <div style={{ background: 'linear-gradient(135deg, #2365AB, #2563eb)', padding: '1.5rem 1.75rem', flexShrink: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div>
-                                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'white', letterSpacing: '0.05em' }}>CIELO</div>
+                                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'white', letterSpacing: '0.05em' }}>{settings?.shortName || 'CIELO'}</div>
                                 <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>Ficha de Cliente — Alquiler de Equipos</div>
                             </div>
                             <div style={{ textAlign: 'right' }}>
@@ -376,6 +383,9 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
                                 <button onClick={() => exportClientPDF(client, invoices, products)} style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, color: 'white', cursor: 'pointer', fontWeight: 600 }}>
                                     <Download size={13} /> PDF
                                 </button>
+                                <button onClick={handleDelete} title="Eliminar Cliente" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: 6, color: '#fca5a5', cursor: 'pointer', fontWeight: 600 }}>
+                                    <Trash2 size={13} /> Eliminar
+                                </button>
                                 <button onClick={onClose} style={{ padding: '0.4rem', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                                     <X size={16} />
                                 </button>
@@ -403,7 +413,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
                             </SectionCard>
 
                             {/* Bloque azul de tributaria — idéntico al "TOTAL" de la factura */}
-                            <div style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', borderRadius: '16px', padding: '1.25rem 1.75rem', boxShadow: '0 10px 15px -3px rgba(59,130,246,0.3)' }}>
+                            <div style={{ background: 'linear-gradient(135deg, #2365AB, #2563eb)', borderRadius: '16px', padding: '1.25rem 1.75rem', boxShadow: '0 10px 15px -3px rgba(35, 101, 171,0.3)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
                                     <Percent size={18} color="rgba(255,255,255,0.9)" />
                                     <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
@@ -430,7 +440,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
                             {/* Resumen cartera */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                                 {[
-                                    ['Total Facturado', `$${totalFacturado.toLocaleString()}`, '#1e293b'],
+                                    ['Total Facturado', `$${totalFacturado.toLocaleString()}`, '#104166'],
                                     ['Total Pagado', `$${totalPagado.toLocaleString()}`, '#10b981'],
                                     ['Deuda Activa', `$${client.debt.toLocaleString()}`, client.debt > 0 ? '#ef4444' : '#10b981'],
                                 ].map(([k, v, c]) => (
@@ -462,7 +472,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
                                     <div key={obra.id} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                                         <div style={{ background: '#f8fafc', padding: '1rem 1.25rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <div>
-                                                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e293b' }}>{obra.nombre}</div>
+                                                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#104166' }}>{obra.nombre}</div>
                                                 <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.3rem' }}>
                                                     <div style={{ background: '#e2e8f0', padding: '0.2rem', borderRadius: '4px', display: 'flex' }}><MapPin size={12} /></div>
                                                     {obra.ubicacion || 'Sin ubicación'}
@@ -481,10 +491,10 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
                                             </Grid2>
                                             <div style={{ marginTop: '1.25rem', background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem', fontWeight: 600 }}>
-                                                    <span style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ejecución presupuestal</span><span style={{ color: '#1e293b', fontWeight: 800 }}>{pct}%</span>
+                                                    <span style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ejecución presupuestal</span><span style={{ color: '#104166', fontWeight: 800 }}>{pct}%</span>
                                                 </div>
                                                 <div style={{ height: 8, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden' }}>
-                                                    <div style={{ height: '100%', width: `${pct}%`, background: pct >= 90 ? '#ef4444' : pct >= 60 ? '#f97316' : '#3b82f6', borderRadius: 999, transition: 'width 0.4s ease' }} />
+                                                    <div style={{ height: '100%', width: `${pct}%`, background: pct >= 90 ? '#ef4444' : pct >= 60 ? '#f97316' : '#2365AB', borderRadius: 999, transition: 'width 0.4s ease' }} />
                                                 </div>
                                             </div>
                                             {obra.descripcion && <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '1rem', fontStyle: 'italic', background: 'rgba(241,245,249,0.5)', padding: '0.75rem', borderRadius: '8px', borderLeft: '3px solid #cbd5e1' }}>{obra.descripcion}</p>}
@@ -513,7 +523,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
                                 <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
                                         <thead>
-                                            <tr style={{ background: '#3b82f6' }}>
+                                            <tr style={{ background: '#2365AB' }}>
                                                 {['Factura', 'Obra', 'Fecha', 'Monto', 'Estado'].map(h => (
                                                     <th key={h} style={{ padding: '0.65rem 0.75rem', textAlign: 'left', color: 'white', fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                                                 ))}
@@ -524,10 +534,10 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
                                                 const obra = client.obras?.find(o => o.id === inv.obraId);
                                                 return (
                                                     <tr key={inv.id} style={{ background: idx % 2 === 0 ? '#f8fafc' : 'white', borderBottom: '1px solid #e2e8f0' }}>
-                                                        <td style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#3b82f6', fontFamily: 'monospace', fontSize: '0.78rem' }}>{inv.id}</td>
-                                                        <td style={{ padding: '0.6rem 0.75rem', color: '#475569', fontSize: '0.78rem' }}>{obra?.nombre || '—'}</td>
+                                                        <td style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#2365AB', fontFamily: 'monospace', fontSize: '0.78rem' }}>{inv.id}</td>
+                                                        <td style={{ padding: '0.6rem 0.75rem', color: '#263777', fontSize: '0.78rem' }}>{obra?.nombre || '—'}</td>
                                                         <td style={{ padding: '0.6rem 0.75rem', color: '#64748b', fontSize: '0.78rem' }}>{inv.date}</td>
-                                                        <td style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#1e293b' }}>${inv.amount.toLocaleString()}</td>
+                                                        <td style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#104166' }}>${inv.amount.toLocaleString()}</td>
                                                         <td style={{ padding: '0.6rem 0.75rem' }}>
                                                             <span style={{ padding: '2px 8px', borderRadius: 999, fontWeight: 700, fontSize: '0.7rem', background: inv.status === 'Paid' ? '#dcfce7' : '#fef9c3', color: inv.status === 'Paid' ? '#166534' : '#854d0e' }}>
                                                                 {inv.status === 'Paid' ? 'Pagada' : 'Pendiente'}
@@ -562,11 +572,11 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4rem' }}>
                                         <div>
                                             <div style={{ borderBottom: '2px solid #e2e8f0', marginBottom: '0.75rem', height: 40 }} />
-                                            <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>Firma Responsable CIELO</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>Firma Responsable {settings?.shortName || 'CIELO'}</div>
                                         </div>
                                         <div>
                                             <div style={{ borderBottom: '2px solid #e2e8f0', marginBottom: '0.75rem', height: 40 }} />
-                                            <div style={{ fontSize: '0.8rem', color: '#1e293b', fontWeight: 700 }}>Repr. Legal: {client.contactoPrincipal || '__________'}</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#104166', fontWeight: 700 }}>Repr. Legal: {client.contactoPrincipal || '__________'}</div>
                                             <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.3rem' }}>NIT: {client.nit || '__________'}</div>
                                         </div>
                                     </div>
@@ -590,9 +600,64 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products }
     );
 }
 
+// ─── MODAL: Confirmar Eliminación con Pasword ─────────────────────────────────
+function DeleteClientModal({ client, onClose, onConfirm }) {
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    
+    return (
+        <div className="modal-overlay" style={{ zIndex: 2000 }}>
+            <div className="modal-content fadeIn" style={{ maxWidth: 420, padding: 0, overflow: 'hidden' }}>
+                <div style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', padding: '1.5rem 2rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Trash2 size={22} color="white" />
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: 800, color: 'white', fontSize: '1.1rem' }}>Eliminar Cliente</div>
+                            <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>{client.name}</div>
+                        </div>
+                    </div>
+                </div>
+                <div style={{ padding: '1.5rem 2rem' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '0.85rem', marginBottom: '1.25rem' }}>
+                        <ShieldAlert size={20} style={{ color: '#ef4444', flexShrink: 0 }} />
+                        <p style={{ fontSize: '0.8rem', color: '#b91c1c', margin: 0, fontWeight: 500, lineHeight: 1.4 }}>
+                            Esta acción eliminará todos los registros del cliente de forma permanente. Para continuar, ingrese su contraseña de administrador.
+                        </p>
+                    </div>
+                    
+                    <div className="input-group">
+                        <label className="input-label" style={{ fontSize: '0.7rem' }}>CONFIRMAR CON CONTRASEÑA</label>
+                        <input 
+                            type="password" 
+                            className="input-base" 
+                            value={password} 
+                            onChange={e => { setPassword(e.target.value); setError(''); }}
+                            placeholder="Ingrese su contraseña..."
+                            autoFocus
+                            onKeyDown={e => e.key === 'Enter' && onConfirm(password, setError)}
+                        />
+                        {error && <p style={{ color: '#ef4444', fontSize: '0.72rem', marginTop: '0.4rem', fontWeight: 600 }}>{error}</p>}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+                        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+                        <button
+                            onClick={() => onConfirm(password, setError)}
+                            style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: 8, padding: '0.6rem 1.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)' }}>
+                            <Trash2 size={16} /> Eliminar Permanente
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Clients() {
-    const { clients, addClient, editClient, addObra, invoices, products } = useAppContext();
+    const { clients, addClient, editClient, deleteClient, addObra, invoices, products, settings, checkPassword } = useAppContext();
 
     const [search, setSearch] = useState('');
     const [filterDeuda, setFilterDeuda] = useState('Todos');
@@ -600,6 +665,7 @@ export default function Clients() {
     const [showModal, setShowModal] = useState(false);
     const [editingClient, setEditingClient] = useState(null);
     const [selectedClient, setSelectedClient] = useState(null);
+    const [deletingClient, setDeletingClient] = useState(null);
 
     // Search + filter
     const filtered = useMemo(() => clients.filter(c => {
@@ -629,6 +695,16 @@ export default function Clients() {
     const handleSaveEdit = (form) => {
         editClient(editingClient.id, form);
         setEditingClient(null);
+    };
+
+    const handleDelete = (password, setError) => {
+        if (checkPassword(password)) {
+            deleteClient(deletingClient.id);
+            setDeletingClient(null);
+            if (selectedClient?.id === deletingClient.id) setSelectedClient(null);
+        } else {
+            setError('La contraseña es incorrecta. Por favor verifique.');
+        }
     };
 
     const inputStyle = {
@@ -744,9 +820,16 @@ export default function Clients() {
                                                     style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: 4 }}>
                                                     <FileText size={13} /> Ficha
                                                 </button>
-                                                <button className="btn btn-secondary btn-sm" onClick={() => exportClientPDF(client, invoices, products)}
+                                                <button className="btn btn-secondary btn-sm" onClick={() => exportClientPDF(client, invoices, products, settings)}
                                                     style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: 4 }}>
                                                     <Printer size={13} /> PDF
+                                                </button>
+                                                <button 
+                                                    className="btn btn-secondary btn-sm" 
+                                                    onClick={() => setDeletingClient(client)}
+                                                    style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)' }}
+                                                >
+                                                    <Trash2 size={13} /> Borrar
                                                 </button>
                                             </div>
                                         </td>
@@ -764,6 +847,7 @@ export default function Clients() {
             {/* Modals */}
             {showModal && <ClientModal onSave={handleSaveNew} onClose={() => setShowModal(false)} />}
             {editingClient && <ClientModal initial={editingClient} isEdit onSave={handleSaveEdit} onClose={() => setEditingClient(null)} />}
+            {deletingClient && <DeleteClientModal client={deletingClient} onClose={() => setDeletingClient(null)} onConfirm={handleDelete} />}
 
             {/* Ficha lateral */}
             {selectedClient && (
@@ -774,6 +858,10 @@ export default function Clients() {
                     onAddObra={addObra}
                     invoices={invoices}
                     products={products}
+                    onDelete={(id) => {
+                        deleteClient(id);
+                        setSelectedClient(null);
+                    }}
                 />
             )}
 

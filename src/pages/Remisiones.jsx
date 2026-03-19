@@ -9,7 +9,7 @@ import { format, differenceInDays } from 'date-fns';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ESTADO_CFG = {
-    'Activa': { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', Icon: Truck },
+    'Activa': { color: '#2365AB', bg: 'rgba(35, 101, 171,0.12)', Icon: Truck },
     'Parcial': { color: '#f97316', bg: 'rgba(249,115,22,0.12)', Icon: Clock },
     'Cerrada': { color: '#10b981', bg: 'rgba(16,185,129,0.12)', Icon: CheckCircle },
 };
@@ -93,9 +93,9 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                 {/* Header */}
                 <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#1e293b', fontSize: '1.2rem', marginBottom: '0.5rem' }}>
-                            <div style={{ background: 'rgba(59,130,246,0.1)', padding: '0.5rem', borderRadius: '10px', display: 'flex' }}>
-                                <Truck size={20} style={{ color: '#3b82f6' }} />
+                        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#104166', fontSize: '1.2rem', marginBottom: '0.5rem' }}>
+                            <div style={{ background: 'rgba(35, 101, 171,0.1)', padding: '0.5rem', borderRadius: '10px', display: 'flex' }}>
+                                <Truck size={20} style={{ color: '#2365AB' }} />
                             </div>
                             Nueva Remisión de Despacho
                         </h3>
@@ -104,10 +104,10 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                             {['Destino', 'Equipos', 'Confirmar'].map((s, i) => (
                                 <React.Fragment key={s}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                        <div style={{ width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, background: step > i + 1 ? '#10b981' : step === i + 1 ? '#3b82f6' : '#e2e8f0', color: step > i ? 'white' : '#64748b' }}>
+                                        <div style={{ width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, background: step > i + 1 ? '#10b981' : step === i + 1 ? '#2365AB' : '#e2e8f0', color: step > i ? 'white' : '#64748b' }}>
                                             {step > i + 1 ? '✓' : i + 1}
                                         </div>
-                                        <span style={{ fontSize: '0.75rem', color: step === i + 1 ? '#3b82f6' : '#64748b', fontWeight: step === i + 1 ? 700 : 500 }}>{s}</span>
+                                        <span style={{ fontSize: '0.75rem', color: step === i + 1 ? '#2365AB' : '#64748b', fontWeight: step === i + 1 ? 700 : 500 }}>{s}</span>
                                     </div>
                                     {i < 2 && <div style={{ width: 24, height: 2, background: step > i + 1 ? '#10b981' : '#e2e8f0', borderRadius: 2 }} />}
                                 </React.Fragment>
@@ -167,14 +167,14 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                             {/* Client summary bar */}
                             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                 <div style={{ background: '#e0e7ff', padding: '0.4rem', borderRadius: '50%', display: 'flex' }}><MapPin size={16} style={{ color: '#4f46e5' }} /></div>
-                                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>{selectedClient?.name}</span>
+                                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#104166' }}>{selectedClient?.name}</span>
                                 <span style={{ color: '#64748b', fontSize: '0.85rem' }}>→ {obrasDisp.find(o => o.id === obraId)?.nombre}</span>
                             </div>
 
                             {/* Add item */}
                             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <Package size={16} color="#3b82f6" /> Agregar Equipo
+                                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#104166', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <Package size={16} color="#2365AB" /> Agregar Equipo
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px auto', gap: '1rem', alignItems: 'end' }}>
                                     <div>
@@ -214,7 +214,7 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                                         <tbody>
                                             {items.map((item, idx) => (
                                                 <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1e293b' }}>{item.nombre}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#104166' }}>{item.nombre}</td>
                                                     <td style={{ padding: '0.75rem 1rem' }}>{item.cantidad}</td>
                                                     <td style={{ padding: '0.75rem 1rem', color: '#10b981', fontWeight: 500 }}>${item.tarifaDia?.toLocaleString()}</td>
                                                     <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
@@ -244,7 +244,7 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                             {/* Summary boxes */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                                 {[
-                                    ['Cliente', selectedClient?.name, '#3b82f6'],
+                                    ['Cliente', selectedClient?.name, '#2365AB'],
                                     ['Obra', obrasDisp.find(o => o.id === obraId)?.nombre || obraId, '#f97316'],
                                     ['Fecha', fecha, '#10b981']
                                 ].map(([k, v, c]) => (
@@ -256,14 +256,14 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                             </div>
 
                             <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
-                                <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', fontSize: '0.75rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', borderBottom: '1px solid #e2e8f0' }}>
+                                <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', fontSize: '0.75rem', fontWeight: 700, color: '#104166', textTransform: 'uppercase', borderBottom: '1px solid #e2e8f0' }}>
                                     Equipos a despachar
                                 </div>
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                                     <tbody>
                                         {items.map((item, idx) => (
                                             <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#1e293b' }}>{item.nombre}</td>
+                                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#104166' }}>{item.nombre}</td>
                                                 <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{item.cantidad} unidad(es)</td>
                                                 <td style={{ padding: '0.75rem 1rem', fontWeight: 500, color: '#10b981', textAlign: 'right' }}>${(item.tarifaDia * item.cantidad).toLocaleString()}/día</td>
                                             </tr>
@@ -282,7 +282,7 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                             {notas && (
                                 <div style={{ display: 'flex', gap: '0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1rem' }}>
                                     <Info size={16} style={{ color: '#64748b', flexShrink: 0, marginTop: 2 }} />
-                                    <span style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.5 }}>{notas}</span>
+                                    <span style={{ fontSize: '0.85rem', color: '#263777', lineHeight: 1.5 }}>{notas}</span>
                                 </div>
                             )}
 
@@ -371,7 +371,7 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
         onClose();
     };
 
-    const inputStyle = { width: '100%', padding: '0.55rem 0.75rem', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#1e293b', fontSize: '0.875rem', textAlign: 'center', boxSizing: 'border-box', outline: 'none' };
+    const inputStyle = { width: '100%', padding: '0.55rem 0.75rem', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#104166', fontSize: '0.875rem', textAlign: 'center', boxSizing: 'border-box', outline: 'none' };
 
     return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
@@ -383,9 +383,9 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
                             <RotateCcw size={22} style={{ color: '#f97316' }} />
                         </div>
                         <div>
-                            <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.15rem' }}>Registrar Devolución — Lógica PEPS</h3>
+                            <h3 style={{ margin: 0, color: '#104166', fontSize: '1.15rem' }}>Registrar Devolución — Lógica PEPS</h3>
                             <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.2rem', fontWeight: 500 }}>
-                                Cliente: <span style={{ color: '#1e293b', fontWeight: 600 }}>{client?.name}</span> &nbsp;→&nbsp; Obra: <span style={{ color: '#1e293b', fontWeight: 600 }}>{obra?.nombre}</span>
+                                Cliente: <span style={{ color: '#104166', fontWeight: 600 }}>{client?.name}</span> &nbsp;→&nbsp; Obra: <span style={{ color: '#104166', fontWeight: 600 }}>{obra?.nombre}</span>
                             </div>
                         </div>
                     </div>
@@ -409,7 +409,7 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                     {enCampo.map(item => (
                                         <div key={item.productId} style={{ display: 'grid', gridTemplateColumns: '1fr auto 90px', gap: '1rem', alignItems: 'center', background: '#f8fafc', borderRadius: '10px', padding: '0.75rem 1.25rem', border: '1px solid #e2e8f0', transition: 'all 0.2s', ...(quantities[item.productId] > 0 ? { borderColor: '#f97316', background: 'rgba(249,115,22,0.03)' } : {}) }}>
-                                            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>{item.nombre}</div>
+                                            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#104166' }}>{item.nombre}</div>
                                             <div style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '6px', background: '#e0e7ff', color: '#4f46e5', fontWeight: 700 }}>{item.enCampo} en campo</div>
                                             <input type="number" min="0" max={item.enCampo} value={quantities[item.productId] || ''} onChange={e => setQ(item.productId, e.target.value)} style={{ ...inputStyle, borderColor: quantities[item.productId] > 0 ? '#f97316' : '#cbd5e1' }} placeholder="0" />
                                         </div>
@@ -434,9 +434,9 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
                                                     </div>
                                                 </div>
                                                 {p.items.map((it, i) => (
-                                                    <div key={i} style={{ fontSize: '0.8rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.2rem' }}>
+                                                    <div key={i} style={{ fontSize: '0.8rem', color: '#263777', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.2rem' }}>
                                                         <span style={{ color: '#cbd5e1' }}>└</span>
-                                                        <span style={{ fontWeight: 600, color: '#1e293b' }}>{it.nombre}:</span>
+                                                        <span style={{ fontWeight: 600, color: '#104166' }}>{it.nombre}:</span>
                                                         devuelve <strong style={{ color: '#ea580c' }}>{it.descuento}</strong> de {it.pendiente}
                                                     </div>
                                                 ))}
@@ -454,7 +454,7 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
 
                 <div style={{ padding: '1.25rem 2rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '1rem', justifyContent: 'space-between', alignItems: 'center', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
                     <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
-                        Total a devolver: <span style={{ color: '#1e293b', fontWeight: 800, fontSize: '1rem' }}>{totalADevolver}</span> ud(s)
+                        Total a devolver: <span style={{ color: '#104166', fontWeight: 800, fontSize: '1rem' }}>{totalADevolver}</span> ud(s)
                     </div>
                     <div style={{ display: 'flex', gap: '0.75rem' }}>
                         <button className="btn btn-secondary" onClick={onClose} style={{ minWidth: 100 }}>Cancelar</button>
@@ -665,7 +665,7 @@ export default function Remisiones() {
                                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                     >
-                                        <td style={{ padding: '0.85rem', fontWeight: 700, fontFamily: 'monospace', color: '#3b82f6', fontSize: '0.82rem' }}>{rem.id}</td>
+                                        <td style={{ padding: '0.85rem', fontWeight: 700, fontFamily: 'monospace', color: '#2365AB', fontSize: '0.82rem' }}>{rem.id}</td>
                                         <td style={{ padding: '0.85rem' }}>
                                             <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{client?.name || rem.clientId}</div>
                                             <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>

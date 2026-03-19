@@ -12,12 +12,13 @@ import { format, parseISO, subDays, eachDayOfInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { applyStandardLayout } from './pdfTheme';
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
 
 // ─── Color Palette ────────────────────────────────────────────────────────────
 const COLORS = {
-  blue: '#3b82f6',
+  blue: '#2365AB',
   green: '#10b981',
   orange: '#f97316',
   red: '#ef4444',
@@ -144,85 +145,63 @@ export default function Dashboard() {
 
   // ── Export to PDF ─────────────────────────────────────────────────────────
   const exportPDF = async () => {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const margin = 10;
+    
+    let y = applyStandardLayout(doc, 'Panel de Control - Reporte Ejecutivo', settings);
 
-    // Header
-    doc.setFillColor(24, 24, 27);
-    doc.rect(0, 0, doc.internal.pageSize.width, 60, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${settings?.companyName || 'CIELO'} – Panel de Control`, 40, 38);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(148, 163, 184);
-    doc.text(`Generado: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 40, 52);
-
-    // KPI Table
-    doc.setFontSize(12);
-    doc.setTextColor(255, 255, 255);
-    doc.text('Indicadores Clave', 40, 85);
+    // Indicators section
+    doc.setTextColor(30, 41, 59); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('1. Indicadores Clave', margin, y);
 
     autoTable(doc, {
-      startY: 95,
-      head: [['Métrica', 'Valor']],
+      startY: y + 5,
+      head: [['Métrica', 'Valor', 'Métrica', 'Valor']],
       body: [
-        ['Total Clientes', clients.length.toString()],
-        ['Unidades en Calle', rentedUnits.toString()],
-        ['Unidades en Bodega', availableUnits.toString()],
-        ['Total Unidades', totalUnits.toString()],
-        ['Ingresos Cobrados', `$${totalRevenue.toLocaleString()}`],
-        ['Cartera Pendiente', `$${pendingRevenue.toLocaleString()}`],
-        ['Total Facturas', invoices.length.toString()],
-        ['Facturas Pagadas', invoices.filter(i => i.status === 'Paid').length.toString()],
-        ['Facturas Pendientes', invoices.filter(i => i.status === 'Pending').length.toString()],
+        ['Total Clientes', clients.length.toString(), 'Ingresos Cobrados', `$${totalRevenue.toLocaleString()}`],
+        ['Unidades en Calle', rentedUnits.toString(), 'Cartera Pendiente', `$${pendingRevenue.toLocaleString()}`],
+        ['Unidades en Bodega', availableUnits.toString(), 'Total Facturas', invoices.length.toString()],
+        ['Total Unidades', totalUnits.toString(), 'Facturas Pagadas', invoices.filter(i => i.status === 'Paid').length.toString()],
       ],
-      styles: { fillColor: [30, 30, 35], textColor: [240, 240, 240], fontSize: 10 },
-      headStyles: { fillColor: [59, 130, 246] },
-      alternateRowStyles: { fillColor: [40, 40, 45] },
-      margin: { left: 40, right: 40 },
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
+      styles: { fontSize: 8, cellPadding: 3 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: margin, right: margin },
     });
 
     // Facturas detail
-    doc.addPage();
-    doc.setFillColor(24, 24, 27);
-    doc.rect(0, 0, doc.internal.pageSize.width, 50, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Detalle de Facturas', 40, 32);
+    const afterKPIs = doc.lastAutoTable.finalY + 12;
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('2. Detalle de Facturación Reciente', margin, afterKPIs);
 
     const clientMap = Object.fromEntries(clients.map(c => [c.id, c.name]));
     autoTable(doc, {
-      startY: 60,
-      head: [['ID Factura', 'Cliente', 'Monto', 'Estado', 'Fecha']],
-      body: invoices.map(inv => [
+      startY: afterKPIs + 5,
+      head: [['Factura', 'Cliente', 'Monto', 'Estado', 'Fecha']],
+      body: invoices.slice(0, 20).map(inv => [
         inv.id,
         clientMap[inv.clientId] || inv.clientId,
         `$${inv.amount.toLocaleString()}`,
-        inv.status === 'Paid' ? 'Pagado' : 'Pendiente',
+        inv.status === 'Paid' ? 'PAGADA' : 'PENDIENTE',
         inv.date,
       ]),
-      styles: { fillColor: [30, 30, 35], textColor: [240, 240, 240], fontSize: 9 },
-      headStyles: { fillColor: [16, 185, 129] },
-      alternateRowStyles: { fillColor: [40, 40, 45] },
-      didParseCell: (data) => {
-        if (data.column.index === 3 && data.section === 'body') {
-          data.cell.styles.textColor = data.cell.raw === 'Pagado' ? [16, 185, 129] : [249, 115, 22];
-        }
-      },
-      margin: { left: 40, right: 40 },
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
+      styles: { fontSize: 8, cellPadding: 3 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: margin, right: margin },
     });
 
-    // Dashboard screenshot
+    // Dashboard view
     if (dashboardRef.current) {
+      doc.addPage('a4', 'landscape');
+      applyStandardLayout(doc, 'Panel de Control - Captura Visual', settings);
+      
       const canvas = await html2canvas(dashboardRef.current, { backgroundColor: '#09090b', scale: 1.2 });
       const imgData = canvas.toDataURL('image/png');
-      doc.addPage('a4', 'landscape');
-      doc.addImage(imgData, 'PNG', 20, 20,
-        doc.internal.pageSize.width - 40,
-        doc.internal.pageSize.height - 40
-      );
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      
+      doc.addImage(imgData, 'PNG', 10, 45, pageW - 20, pageH - 60);
     }
 
     doc.save(`Dashboard_${settings?.companyName || 'CIELO'}_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
@@ -277,7 +256,7 @@ export default function Dashboard() {
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cliData), 'Clientes');
 
-    XLSX.writeFile(wb, `Reporte_CIELO_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
+    XLSX.writeFile(wb, `Reporte_${settings?.shortName || 'CIELO'}_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
   };
 
   // ── UI ────────────────────────────────────────────────────────────────────

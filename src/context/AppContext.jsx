@@ -40,6 +40,11 @@ export const AppProvider = ({ children }) => {
   const isGerente = currentUser?.role === 'gerente';
   const canViewDashboard = isAdmin || isGerente;
 
+  const verifyPassword = (password) => {
+    const user = USERS.find(u => u.username === currentUser?.username);
+    return user && user.password === password;
+  };
+
   // ── Estado general ────────────────────────────────────────────────────────
   const [products, setProducts] = useState([]);
   const [clients, setClients] = useState([]);
@@ -51,7 +56,9 @@ export const AppProvider = ({ children }) => {
   const [empleados, setEmpleados] = useState([]);
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [logs, setLogs] = useState([]);
-  const [settings, setSettings] = useState({ companyName: '', nit: '', phone: '', email: '', logo: '', address: '' });
+  const [settings, setSettings] = useState({ 
+    companyName: '', shortName: '', nameComplement: '', nit: '', phone: '', email: '', logo: '', address: '', headerExtra: '' 
+  });
 
   // ── Carga inicial desde la API ───────────────────────────────────────────
   const reloadAll = useCallback(async () => {
@@ -68,7 +75,7 @@ export const AppProvider = ({ children }) => {
         fetchSafe('/api/gastos', []),
         fetchSafe('/api/empleados', []),
         fetchSafe('/api/liquidaciones', []),
-        fetchSafe('/api/settings', { companyName: 'CIELO', logo: '' }),
+        fetchSafe('/api/settings', { companyName: 'CIELO', logo: '', headerExtra: '' }),
       ]);
       
       console.log('API Data loaded:', { products: p.length, clients: c.length, settings: s });
@@ -124,6 +131,11 @@ export const AppProvider = ({ children }) => {
     const updated = { ...current, ...updatedData };
     await api.put(`/api/clients/${clientId}`, updated);
     await reloadAll();
+  };
+  const deleteClient = async (clientId) => {
+    await api.del(`/api/clients/${clientId}`);
+    await reloadAll();
+    logAction('Cliente Eliminado', clientId, '', 'system');
   };
 
   // ── Obra CRUD (embebida en client.obras como JSONB) ─────────────────────
@@ -289,6 +301,31 @@ export const AppProvider = ({ children }) => {
     await reloadAll();
   };
 
+  const deleteInvoice = async (invoiceId) => {
+    const invoice = invoices.find(inv => inv.id === invoiceId);
+    if (!invoice) return;
+
+    // Si la factura está pendiente, restamos de la deuda del cliente
+    if (invoice.status === 'Pending') {
+      const client = clients.find(c => c.id === invoice.clientId);
+      if (client) {
+        await api.put(`/api/clients/${client.id}`, { ...client, debt: Math.max(0, client.debt - invoice.amount) });
+      }
+    }
+
+    // Si la factura viene de una cotización, resetear el estado de la cotización
+    if (invoice.cotizacionId) {
+      const cot = cotizaciones.find(c => c.id === invoice.cotizacionId);
+      if (cot) {
+        await api.put(`/api/cotizaciones/${cot.id}`, { ...cot, estado: 'Aprobada', facturaId: null });
+      }
+    }
+
+    await api.del(`/api/invoices/${invoiceId}`);
+    await reloadAll();
+    logAction('Invoice Deleted', invoiceId, '', 'system');
+  };
+
   // ─── MAINTENANCE CRUD ─────────────────────────────────────────────────────
   const addMaintenance = async (maint) => {
     const newM = { ...maint, id: nextId(maintenances, 'M'), date: format(new Date(), 'yyyy-MM-dd') };
@@ -389,7 +426,16 @@ export const AppProvider = ({ children }) => {
   // ─── COTIZACIONES CRUD ────────────────────────────────────────────────────
   const addCotizacion = async (data) => {
     const id = nextId(cotizaciones, 'COT');
-    const nueva = { ...data, id, fecha: format(new Date(), 'yyyy-MM-dd'), estado: 'Borrador', habeasData: false, habeasDataTimestamp: null, firma: null, foto: null };
+    const defaultClausulas = [
+        '1. El ARRENDATARIO se compromete a utilizar los equipos únicamente en la obra indicada y a devolverlos en perfectas condiciones de funcionamiento.',
+        '2. Cualquier daño, pérdida o robo de los equipos será de responsabilidad exclusiva del ARRENDATARIO.',
+        '3. Los días de alquiler se calculan desde la fecha indicada en cada remisión hasta su correspondiente devolución (lógica PEPS).',
+        '4. El incumplimiento en el pago generará intereses de mora del 1.5% mensual sobre el saldo pendiente.',
+        '5. Este contrato se rige por las leyes colombianas. Las partes se someten a los jueces competentes de la ciudad de Bogotá D.C.',
+        '6. Forma de pago: ' + (data.metodoPago || 'Acordada entre las partes.'),
+        '7. Transporte: ' + (data.responsableTransporte || 'Acordado entre las partes.'),
+    ];
+    const nueva = { ...data, id, fecha: format(new Date(), 'yyyy-MM-dd'), estado: 'Borrador', habeasData: false, habeasDataTimestamp: null, firma: null, foto: null, clausulas: data.clausulas || defaultClausulas };
     await api.post('/api/cotizaciones', nueva);
     await reloadAll();
     const client = clients.find(c => c.id === data.clientId);
@@ -402,6 +448,14 @@ export const AppProvider = ({ children }) => {
     await api.put(`/api/cotizaciones/${cotId}`, { ...current, estado: nuevoEstado, ...extra });
     await reloadAll();
     logAction(`Cotización ${nuevoEstado}`, cotId, '', 'system');
+  };
+
+  const updateCotizacion = async (cotId, data) => {
+    const current = cotizaciones.find(c => c.id === cotId);
+    if (!current) return;
+    await api.put(`/api/cotizaciones/${cotId}`, { ...current, ...data });
+    await reloadAll();
+    logAction('Cotización Actualizada', cotId, '', 'system');
   };
 
   // ─── GASTOS CRUD ──────────────────────────────────────────────────────────
@@ -446,6 +500,11 @@ export const AppProvider = ({ children }) => {
     await reloadAll();
     logAction('Nómina Pagada', id, '', 'system');
   };
+  
+  const checkPassword = (password) => {
+    const user = USERS.find(u => u.username === currentUser?.username);
+    return user && user.password === password;
+  };
 
   const updateSettings = async (data) => {
     await api.put('/api/settings', data);
@@ -463,18 +522,18 @@ export const AppProvider = ({ children }) => {
       // Auth
       currentUser, login, logout, canViewDashboard, isAdmin, isGerente,
       // Clients
-      clients, setClients, addClient, editClient, addObra, editObra,
+      clients, setClients, addClient, editClient, deleteClient, addObra, editObra,
       // Products
       products, setProducts, addProduct, editProduct, returnProduct, deleteProduct, darDeBajaProduct,
       // Invoices
-      invoices, setInvoices, createInvoice, payInvoice, createInvoiceFromCotizacion, marcarRemisionCreada,
+      invoices, setInvoices, createInvoice, payInvoice, createInvoiceFromCotizacion, marcarRemisionCreada, deleteInvoice,
       // Other
       logs, maintenances, addMaintenance, editMaintenance,
       // Remisiones
       remisiones, addRemision, registrarDevolucion,
       // Cotizaciones
-      cotizaciones, addCotizacion, actualizarEstadoCotizacion,
-      // Financiero
+      cotizaciones, addCotizacion, actualizarEstadoCotizacion, updateCotizacion,
+      // Gastos
       gastos, addGasto, pagarGasto,
       empleados, addEmpleado,
       liquidaciones, addLiquidacion, pagarLiquidacion,

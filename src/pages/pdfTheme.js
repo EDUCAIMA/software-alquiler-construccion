@@ -1,71 +1,70 @@
 import { format } from 'date-fns';
 
 /**
- * Aplica el encabezado y pie de página estándar a un documento jsPDF.
- * 
- * Estructura solicitada:
- * - Izquierda: Logo y NIT debajo.
- * - Derecha: Nombre de la empresa y Nombre del documento debajo.
- * - Pie de página: Correo, dirección y teléfono (centrado).
+ * Aplica el encabezado y pie de página estándar institucional a un documento jsPDF.
+ * Basado en el formato profesional de factura/cotización solicitado.
  */
-export const applyStandardLayout = (doc, title, settings) => {
+export const applyStandardLayout = (doc, title, settings, number = '') => {
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
-    const margin = 14;
+    const margin = 10;
 
-    // --- ENCABEZADO ---
+    // --- ENCABEZADO PROFESIONAL ---
+    let y = 10;
     
-    // Fondo sutil para el encabezado (opcional, para dar premium feel)
-    doc.setFillColor(248, 250, 252);
-    doc.rect(0, 0, W, 45, 'F');
-    doc.setDrawColor(226, 232, 240);
-    doc.line(0, 45, W, 45);
-
-    // 1. Lado Izquierdo: Logo y NIT
-    let logoSize = 18;
+    // Logo
     if (settings?.logo) {
         try {
-            doc.addImage(settings.logo, 'PNG', margin, 8, logoSize, logoSize);
+            doc.addImage(settings.logo, 'PNG', margin, y, 35, 18);
         } catch (e) {
-            console.error('Error adding logo to PDF:', e);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(14);
+            doc.text(settings?.shortName || 'CIELO', margin, y + 10);
         }
+    } else {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.text(settings?.shortName || 'CIELO', margin, y + 10);
     }
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`NIT: ${settings?.nit || 'N/A'}`, margin, 8 + logoSize + 6);
-
-    // 2. Lado Derecho: Nombre Empresa y Título Documento
-    doc.setFontSize(18);
+    // Información de la Empresa (Izquierda/Abajo del Logo)
+    doc.setFontSize(7.5);
     doc.setTextColor(30, 41, 59);
-    doc.text(settings?.companyName || 'CIELO', W - margin, 18, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.text(settings?.companyName?.toUpperCase() || 'CIELO COLOMBIA S.A.S.', margin, y + 24);
+    doc.setFont('helvetica', 'normal');
+    
+    const infoLines = [
+        `NIT. ${settings?.nit || '900.000.000-0'}`,
+        settings?.address || 'Dirección no configurada',
+        `Tel: ${settings?.phone || '—'}  |  ${settings?.email || '—'}`
+    ];
+    
+    infoLines.forEach((line, idx) => {
+        doc.text(line, margin, y + 28 + (idx * 4));
+    });
 
-    doc.setFontSize(14);
-    doc.setTextColor(59, 130, 246); // Color primario para el título
-    doc.text(title.toUpperCase(), W - margin, 28, { align: 'right' });
-
-    // Fecha de generación (opcional, para trazabilidad)
-    doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184);
-    doc.text(`Generado el: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, W - margin, 36, { align: 'right' });
+    // Recuadro Derecha: Tipo documento y número
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.5);
+    doc.rect(W - margin - 65, y, 65, 20);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title.toUpperCase(), W - margin - 32.5, y + 8, { align: 'center' });
+    
+    if (number) {
+        doc.setFontSize(11);
+        doc.text(`Nro - ${number}`, W - margin - 32.5, y + 15, { align: 'center' });
+    }
 
     // --- PIE DE PÁGINA ---
+    doc.setFontSize(6);
+    doc.setTextColor(100, 116, 139);
+    doc.setFont('helvetica', 'normal');
     
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(30, 58, 138); // Azul oscuro
+    const generationInfo = `Página 1 de 1  |  Generado por Sistema de Gestión ${settings?.shortName || ''} el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
+    doc.text(generationInfo, W / 2, H - 10, { align: 'center' });
     
-    // Texto con más separación (usando bullets y espacios extra)
-    const email = settings?.email || '';
-    const address = settings?.address || '';
-    const phone = settings?.phone || '';
-    
-    const footerText = `${email}     •     ${address}     •     Tel: ${phone}`;
-    doc.text(footerText, W / 2, H - 15, { align: 'center' });
-    
-    // Línea divisoria pie de página un poco más gruesa (0.5)
-    doc.setDrawColor(203, 213, 225);
-    doc.setLineWidth(0.5);
-    doc.line(margin, H - 22, W - margin, H - 22);
+    return y + 42; // Retorna la posición Y donde debe continuar el contenido
 };
+

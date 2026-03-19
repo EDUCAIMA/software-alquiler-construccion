@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import {
     FilePlus, Search, CheckCircle, XCircle, Clock, Send,
-    X, FileText, Shield, Download,
-    PenTool, Fingerprint, MapPin, ChevronRight
+    X, FileText, Shield, Download, Copy, Share2,
+    PenTool, Fingerprint, MapPin, ChevronRight, Upload, Eye,
+    Plus, List, Edit2
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format } from 'date-fns';
@@ -35,7 +36,7 @@ class ModalErrorBoundary extends React.Component {
                             {this.state.error?.message || String(this.state.error)}
                         </pre>
                         <button onClick={() => { this.setState({ hasError: false, error: null }); this.props.onClose?.(); }}
-                            style={{ marginTop: '1rem', padding: '0.5rem 1.5rem', background: '#3b82f6', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
+                            style={{ marginTop: '1rem', padding: '0.5rem 1.5rem', background: '#2365AB', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>
                             Cerrar
                         </button>
                     </div>
@@ -47,162 +48,242 @@ class ModalErrorBoundary extends React.Component {
 }
 
 // ─── Approval Modal ───────────────────────────────────────────────────────────
+// ─── Approval Modal ───────────────────────────────────────────────────────────
+// ─── Approval Modal ───────────────────────────────────────────────────────────
+// ─── Approval Modal ───────────────────────────────────────────────────────────
 function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
-    const [step, setStep] = useState(1); // 1=habeas, 2=firma, 3=foto, 4=biometria
-    const [habeasOk, setHabeasOk] = useState(cot.habeasData);
-    const [habeasTS, setHabeasTS] = useState(cot.habeasDataTimestamp);
-    const [showHD, setShowHD] = useState(false);
-    const [firma, setFirma] = useState(cot.firma);
-    const [foto, setFoto] = useState(cot.foto);
-    const [biometria, setBiometria] = useState(false);
+    const [mode, setMode] = useState(null); // 'internal', 'external'
+    const [file, setFile] = useState(null);
+    const [fileName, setFileName] = useState('');
+    const [notes, setNotes] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [copied, setCopied] = useState(false);
 
-    const handleApprove = () => {
-        onApprove({ habeasData: habeasOk, habeasDataTimestamp: habeasTS, firma, foto });
+    const shareLink = `${window.location.origin}/public/cotizacion/${cot.id}`;
+
+    const handleFileChange = (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        setFileName(f.name);
+        const reader = new FileReader();
+        reader.onload = (event) => setFile(event.target.result);
+        reader.readAsDataURL(f);
+    };
+
+    const handleConfirmInternal = () => {
+        setLoading(true);
+        onApprove({ firma: file, notas: notes || cot.notes });
         onClose();
     };
 
-    const steps = ['Habeas Data', 'Firma Digital', 'Foto / Doc.', 'Biometría'];
-    const canNext = (s) => {
-        if (s === 1) return habeasOk;
-        if (s === 2) return !!firma;
-        if (s === 3) return true; // foto optional
-        if (s === 4) return true; // biometria simulated
-        return true;
+    const handleCopy = () => {
+        navigator.clipboard.writeText(shareLink);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleWhatsApp = () => {
+        const text = encodeURIComponent(`Hola, le adjunto el link para revisar y aprobar su cotización #${cot.id}: ${shareLink}`);
+        window.open(`https://wa.me/?text=${text}`, '_blank');
     };
 
     return (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-            <div className="glass-panel" style={{ padding: 0, width: '100%', maxWidth: 600, maxHeight: '93vh', overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+            <div className="glass-panel" style={{ padding: 0, width: '100%', maxWidth: mode ? 500 : 600, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', background: 'white', transition: 'all 0.3s ease' }}>
+                
                 {/* Header */}
-                <div style={{ background: 'linear-gradient(135deg,#10b981,#059669)', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ background: 'linear-gradient(135deg,#104166,#2365AB)', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                        <div style={{ fontWeight: 800, color: 'white', fontSize: '1.05rem' }}>Aprobar Cotización — {cot.id}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>{client?.name} · {obra?.nombre}</div>
+                        <div style={{ fontWeight: 800, color: 'white', fontSize: '1.2rem', letterSpacing: '-0.02em' }}>
+                            {mode === 'internal' ? 'Aprobación Administrativa' : mode === 'external' ? 'Enviar Link de Aprobación' : 'Seleccionar Método de Aprobación'}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)', marginTop: 2, fontWeight: 500 }}>Cotización #{cot.id} · {client?.name}</div>
                     </div>
-                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, color: 'white', cursor: 'pointer', padding: '0.3rem', display: 'flex' }}><X size={18} /></button>
+                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: 34, height: 34, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
                 </div>
 
-                {/* Step tabs */}
-                <div style={{ display: 'flex', padding: '1rem 1.5rem 0', gap: '0.5rem', borderBottom: '1px solid var(--surface-border)' }}>
-                    {steps.map((s, i) => (
-                        <button key={s} onClick={() => { if (i === 0 || canNext(i)) setStep(i + 1); }}
-                            style={{ padding: '0.4rem 0.9rem', borderRadius: '8px 8px 0 0', border: 'none', cursor: canNext(i) || i === 0 ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: '0.78rem', background: step === i + 1 ? 'var(--glass-bg)' : 'transparent', color: step === i + 1 ? '#3b82f6' : 'var(--text-muted)', borderBottom: step === i + 1 ? '2px solid #3b82f6' : '2px solid transparent', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            {i < step - 1 ? <CheckCircle size={13} style={{ color: '#10b981' }} /> : null}
-                            {s}
-                        </button>
-                    ))}
-                </div>
-
-                <div style={{ padding: '1.5rem' }}>
-                    {/* Step 1: Habeas Data */}
-                    {step === 1 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ background: habeasOk ? 'rgba(16,185,129,0.08)' : 'rgba(59,130,246,0.06)', border: `1px solid ${habeasOk ? 'rgba(16,185,129,0.3)' : 'rgba(59,130,246,0.2)'}`, borderRadius: 10, padding: '1rem' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
-                                    <Shield size={18} style={{ color: habeasOk ? '#10b981' : '#3b82f6' }} />
-                                    <span style={{ fontWeight: 700, color: habeasOk ? '#10b981' : '#3b82f6' }}>
-                                        {habeasOk ? `✓ Aceptado — ${habeasTS?.slice(0, 10) || ''}` : 'Pendiente de Aceptación'}
-                                    </span>
+                <div style={{ padding: '2rem' }}>
+                    
+                    {!mode && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                            <div className="select-card" onClick={() => setMode('external')} style={{ border: '2px solid #f1f5f9', borderRadius: 16, padding: '1.5rem', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                <div style={{ background: '#e0f2fe', width: 60, height: 60, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                                    <Send size={28} color="#2365AB" />
                                 </div>
-                                {habeasOk ? (
-                                    <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>El cliente ha aceptado el tratamiento de datos. Timestamp: <strong>{habeasTS}</strong></p>
-                                ) : (
-                                    <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>El cliente debe leer y aceptar la política de protección de datos (Ley 1581/2012) antes de continuar.</p>
-                                )}
+                                <h4 style={{ margin: '0 0 0.5rem', color: '#1e293b' }}>Por el Cliente</h4>
+                                <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>Envía un link para que el cliente firme desde su celular.</p>
                             </div>
-                            {!habeasOk && (
-                                <button onClick={() => setShowHD(true)} style={{ padding: '0.65rem 1.5rem', borderRadius: 8, background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start' }}>
-                                    <Shield size={15} /> Mostrar Aviso Habeas Data al Cliente
+
+                            <div className="select-card" onClick={() => setMode('internal')} style={{ border: '2px solid #f1f5f9', borderRadius: 16, padding: '1.5rem', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                <div style={{ background: '#dcfce7', width: 60, height: 60, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                                    <Shield size={28} color="#10b981" />
+                                </div>
+                                <h4 style={{ margin: '0 0 0.5rem', color: '#1e293b' }}>Interna / Manual</h4>
+                                <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>Carga un soporte o registra una nota administrativa.</p>
+                            </div>
+                            <style>{`
+                                .select-card:hover { border-color: #2365AB !important; background: #f8fafc; transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
+                            `}</style>
+                        </div>
+                    )}
+
+                    {mode === 'external' && (
+                        <div style={{ textAlign: 'center' }}>
+                            <p style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '1.5rem' }}>Copie el siguiente enlace y envíelo al cliente por WhatsApp o correo para que pueda realizar la aprobación digital.</p>
+                            <div style={{ background: '#f1f5f9', padding: '0.75rem 1rem', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10, border: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
+                                <div style={{ flex: 1, fontSize: '0.75rem', color: '#475569', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shareLink}</div>
+                                <button onClick={handleCopy} style={{ background: 'white', border: '1px solid #cbd5e1', padding: '0.4rem 0.8rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    {copied ? <><CheckCircle size={14} color="#10b981" /> Copiado</> : <><Copy size={14} /> Copiar</>}
                                 </button>
-                            )}
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                                <button className="btn btn-primary" disabled={!habeasOk} onClick={() => setStep(2)}>Firma Digital <ChevronRight size={16} /></button>
                             </div>
-                        </div>
-                    )}
-
-                    {/* Step 2: Firma */}
-                    {step === 2 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--surface-border)', borderRadius: 10, padding: '1rem' }}>
-                                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: 5 }}>
-                                    <PenTool size={13} /> Firma Digital del Cliente
-                                </div>
-                                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.85rem' }}>El cliente firma a continuación usando el dedo (tableta/móvil) o el mouse (escritorio). La firma se almacena en el contrato.</p>
-                                <SignatureCanvas onSave={setFirma} onClear={() => setFirma(null)} />
-                                {firma && (
-                                    <div style={{ marginTop: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(16,185,129,0.1)', borderRadius: 8, fontSize: '0.78rem', color: '#10b981', fontWeight: 700 }}>
-                                        ✓ Firma capturada
-                                    </div>
-                                )}
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <button className="btn btn-secondary" onClick={() => setStep(1)}>← Atrás</button>
-                                <button className="btn btn-primary" disabled={!firma} onClick={() => setStep(3)}>Foto / Doc. <ChevronRight size={16} /></button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 3: Foto */}
-                    {step === 3 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--surface-border)', borderRadius: 10, padding: '1.25rem' }}>
-                                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Captura de Foto (Cliente / Documento)</div>
-                                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Capture la foto del cliente o de su documento de identidad para registro. Este paso es opcional.</p>
-                                <WebcamCapture onCapture={setFoto} />
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <button className="btn btn-secondary" onClick={() => setStep(2)}>← Atrás</button>
-                                <button className="btn btn-primary" onClick={() => setStep(4)}>Biometría <ChevronRight size={16} /></button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 4: Biometría */}
-                    {step === 4 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--surface-border)', borderRadius: 10, padding: '1.25rem', textAlign: 'center' }}>
-                                <Fingerprint size={52} style={{ color: biometria ? '#10b981' : '#3b82f6', marginBottom: '0.75rem' }} />
-                                <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: '0.5rem' }}>{biometria ? '✓ Huella Validada' : 'Validación Biométrica'}</div>
-                                {!biometria ? (
-                                    <>
-                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', maxWidth: 380, margin: '0 auto 1rem' }}>
-                                            Conecte el lector de huella (USB) y solicite al cliente apoyar el dedo para validar su identidad. Para validación remota el cliente recibirá un enlace en su celular.
-                                        </p>
-                                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-                                            <button onClick={() => setBiometria(true)} style={{ padding: '0.6rem 1.5rem', borderRadius: 8, background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <Fingerprint size={15} /> Simular Lectura de Huella
-                                            </button>
-                                        </div>
-                                        <p style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '0.75rem' }}>Nota: integración con SDK del fabricante (ZK/Digital Persona) en Fase 1.5</p>
-                                    </>
-                                ) : (
-                                    <p style={{ fontSize: '0.82rem', color: '#10b981', marginTop: '0.5rem' }}>Identidad verificada. Registro almacenado con timestamp.</p>
-                                )}
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <button className="btn btn-secondary" onClick={() => setStep(3)}>← Atrás</button>
-                                <button className="btn btn-primary" onClick={handleApprove}
-                                    style={{ background: '#10b981', display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: '0 4px 14px rgba(16,185,129,0.35)' }}>
-                                    <CheckCircle size={16} /> Aprobar y Generar Documentos
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button onClick={() => setMode(null)} className="btn btn-secondary" style={{ flex: 1 }}>Volver</button>
+                                <button onClick={handleWhatsApp} className="btn btn-primary" style={{ flex: 2, background: '#25D366', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'white', fontWeight: 700 }}>
+                                    <Share2 size={18} /> Enviar por WhatsApp
                                 </button>
                             </div>
                         </div>
+                    )}
+
+                    {mode === 'internal' && (
+                        <>
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#104166', marginBottom: '0.6rem', textTransform: 'uppercase' }}>Soporte de Aprobación (Opcional)</label>
+                                <div style={{ position: 'relative', border: '2px dashed #cbd5e1', borderRadius: 14, padding: '1.5rem', textAlign: 'center', background: '#f1f5f9', cursor: 'pointer' }} 
+                                     onClick={() => document.getElementById('support-file').click()}>
+                                    <input id="support-file" type="file" hidden accept=".pdf,image/*" onChange={handleFileChange} />
+                                    {fileName ? 
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                                            <FileText size={20} color="#10b981" />
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{fileName}</span>
+                                        </div> :
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: '0.8rem', color: '#64748b' }}><Upload size={18} /> Subir PDF o Imagen</div>
+                                    }
+                                </div>
+                            </div>
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#104166', marginBottom: '0.6rem', textTransform: 'uppercase' }}>Notas / Motivo</label>
+                                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Ej: Aprobado según correo..." style={{ width: '100%', padding: '0.75rem', borderRadius: 12, border: '1px solid #cbd5e1', color: '#000', fontSize: '0.9rem', minHeight: 90, boxSizing: 'border-box' }} />
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button onClick={() => setMode(null)} className="btn btn-secondary" style={{ flex: 1 }}>Volver</button>
+                                <button onClick={handleConfirmInternal} disabled={loading} className="btn btn-primary" style={{ flex: 2, background: 'linear-gradient(135deg,#2365AB,#104166)', border: 'none', color: 'white' }}>
+                                    {loading ? 'Procesando...' : 'Confirmar Aprobación'}
+                                </button>
+                            </div>
+                        </>
                     )}
                 </div>
             </div>
-            {showHD && (
-                <HabeasDataModal
-                    onClose={() => setShowHD(false)}
-                    onAccept={ts => { setHabeasOk(true); setHabeasTS(ts); setShowHD(false); }}
-                />
-            )}
         </div>
     );
 }
 
+function ShareModal({ cotId, onClose }) {
+    const shareLink = `${window.location.origin}/public/cotizacion/${cotId}`;
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(shareLink);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleWhatsApp = () => {
+        const text = encodeURIComponent(`Hola, le adjunto el link para revisar y aprobar su cotización #${cotId}: ${shareLink}`);
+        window.open(`https://wa.me/?text=${text}`, '_blank');
+    };
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '1rem' }}>
+            <div className="glass-panel" style={{ maxWidth: 450, width: '100%', padding: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Share2 size={20} color="#2365AB" /> Compartir Cotización</h3>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={20} /></button>
+                </div>
+                
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Envíe este enlace a su cliente para que pueda revisar, firmar y aprobar la cotización desde su celular o computador.</p>
+                
+                <div style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid var(--surface-border)', borderRadius: 10, padding: '0.75rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <input readOnly value={shareLink} style={{ flex: 1, background: 'none', border: 'none', color: '#2365AB', fontSize: '0.8rem', fontWeight: 600, outline: 'none' }} />
+                    <button onClick={handleCopy} style={{ background: copied ? '#10b981' : '#2365AB', color: 'white', border: 'none', borderRadius: 6, padding: '0.4rem 0.8rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {copied ? <CheckCircle size={14} /> : <Copy size={14} />} {copied ? 'Copiado' : 'Copiar'}
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button onClick={handleWhatsApp} style={{ flex: 1, padding: '0.75rem', borderRadius: 10, background: '#25D366', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                        WhatsApp
+                    </button>
+                    <button onClick={onClose} style={{ flex: 1, padding: '0.75rem', borderRadius: 10, background: 'white', border: '1px solid #cbd5e1', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ContratoEditorModal({ cot, onClose, onSave }) {
+    const [clausulas, setClausulas] = useState(cot.clausulas && cot.clausulas.length > 0 ? [...cot.clausulas] : [
+        '1. El ARRENDATARIO se compromete a utilizar los equipos únicamente en la obra indicada y a devolverlos en perfectas condiciones de funcionamiento.',
+        '2. Cualquier daño, pérdida o robo de los equipos será de responsabilidad exclusiva del ARRENDATARIO.',
+        '3. Los días de alquiler se calculan desde la fecha indicada en cada remisión hasta su correspondiente devolución (lógica PEPS).',
+        '4. El incumplimiento en el pago generará intereses de mora del 1.5% mensual sobre el saldo pendiente.',
+        '5. Este contrato se rige por las leyes colombianas. Las partes se someten a los jueces competentes de la ciudad de Bogotá D.C.',
+        '6. Forma de pago: ' + (cot.metodoPago || 'Acordada entre las partes.'),
+        '7. Transporte: ' + (cot.responsableTransporte || 'Acordado entre las partes.'),
+    ]);
+    
+    const handleAdd = () => setClausulas([...clausulas, '']);
+    const handleRemove = (idx) => setClausulas(clausulas.filter((_, i) => i !== idx));
+    const handleChange = (idx, val) => {
+        const next = [...clausulas];
+        next[idx] = val;
+        setClausulas(next);
+    };
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1.5rem' }}>
+            <div className="glass-panel" style={{ maxWidth: 700, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'white', padding: 0, overflow: 'hidden' }}>
+                <div style={{ background: 'linear-gradient(135deg,#104166,#2365AB)', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h3 style={{ color: 'white', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Edit2 size={20} /> Editar Cláusulas del Contrato</h3>
+                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem', margin: '4px 0 0', fontWeight: 500 }}>Personalice los términos legales para {cot.id}</p>
+                    </div>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><X size={20} /></button>
+                </div>
+                
+                <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
+                    {clausulas.map((c, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', alignItems: 'flex-start' }}>
+                            <div style={{ background: '#2365AB', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, color: 'white', flexShrink: 0, marginTop: 6, boxShadow: '0 2px 5px rgba(35,101,171,0.3)' }}>{idx + 1}</div>
+                            <textarea 
+                                value={c} 
+                                onChange={(e) => handleChange(idx, e.target.value)}
+                                style={{ flex: 1, padding: '0.85rem', borderRadius: 10, border: '1px solid #cbd5e1', fontSize: '0.875rem', minHeight: 80, fontFamily: 'inherit', color: '#334155', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}
+                            />
+                            <button onClick={() => handleRemove(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', marginTop: 10, padding: 4 }}><XCircle size={18} /></button>
+                        </div>
+                    ))}
+                    <button onClick={handleAdd} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', border: '2px dashed #cbd5e1', borderRadius: 10, background: 'white', color: '#64748b', fontWeight: 700, cursor: 'pointer', width: '100%', justifyContent: 'center', transition: 'all 0.2s' }}>
+                        <Plus size={18} /> Agregar Nueva Cláusula
+                    </button>
+                    <style>{`button:hover { filter: brightness(0.95); }`}</style>
+                </div>
+
+                <div style={{ padding: '1.25rem 1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '1rem', justifyContent: 'flex-end', background: 'white' }}>
+                    <button onClick={onClose} className="btn btn-secondary" style={{ padding: '0.6rem 1.5rem' }}>Cancelar</button>
+                    <button onClick={() => { onSave(clausulas); onClose(); }} className="btn btn-primary" style={{ background: '#10b981', color: 'white', border: 'none', padding: '0.6rem 2rem', boxShadow: '0 4px 12px rgba(16,185,129,0.35)' }}>Guardar Cambios</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
-function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, onOpenApproval, onFacturar }) {
+function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, onOpenApproval, onFacturar, onSendLink, onEditContrato, onEdit }) {
     const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
     const subtotal = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0);
     const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
@@ -211,12 +292,12 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
 
     return (
         <>
-            <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 520, zIndex: 900, background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 40px rgba(0,0,0,0.4)', overflowY: 'auto' }}>
+            <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 520, zIndex: 900, background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 40px rgba(0,0,0,0.4)', overflowY: 'auto', overflowX: 'auto' }}>
                 {/* Header */}
-                <div style={{ background: 'linear-gradient(135deg,#1e293b,#334155)', padding: '1.5rem', flexShrink: 0 }}>
+                <div style={{ background: 'linear-gradient(135deg,#104166,#154272)', padding: '1.5rem', flexShrink: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
-                            <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.6)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>CIELO — Cotización</div>
+                            <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.6)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{settings?.shortName || 'CIELO'} — Cotización</div>
                             <div style={{ fontSize: '1.3rem', fontWeight: 900, color: 'white', fontFamily: 'monospace', marginTop: 4 }}>{cot.id}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
                                 <span style={{ padding: '3px 10px', borderRadius: 999, background: cfg.bg, color: cfg.color, fontSize: '0.72rem', fontWeight: 700, border: `1px solid ${cfg.color}30` }}>{cot.estado}</span>
@@ -242,7 +323,7 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
                             <tbody>
                                 {cot.items.map((i, idx) => (
                                     <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                        <td style={{ padding: '0.6rem 0.85rem', fontWeight: 600, color: '#1e293b' }}>{i.nombre}</td>
+                                        <td style={{ padding: '0.6rem 0.85rem', fontWeight: 600, color: '#104166' }}>{i.nombre}</td>
                                         <td style={{ padding: '0.6rem 0.85rem', color: '#64748b', fontSize: '0.78rem' }}>{i.cantidad} u. × {i.dias}d</td>
                                         <td style={{ padding: '0.6rem 0.85rem', fontWeight: 700, color: '#10b981', textAlign: 'right' }}>{fmtCOP(i.cantidad * i.dias * i.tarifaDia)}</td>
                                     </tr>
@@ -252,7 +333,7 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
                     </div>
 
                     {/* Totals */}
-                    <div style={{ background: '#3b82f6', borderRadius: 10, padding: '1rem 1.25rem' }}>
+                    <div style={{ background: '#2365AB', borderRadius: 10, padding: '1rem 1.25rem' }}>
                         {[['Subtotal', fmtCOP(subtotal)], ['+ IVA', fmtCOP(iva)], ['+ Ret.', fmtCOP(ret)], ['+ Transporte', fmtCOP(cot.transporte || 0)]].map(([k, v]) => (
                             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>
                                 <span>{k}</span><span style={{ fontWeight: 700, color: 'white' }}>{v}</span>
@@ -268,18 +349,13 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
                     <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '0.85rem 1rem' }}>
                         {[['Método Pago', cot.metodoPago], ['Responsable Transporte', cot.responsableTransporte], ['Plazo Entrega', cot.plazoEntrega], ['Validez', `${cot.validezDias} días`]].map(([k, v]) => (
                             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '0.3rem 0', borderBottom: '1px solid #f1f5f9' }}>
-                                <span style={{ color: '#64748b' }}>{k}</span><span style={{ fontWeight: 600, color: '#1e293b' }}>{v}</span>
+                                <span style={{ color: '#64748b' }}>{k}</span><span style={{ fontWeight: 600, color: '#104166' }}>{v}</span>
                             </div>
                         ))}
                     </div>
 
                     {/* Habeas Data status */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', background: cot.habeasData ? '#f0fdf4' : '#fef9f0', border: `1px solid ${cot.habeasData ? '#bbf7d0' : '#fed7aa'}`, borderRadius: 8, padding: '0.6rem 0.85rem' }}>
-                        <Shield size={14} style={{ color: cot.habeasData ? '#10b981' : '#f97316', flexShrink: 0 }} />
-                        <span style={{ fontSize: '0.78rem', color: cot.habeasData ? '#166534' : '#92400e', fontWeight: 600 }}>
-                            {cot.habeasData ? `Habeas Data aceptado — ${cot.habeasDataTimestamp?.slice(0, 10)}` : 'Habeas Data pendiente'}
-                        </span>
-                    </div>
+
 
                     {/* notas */}
                     {cot.notas && <div style={{ fontSize: '0.78rem', color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.65rem 0.85rem' }}>{cot.notas}</div>}
@@ -290,13 +366,19 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
                         {/* Botón Imprimir Cotización — SIEMPRE visible */}
                         <button
                             onClick={() => generateCotizacionPDF(cot, client, obra, settings)}
-                            style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: 'linear-gradient(135deg,#3b82f6,#2563eb)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 4px 12px rgba(59,130,246,0.35)' }}>
+                            style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: 'linear-gradient(135deg,#2365AB,#2563eb)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 4px 12px rgba(35, 101, 171,0.35)' }}>
                             <Download size={15} /> Imprimir / PDF Cotización
                         </button>
 
-                        {cot.estado === 'Borrador' && (
-                            <button onClick={() => onUpdateEstado(cot.id, 'Enviada')} style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: '#f97316', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                                <Send size={15} /> Marcar como Enviada
+                        {(cot.estado === 'Borrador' || cot.estado === 'Enviada') && (
+                            <button onClick={onEdit} style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                <Edit2 size={15} /> Editar Cotización
+                            </button>
+                        )}
+
+                        {(cot.estado === 'Borrador' || cot.estado === 'Enviada') && (
+                            <button onClick={() => onSendLink(cot.id)} style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: '#f97316', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                <Send size={15} /> {cot.estado === 'Borrador' ? 'Generar Link y Marcar Enviada' : 'Compartir / Ver Link de Aprobación'}
                             </button>
                         )}
                         {(cot.estado === 'Borrador' || cot.estado === 'Enviada') && (
@@ -325,9 +407,16 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
                                     ['Pagaré', () => generatePagarePDF(cot, client, settings)],
                                     ['Carta de Instrucciones', () => generateCartaPDF(cot, client, settings)]
                                 ].map(([label, fn]) => (
-                                    <button key={label} onClick={fn} style={{ width: '100%', padding: '0.6rem', borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.25)', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                                        <Download size={14} /> {label}
-                                    </button>
+                                    <div key={label} style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button onClick={fn} style={{ flex: 1, padding: '0.6rem', borderRadius: 8, background: 'rgba(35, 101, 171,0.1)', color: '#2365AB', border: '1px solid rgba(35, 101, 171,0.25)', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                            <Download size={14} /> {label}
+                                        </button>
+                                        {label === 'Contrato de Alquiler' && (
+                                            <button onClick={onEditContrato} title="Editar Cláusulas" style={{ padding: '0.6rem', borderRadius: 8, background: '#f1f5f9', border: '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                <Edit2 size={14} color="#64748b" />
+                                            </button>
+                                        )}
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -342,7 +431,7 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
 
                     {/* Footer */}
                     <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '0.75rem', textAlign: 'center', fontSize: '0.7rem', color: '#94a3b8' }}>
-                        CIELO · {cot.id} · Generado el {format(new Date(), 'dd/MM/yyyy')}
+                        {settings?.shortName || 'CIELO'} · {cot.id} · Generado el {format(new Date(), 'dd/MM/yyyy')}
                     </div>
                 </div>
             </div>
@@ -353,12 +442,20 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function Cotizaciones() {
-    const { clients, products, cotizaciones, settings, addCotizacion, actualizarEstadoCotizacion, createInvoiceFromCotizacion } = useAppContext();
+    const { clients, products, cotizaciones, settings, addCotizacion, updateCotizacion, actualizarEstadoCotizacion, createInvoiceFromCotizacion } = useAppContext();
     const [search, setSearch] = useState('');
     const [filterE, setFilterE] = useState('Todos');
     const [showNew, setShowNew] = useState(false);
     const [selected, setSelected] = useState(null);
     const [approving, setApproving] = useState(null);
+    const [sharing, setSharing] = useState(null);
+    const [editingContrato, setEditingContrato] = useState(null);
+    const [editing, setEditing] = useState(null);
+
+    const handleSendQuote = (cotId) => {
+        actualizarEstadoCotizacion(cotId, 'Enviada');
+        setSharing(cotId);
+    };
 
     const filtered = useMemo(() =>
         cotizaciones.filter(c => {
@@ -393,11 +490,19 @@ export default function Cotizaciones() {
             </div>
 
             {/* KPIs */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-                {[['Borradores', kpi('Borrador'), 'blue', Clock], ['Enviadas', kpi('Enviada'), 'orange', Send], ['Aprobadas', kpi('Aprobada'), 'green', CheckCircle], ['Rechazadas', kpi('Rechazada'), 'red', XCircle]].map(([l, v, c, Ic]) => (
-                    <div key={l} className={`stat-card ${c}`}>
-                        <div className={`icon-wrapper ${c}`}><Ic size={20} /></div>
-                        <div><div className="stat-value">{v}</div><div className="stat-label">{l}</div></div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                {[
+                    ['Borradores', kpi('Borrador'), 'blue', Clock, '#2365AB'],
+                    ['Enviadas', kpi('Enviada'), 'orange', Send, '#f97316'],
+                    ['Aprobadas', kpi('Aprobada'), 'green', CheckCircle, '#10b981'],
+                    ['Rechazadas', kpi('Rechazada'), 'red', XCircle, '#ef4444']
+                ].map(([l, v, c, Ic, color]) => (
+                    <div key={l} className={`mini-kpi-card ${c}`} style={{ cursor: 'pointer' }} onClick={() => setFilterE(l === 'Borradores' ? 'Borrador' : l.slice(0, -1))}>
+                        <div className="mini-kpi-header">
+                            <Ic size={18} color={color} />
+                            <span className="mini-kpi-value">{v}</span>
+                        </div>
+                        <div className="mini-kpi-label">{l}</div>
                     </div>
                 ))}
             </div>
@@ -420,7 +525,7 @@ export default function Cotizaciones() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                {['ID', 'Cliente / Obra', 'Fecha', 'Válida hasta', 'Ítems', 'Total Est.', 'Habeas Data', 'Estado', 'Acción'].map(h => (
+                                {['ID', 'Cliente / Obra', 'Fecha', 'Válida hasta', 'Ítems', 'Total Est.', 'Estado', 'Acción'].map(h => (
                                     <th key={h} style={{ padding: '0.75rem 0.8rem', textAlign: 'left', fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                                 ))}
                             </tr>
@@ -432,11 +537,10 @@ export default function Cotizaciones() {
                                 const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
                                 const Ico = cfg.icon;
                                 return (
-                                    <tr key={cot.id} style={{ borderBottom: '1px solid var(--surface-border)', cursor: 'pointer' }}
+                                    <tr key={cot.id} style={{ borderBottom: '1px solid var(--surface-border)' }}
                                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                        onClick={() => setSelected(cot.id)}>
-                                        <td style={{ padding: '0.85rem', fontWeight: 700, fontFamily: 'monospace', color: '#3b82f6', fontSize: '0.8rem' }}>{cot.id}</td>
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                        <td style={{ padding: '0.85rem', fontWeight: 700, fontFamily: 'monospace', color: '#2365AB', fontSize: '0.8rem' }}>{cot.id}</td>
                                         <td style={{ padding: '0.85rem' }}>
                                             <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{client?.name || cot.clientId}</div>
                                             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}><MapPin size={10} />{obra?.nombre || cot.obraId}</div>
@@ -445,17 +549,16 @@ export default function Cotizaciones() {
                                         <td style={{ padding: '0.85rem', fontSize: '0.8rem', color: '#f97316' }}>{cot.fecha ? new Date(new Date(cot.fecha).getTime() + (cot.validezDias || 15) * 86400000).toISOString().slice(0, 10) : '—'}</td>
                                         <td style={{ padding: '0.85rem', fontSize: '0.82rem' }}>{cot.items.length} ítem(s)</td>
                                         <td style={{ padding: '0.85rem', fontWeight: 700, color: '#10b981' }}>{fmtCOP(total(cot))}</td>
-                                        <td style={{ padding: '0.85rem' }}>
-                                            <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: cot.habeasData ? 'rgba(16,185,129,0.12)' : 'rgba(249,115,22,0.1)', color: cot.habeasData ? '#10b981' : '#f97316', border: `1px solid ${cot.habeasData ? 'rgba(16,185,129,0.3)' : 'rgba(249,115,22,0.3)'}`, display: 'flex', alignItems: 'center', gap: 3, width: 'fit-content' }}>
-                                                <Shield size={9} />{cot.habeasData ? 'OK' : 'Pendiente'}
-                                            </span>
-                                        </td>
+
                                         <td style={{ padding: '0.85rem' }}>
                                             <span style={{ padding: '3px 10px', borderRadius: 999, background: cfg.bg, color: cfg.color, fontWeight: 700, fontSize: '0.7rem', border: `1px solid ${cfg.color}30`, display: 'flex', alignItems: 'center', gap: 4, width: 'fit-content' }}>
                                                 <Ico size={11} />{cot.estado}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '0.85rem' }} onClick={e => e.stopPropagation()}>
+                                        <td style={{ padding: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={e => e.stopPropagation()}>
+                                            <button onClick={() => setSelected(cot.id)} className="btn btn-sm" style={{ background: 'rgba(35, 101, 171, 0.1)', color: '#2365AB', border: '1px solid rgba(35, 101, 171, 0.3)', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.6rem', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                <Eye size={12} /> Ver
+                                            </button>
                                             {(cot.estado === 'Borrador' || cot.estado === 'Enviada') && (
                                                 <button onClick={() => setApproving(cot.id)} className="btn btn-sm" style={{ background: '#10b981', color: 'white', border: 'none', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.75rem', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
                                                     <CheckCircle size={12} /> Aprobar
@@ -467,7 +570,7 @@ export default function Cotizaciones() {
                                                 </button>
                                             )}
                                             {cot.estado === 'Aprobada' && cot.facturaId && (
-                                                <button onClick={() => generateContratoPDF(cot, getClient(cot.clientId), getObra(cot), settings)} className="btn btn-sm" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.75rem', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                <button onClick={() => generateContratoPDF(cot, getClient(cot.clientId), getObra(cot), settings)} className="btn btn-sm" style={{ background: 'rgba(35, 101, 171,0.1)', color: '#2365AB', border: '1px solid rgba(35, 101, 171,0.3)', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.75rem', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
                                                     <Download size={12} /> PDF
                                                 </button>
                                             )}
@@ -497,6 +600,18 @@ export default function Cotizaciones() {
                     onUpdateEstado={actualizarEstadoCotizacion}
                     onOpenApproval={() => { setApproving(selectedCot.id); setSelected(null); }}
                     onFacturar={() => { createInvoiceFromCotizacion(selectedCot.id); setSelected(null); }}
+                    onSendLink={handleSendQuote}
+                    onEditContrato={() => setEditingContrato(selectedCot.id)}
+                    onEdit={() => { setEditing(selectedCot); setSelected(null); }}
+                />
+            )}
+
+            {/* Contrato Editor Modal */}
+            {editingContrato && (
+                <ContratoEditorModal 
+                    cot={cotizaciones.find(c => c.id === editingContrato)}
+                    onClose={() => setEditingContrato(null)}
+                    onSave={(clausulas) => actualizarEstadoCotizacion(editingContrato, cotizaciones.find(c => c.id === editingContrato).estado, { clausulas })}
                 />
             )}
 
@@ -511,15 +626,18 @@ export default function Cotizaciones() {
                 />
             )}
 
-            {/* New Quote Modal */}
+            {/* Share Modal */}
+            {sharing && <ShareModal cotId={sharing} onClose={() => setSharing(null)} />}
+
+            {/* Nueva/Editar Cotización Modal */}
             {showNew && (
                 <ModalErrorBoundary onClose={() => setShowNew(false)}>
-                    <NuevaCotizacionModal
-                        onClose={() => setShowNew(false)}
-                        onSave={addCotizacion}
-                        clients={clients}
-                        products={products}
-                    />
+                    <NuevaCotizacionModal onClose={() => setShowNew(false)} onSave={addCotizacion} clients={clients} products={products} />
+                </ModalErrorBoundary>
+            )}
+            {editing && (
+                <ModalErrorBoundary onClose={() => setEditing(null)}>
+                    <NuevaCotizacionModal initialData={editing} onClose={() => setEditing(null)} onSave={(data) => updateCotizacion(editing.id, data)} clients={clients} products={products} />
                 </ModalErrorBoundary>
             )}
         </>
