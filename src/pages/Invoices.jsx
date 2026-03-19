@@ -190,14 +190,21 @@ export default function Invoices() {
             startY: y,
             margin: { left: margin, right: margin },
             head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
-            body: invoice.items.map((item, idx) => [
-                idx + 1,
-                item.nombre.toUpperCase(),
-                item.quantity,
-                item.days || 1,
-                item.price.toLocaleString('es-CO'),
-                (item.quantity * (item.days || 1) * item.price).toLocaleString('es-CO')
-            ]),
+            body: (invoice.items || []).map((item, idx) => {
+                const productName = item.nombre || products.find(p => p.id === item.productId)?.name || 'EQUIPO';
+                const qty = Number(item.quantity || item.cantidad || 0);
+                const days = Number(item.days || item.dias || 1);
+                const price = Number(item.price || item.tarifaDia || 0);
+                
+                return [
+                    idx + 1,
+                    productName.toUpperCase(),
+                    qty,
+                    days,
+                    price.toLocaleString('es-CO'),
+                    (qty * days * price).toLocaleString('es-CO')
+                ];
+            }),
             theme: 'plain',
             headStyles: { 
                 fillColor: [241, 245, 249], 
@@ -228,14 +235,20 @@ export default function Invoices() {
 
         try {
             // --- Totales Estilo Profesional (Recuadros) ---
-            const subtotal = invoice.items.reduce((s, item) => s + (item.quantity * (item.days || 1) * item.price), 0);
+            const subtotal = (invoice.items || []).reduce((s, item) => {
+                const qty = Number(item.quantity || item.cantidad || 0);
+                const days = Number(item.days || item.dias || 1);
+                const price = Number(item.price || item.tarifaDia || 0);
+                return s + (qty * days * price);
+            }, 0);
+
             const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
             const iva = Math.round(subtotal * porcIVA / 100);
             const porcRet = client?.porcRetencion || 0;
             const ret = Math.round(subtotal * porcRet / 100);
             const totalVal = subtotal + iva + ret + (Number(invoice.transporte) || 0);
 
-            let ty = doc.lastAutoTable.finalY + 10;
+            let ty = (doc.lastAutoTable?.finalY || y + 20) + 10;
             const totW = 80;
             const totX = pageWidth - margin - totW;
             const totH = 7;
