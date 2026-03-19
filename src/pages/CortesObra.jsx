@@ -42,39 +42,81 @@ function generateCortePDF(resultado, client, obra, settings) {
     // Items table
     autoTable(doc, {
         startY: y,
-        head: [['Remisión', 'Equipo', 'Esquema', 'Cant.', 'Días', 'Tarifa/día', 'Subtotal']],
-        body: resultado.lineas.map(l => [l.remId, l.equipo, l.esquema || 'Calen.', l.cantidad, l.dias, fmtCOP(l.tarifaDia), fmtCOP(l.subtotal)]),
-        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        styles: { fontSize: 7.5, cellPadding: 3 },
         margin: { left: margin, right: margin },
+        head: [['ITE', 'REM.', 'EQUIPO', 'CAN.', 'DÍAS', 'TARIFA/DÍA', 'TOTAL']],
+        body: resultado.lineas.map((l, idx) => [
+            idx + 1,
+            l.remId,
+            l.equipo.toUpperCase(),
+            l.cantidad,
+            l.dias,
+            l.tarifaDia.toLocaleString('es-CO'),
+            l.subtotal.toLocaleString('es-CO')
+        ]),
+        theme: 'plain',
+        headStyles: { 
+            fillColor: [241, 245, 249], 
+            textColor: [30, 41, 59], 
+            fontSize: 7.5, 
+            fontStyle: 'bold', 
+            halign: 'center',
+            lineWidth: 0.1,
+            lineColor: [30, 41, 59]
+        },
+        styles: { 
+            fontSize: 7.5, 
+            cellPadding: 2, 
+            textColor: [30, 41, 59], 
+            halign: 'center',
+            lineWidth: 0.1,
+            lineColor: [30, 41, 59]
+        },
+        columnStyles: {
+            0: { cellWidth: 8 },
+            1: { cellWidth: 15 },
+            2: { halign: 'left', cellWidth: 'auto' },
+            3: { cellWidth: 12 },
+            4: { cellWidth: 12 },
+            5: { halign: 'right', cellWidth: 25 },
+            6: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
+        }
     });
 
     const finalY = doc.lastAutoTable.finalY + 10;
-    
-    // Totals grid
-    const boxW = 80;
-    const startX = pageW - margin - boxW;
-    
-    doc.setFillColor(30, 41, 59);
-    doc.roundedRect(startX, finalY, boxW, 45, 3, 3, 'F');
-    
-    doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
-    const rows = [
-        ['Subtotal:', fmtCOP(resultado.subtotal)],
-        [`IVA (${resultado.porcIVA || 0}%):`, fmtCOP(resultado.iva)],
-        [`Ret. (${client?.porcRetencion || 0}%):`, fmtCOP(resultado.retencion)],
-        ['Transporte:', fmtCOP(resultado.transporte)],
+    const totW = 80;
+    const totX = pageW - margin - totW;
+    const totH = 7;
+    let ty = finalY;
+
+    const totals = [
+        ['SUBTOTAL ALQUILER', resultado.subtotal.toLocaleString('es-CO')],
+        [`IVA (${resultado.porcIVA || 0}%)`, resultado.iva.toLocaleString('es-CO')],
+        [`RETENCIÓN (${client?.porcRetencion || 0}%)`, resultado.retencion.toLocaleString('es-CO')],
+        ['TRANSPORTE TOTAL', resultado.transporte.toLocaleString('es-CO')]
     ];
-    
-    rows.forEach(([label, val], i) => {
-        doc.text(label, startX + 5, finalY + 8 + (i * 7));
-        doc.text(val, pageW - margin - 5, finalY + 8 + (i * 7), { align: 'right' });
+
+    totals.forEach(([label, value]) => {
+        doc.setLineWidth(0.1);
+        doc.setDrawColor(30, 41, 59);
+        doc.rect(totX, ty, 50, totH);
+        doc.rect(totX + 50, ty, 30, totH);
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.text(label, totX + 2, ty + 4.5);
+        doc.setFont('helvetica', 'normal');
+        doc.text(value, totX + 78, ty + 4.5, { align: 'right' });
+        ty += totH;
     });
-    
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-    doc.text('TOTAL NETO:', startX + 5, finalY + 40);
-    doc.text(fmtCOP(resultado.totalNeto), pageW - margin - 5, finalY + 40, { align: 'right' });
+
+    // Gran Total Box
+    doc.setFillColor(241, 245, 249);
+    doc.rect(totX, ty, 50, 9, 'F');
+    doc.rect(totX, ty, 50, 9, 'S');
+    doc.rect(totX + 50, ty, 30, 9, 'S');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL NETO', totX + 2, ty + 6);
+    doc.text(`$${resultado.totalNeto.toLocaleString('es-CO')}`, totX + 78, ty + 6, { align: 'right' });
 
     doc.save(`Corte_${obra?.nombre?.replace(/\s+/g, '_') || 'Todas_las_obras'}_${format(new Date(), 'yyyyMMdd')}.pdf`);
 }

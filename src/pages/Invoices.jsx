@@ -188,64 +188,89 @@ export default function Invoices() {
 
         autoTable(doc, {
             startY: y,
-            head: [['Descripción', 'Cant.', 'Días', 'Precio Unit.', 'Subtotal']],
-            body: invoice.items.map(item => [
-                item.nombre,
+            margin: { left: margin, right: margin },
+            head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
+            body: invoice.items.map((item, idx) => [
+                idx + 1,
+                item.nombre.toUpperCase(),
                 item.quantity,
                 item.days || 1,
-                `$${item.price.toLocaleString()}`,
-                `$${(item.quantity * (item.days || 1) * item.price).toLocaleString()}`
+                item.price.toLocaleString('es-CO'),
+                (item.quantity * (item.days || 1) * item.price).toLocaleString('es-CO')
             ]),
-            headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-            styles: { fontSize: 8, cellPadding: 4 },
-            alternateRowStyles: { fillColor: [248, 250, 252] },
+            theme: 'plain',
+            headStyles: { 
+                fillColor: [241, 245, 249], 
+                textColor: [30, 41, 59], 
+                fontSize: 7.5, 
+                fontStyle: 'bold', 
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [30, 41, 59]
+            },
+            styles: { 
+                fontSize: 7.5, 
+                cellPadding: 2, 
+                textColor: [30, 41, 59], 
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [30, 41, 59]
+            },
             columnStyles: {
-                1: { halign: 'center' },
-                2: { halign: 'center' },
-                3: { halign: 'right' },
-                4: { halign: 'right', fontStyle: 'bold' }
+                0: { cellWidth: 10 },
+                1: { halign: 'left', cellWidth: 'auto' },
+                2: { cellWidth: 15 },
+                3: { cellWidth: 15 },
+                4: { halign: 'right', cellWidth: 25 },
+                5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
             }
         });
 
         try {
-            // --- Total Breakdown ---
+            // --- Totales Estilo Profesional (Recuadros) ---
             const subtotal = invoice.items.reduce((s, item) => s + (item.quantity * (item.days || 1) * item.price), 0);
             const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
             const iva = Math.round(subtotal * porcIVA / 100);
             const porcRet = client?.porcRetencion || 0;
             const ret = Math.round(subtotal * porcRet / 100);
-            const total = subtotal + iva + ret + (Number(invoice.transporte) || 0);
+            const totalVal = subtotal + iva + ret + (Number(invoice.transporte) || 0);
 
-            y = (doc).lastAutoTable.finalY + 10;
+            let ty = doc.lastAutoTable.finalY + 10;
             const totW = 80;
             const totX = pageWidth - margin - totW;
+            const totH = 7;
 
-            const summaryItems = [
-                ['Subtotal:', `$${subtotal.toLocaleString()}`],
-                ...(porcIVA > 0 ? [[`+ IVA (${porcIVA}%):`, `$${iva.toLocaleString()}`]] : []),
-                ...(porcRet > 0 ? [[`+ Retención (${porcRet}%):`, `$${ret.toLocaleString()}`]] : []),
-                ...(Number(invoice.transporte) > 0 ? [['+ Transporte:', `$${(Number(invoice.transporte) || 0).toLocaleString()}`]] : [])
+            const totals = [
+                ['SUB-TOTAL', subtotal.toLocaleString('es-CO')],
+                [`IVA (${porcIVA}%)`, iva.toLocaleString('es-CO')],
+                [`RETENCIÓN (${porcRet}%)`, ret.toLocaleString('es-CO')],
+                ['TRANSPORTE', (Number(invoice.transporte) || 0).toLocaleString('es-CO')]
             ];
 
-            summaryItems.forEach(([label, value]) => {
-                doc.setFontSize(8.5);
-                doc.setTextColor(100, 116, 139);
-                doc.setFont(undefined, 'normal');
-                doc.text(label, totX, y);
-                doc.setTextColor(30, 41, 59);
-                doc.setFont(undefined, 'bold');
-                doc.text(value, pageWidth - margin, y, { align: 'right' });
-                y += 8;
+            totals.forEach(([label, value]) => {
+                doc.setLineWidth(0.1);
+                doc.setDrawColor(30, 41, 59);
+                doc.rect(totX, ty, 50, totH);
+                doc.rect(totX + 50, ty, 30, totH);
+                doc.setFontSize(7);
+                doc.setFont('helvetica', 'bold');
+                doc.text(label, totX + 2, ty + 4.5);
+                doc.setFont('helvetica', 'normal');
+                doc.text(value, totX + 78, ty + 4.5, { align: 'right' });
+                ty += totH;
             });
 
-            // Total
-            y += 4;
-            doc.setFillColor(30, 41, 59);
-            doc.rect(totX - 10, y - 6, totW + 10, 10, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(10);
-            doc.text('TOTAL:', totX, y + 1);
-            doc.text(`$${total.toLocaleString()}`, pageWidth - margin, y + 1, { align: 'right' });
+            // Gran Total Box
+            doc.setFillColor(241, 245, 249);
+            doc.rect(totX, ty, 50, 9, 'F');
+            doc.rect(totX, ty, 50, 9, 'S');
+            doc.rect(totX + 50, ty, 30, 9, 'S');
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'bold');
+            doc.text('TOTAL', totX + 2, ty + 6);
+            doc.text(`$${totalVal.toLocaleString('es-CO')}`, totX + 78, ty + 6, { align: 'right' });
+            
+            y = ty + 20;
         } catch (err) {
             console.error('Error in total calculation or summary:', err);
         }

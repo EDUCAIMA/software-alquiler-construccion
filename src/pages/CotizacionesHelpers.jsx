@@ -225,12 +225,43 @@ function generateContratoPDF(cot, client, obra, settings) {
     autoTable(doc, {
         startY: y,
         margin: { left: margin, right: margin },
-        head: [['Equipo / Herramienta', 'Cant.', 'Días', 'Tarifa/día', 'Subtotal']],
-        body: cot.items.map(i => [i.nombre, i.cantidad, i.dias, fmtCOP(i.tarifaDia), fmtCOP(i.cantidad * i.dias * i.tarifaDia)]),
-        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8.5 },
-        styles: { fontSize: 8.5 },
-        foot: [['', '', '', 'TOTAL ANTES DE IMP.', fmtCOP(cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (Number(cot.transporte) || 0))]],
-        footStyles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [30, 41, 59] },
+        head: [['ITE', 'EQUIPO / HERRAMIENTA', 'CAN.', 'DÍAS', 'TARIFA/DÍA', 'SUBTOTAL']],
+        body: cot.items.map((i, idx) => [
+            idx + 1,
+            i.nombre.toUpperCase(),
+            i.cantidad,
+            i.dias,
+            i.tarifaDia.toLocaleString('es-CO'),
+            (i.cantidad * i.dias * i.tarifaDia).toLocaleString('es-CO')
+        ]),
+        theme: 'plain',
+        headStyles: { 
+            fillColor: [241, 245, 249], 
+            textColor: [30, 41, 59], 
+            fontSize: 7.5, 
+            fontStyle: 'bold', 
+            halign: 'center',
+            lineWidth: 0.1,
+            lineColor: [30, 41, 59]
+        },
+        styles: { 
+            fontSize: 7.5, 
+            cellPadding: 2, 
+            textColor: [30, 41, 59], 
+            halign: 'center',
+            lineWidth: 0.1,
+            lineColor: [30, 41, 59]
+        },
+        columnStyles: {
+            0: { cellWidth: 8 },
+            1: { halign: 'left', cellWidth: 'auto' },
+            2: { cellWidth: 12 },
+            3: { cellWidth: 12 },
+            4: { halign: 'right', cellWidth: 25 },
+            5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
+        },
+        foot: [['', '', '', '', 'TOTAL ANTES DE IMP.', (cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (Number(cot.transporte) || 0)).toLocaleString('es-CO')]],
+        footStyles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [30, 41, 59], halign: 'right', lineWidth: 0.1, lineColor: [30, 41, 59] },
     });
 
     let currentY = doc.lastAutoTable.finalY + 12;
