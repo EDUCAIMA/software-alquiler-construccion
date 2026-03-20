@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import {
     Plus, Search, Printer, FileText, X, Building2, MapPin,
     Phone, Mail, Edit3, ChevronDown, ChevronRight, CheckCircle,
-    Clock, AlertTriangle, Receipt, Percent, User, Download, Trash2, ShieldAlert
+    Clock, AlertTriangle, Receipt, Percent, User, Download, Trash2, ShieldAlert,
+    ChevronLeft, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import jsPDF from 'jspdf';
@@ -676,6 +677,17 @@ export default function Clients() {
         return matchSearch && matchDeuda && matchReg;
     }), [clients, search, filterDeuda, filterRegimen]);
 
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+
+    const paginatedClients = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filtered.slice(start, start + itemsPerPage);
+    }, [filtered, currentPage, itemsPerPage]);
+
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+
     // KPIs
     const totalDeuda = clients.reduce((s, c) => s + c.debt, 0);
     const totalObras = clients.reduce((s, c) => s + (c.obras?.length || 0), 0);
@@ -727,23 +739,21 @@ export default function Clients() {
             </div>
 
             {/* KPI Row */}
-            <div className="grid-cards" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1.5rem' }}>
-                <div className="stat-card blue">
-                    <div className="icon-wrapper blue"><User size={22} /></div>
-                    <div><div className="stat-value">{clients.length}</div><div className="stat-label">Total Clientes</div></div>
-                </div>
-                <div className="stat-card orange">
-                    <div className="icon-wrapper orange"><Building2 size={22} /></div>
-                    <div><div className="stat-value">{totalObras}</div><div className="stat-label">Obras Registradas</div></div>
-                </div>
-                <div className="stat-card green">
-                    <div className="icon-wrapper green"><CheckCircle size={22} /></div>
-                    <div><div className="stat-value">{obrasActivas}</div><div className="stat-label">Obras Activas</div></div>
-                </div>
-                <div className="stat-card red">
-                    <div className="icon-wrapper red"><Receipt size={22} /></div>
-                    <div><div className="stat-value">${totalDeuda.toLocaleString()}</div><div className="stat-label">Cartera Total</div></div>
-                </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+                {[
+                    { label: 'Total Clientes', value: clients.length, color: 'blue', Icon: User },
+                    { label: 'Obras Registradas', value: totalObras, color: 'orange', Icon: Building2 },
+                    { label: 'Obras Activas', value: obrasActivas, color: 'green', Icon: CheckCircle },
+                    { label: 'Cartera Total', value: `$${totalDeuda.toLocaleString()}`, color: 'red', Icon: Receipt },
+                ].map(({ label, value, color, Icon }) => (
+                    <div key={label} className={`stat-card ${color}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0.75rem', textAlign: 'center', height: '100%' }}>
+                        <div className={`icon-wrapper ${color}`} style={{ marginBottom: '0.4rem', width: '32px', height: '32px' }}><Icon size={18} /></div>
+                        <div>
+                            <div className="stat-value" style={{ fontSize: '1.1rem', lineHeight: 1.1 }}>{value}</div>
+                            <div className="stat-label" style={{ fontSize: '0.65rem', marginTop: '0.1rem' }}>{label}</div>
+                        </div>
+                    </div>
+                ))}
             </div>
 
             {/* Filters */}
@@ -774,7 +784,7 @@ export default function Clients() {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map(client => {
+                            {paginatedClients.map(client => {
                                 const obrasActivas = (client.obras || []).filter(o => o.estado === 'Activa').length;
                                 return (
                                     <tr key={client.id}
@@ -841,6 +851,88 @@ export default function Clients() {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex justify-between items-center mt-6 py-4 px-2" style={{ borderTop: '1px solid var(--surface-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>Mostrar:</span>
+                            <div style={{ position: 'relative' }}>
+                                <select 
+                                    value={itemsPerPage} 
+                                    onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                                    className="input-base"
+                                    style={{ padding: '0.3rem 1.8rem 0.3rem 0.6rem', fontSize: '0.8rem', width: 'auto', minWidth: '70px', height: '32px' }}
+                                >
+                                    {[5, 10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                                <ChevronDown size={14} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+                            </div>
+                            <span>por página</span>
+                        </div>
+                        <div style={{ width: '1px', height: '16px', background: 'var(--surface-border)' }}></div>
+                        <div>
+                            Mostrando {filtered.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, filtered.length)} de {filtered.length} registros
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(1)}
+                            title="Primera página"
+                        >
+                            <ChevronsLeft size={16} />
+                        </button>
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(prev => prev - 1)}
+                            title="Página anterior"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        
+                        <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                let pageNum;
+                                if (totalPages <= 5) pageNum = i + 1;
+                                else if (currentPage <= 3) pageNum = i + 1;
+                                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                else pageNum = currentPage - 2 + i;
+                                
+                                return (
+                                    <button 
+                                        key={pageNum}
+                                        onClick={() => setCurrentPage(pageNum)}
+                                        className={`btn btn-sm ${currentPage === pageNum ? 'btn-primary' : 'btn-secondary'}`}
+                                        style={{ minWidth: '32px', height: '32px', padding: 0 }}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(prev => prev + 1)}
+                            title="Siguiente página"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(totalPages)}
+                            title="Última página"
+                        >
+                            <ChevronsRight size={16} />
+                        </button>
+                    </div>
                 </div>
             </div>
 

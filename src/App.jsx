@@ -68,11 +68,13 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <div className="logo-icon">
-          {settings?.logo ? (
+        <div className="logo-icon" style={{ background: '#ffffff' }}>
+          {settings?.logoUI ? (
+            <img src={settings.logoUI} alt="Logo" className="sidebar-logo-img" />
+          ) : settings?.logo ? (
             <img src={settings.logo} alt="Logo" className="sidebar-logo-img" />
           ) : (
-            <Package size={54} color="white" />
+            <Package size={54} color="#2365AB" />
           )}
         </div>
       </div>

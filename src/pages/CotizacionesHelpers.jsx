@@ -192,110 +192,137 @@ function generateCotizacionPDF(cot, client, obra, settings) {
 
 // ─── PDF generators ───────────────────────────────────────────────────────────
 function generateContratoPDF(cot, client, obra, settings) {
-    const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    let y = applyStandardLayout(doc, 'Contrato de Alquiler', settings, cot.id);
-    const margin = 10;
+    try {
+        const doc = new jsPDF();
+        const W = doc.internal.pageSize.getWidth();
+        const H = doc.internal.pageSize.getHeight();
+        let y = applyStandardLayout(doc, 'Contrato de Alquiler', settings, cot.id);
+        const margin = 10;
 
-    y = drawInfoGrid(doc, y, client, {
-        valTopLeft: cot.fecha || format(new Date(), 'yyyy-MM-dd'),
-        valTopRight: 'Vigente',
-        labelTopRight: 'Vigencia',
-        valMidLeft: obra?.nombre?.substring(0, 20) || cot.obraId || '—',
-        valMidRight: cot.metodoPago?.toUpperCase() || 'CONTADO',
-        valBottom: cot.responsableTransporte?.toUpperCase() || 'CLIENTE',
-        obraDireccion: obra?.ubicacion || client?.direccion
-    });
+        y = drawInfoGrid(doc, y, client, {
+            valTopLeft: cot.fecha || format(new Date(), 'yyyy-MM-dd'),
+            valTopRight: 'Vigente',
+            labelTopRight: 'Vigencia',
+            valMidLeft: obra?.nombre?.substring(0, 20) || cot.obraId || '—',
+            valMidRight: cot.metodoPago?.toUpperCase() || 'CONTADO',
+            valBottom: cot.responsableTransporte?.toUpperCase() || 'CLIENTE',
+            obraDireccion: obra?.ubicacion || client?.direccion
+        });
 
-    doc.setTextColor(30, 41, 59); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('PARTES DEL CONTRATO', margin, y);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
-    doc.text(`ARRENDADOR: ${settings?.companyName || 'CIELO'} — Alquiler de Equipos y Herramientas | NIT: ${settings?.nit || '900.XXX.XXX-X'}`, margin, y + 8);
-    doc.text(`ARRENDATARIO: ${client?.name || '—'} | NIT/CC: ${client?.nit || '—'} | ${client?.type || ''}`, margin, y + 14);
-    doc.text(`Obra Destino: ${obra?.nombre || '—'} — ${obra?.ubicacion || '—'}`, margin, y + 20);
+        doc.setTextColor(30, 41, 59); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+        doc.text('PARTES DEL CONTRATO', margin, y);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+        doc.text(`ARRENDADOR: ${settings?.companyName || 'CIELO'} — Alquiler de Equipos y Herramientas | NIT: ${settings?.nit || '900.XXX.XXX-X'}`, margin, y + 8);
+        doc.text(`ARRENDATARIO: ${client?.name || '—'} | NIT/CC: ${client?.nit || '—'} | ${client?.type || ''}`, margin, y + 14);
+        doc.text(`Obra Destino: ${obra?.nombre || '—'} — ${obra?.ubicacion || '—'}`, margin, y + 20);
 
-    y += 32;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-    doc.text('OBJETO DEL CONTRATO', margin, y);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
-    const objeto = `El ARRENDADOR entrega en calidad de alquiler al ARRENDATARIO los equipos y herramientas descritos en el anexo de la presente cotización ${cot.id}, para ser utilizados exclusivamente en la obra indicada, bajo los términos y condiciones aquí establecidos.`;
-    doc.text(doc.splitTextToSize(objeto, W - margin * 2), margin, y + 8);
+        y += 32;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+        doc.text('OBJETO DEL CONTRATO', margin, y);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+        const objeto = `El ARRENDADOR entrega en calidad de alquiler al ARRENDATARIO los equipos y herramientas descritos en el anexo de la presente cotización ${cot.id}, para ser utilizados exclusivamente en la obra indicada, bajo los términos y condiciones aquí establecidos.`;
+        doc.text(doc.splitTextToSize(objeto, W - margin * 2), margin, y + 8);
 
-    y += 18;
-    autoTable(doc, {
-        startY: y,
-        margin: { left: margin, right: margin },
-        head: [['ITE', 'EQUIPO / HERRAMIENTA', 'CAN.', 'DÍAS', 'TARIFA/DÍA', 'SUBTOTAL']],
-        body: cot.items.map((i, idx) => [
-            idx + 1,
-            i.nombre.toUpperCase(),
-            i.cantidad,
-            i.dias,
-            i.tarifaDia.toLocaleString('es-CO'),
-            (i.cantidad * i.dias * i.tarifaDia).toLocaleString('es-CO')
-        ]),
-        theme: 'plain',
-        headStyles: { 
-            fillColor: [241, 245, 249], 
-            textColor: [30, 41, 59], 
-            fontSize: 7.5, 
-            fontStyle: 'bold', 
-            halign: 'center',
-            lineWidth: 0.1,
-            lineColor: [30, 41, 59]
-        },
-        styles: { 
-            fontSize: 7.5, 
-            cellPadding: 2, 
-            textColor: [30, 41, 59], 
-            halign: 'center',
-            lineWidth: 0.1,
-            lineColor: [30, 41, 59]
-        },
-        columnStyles: {
-            0: { cellWidth: 8 },
-            1: { halign: 'left', cellWidth: 'auto' },
-            2: { cellWidth: 12 },
-            3: { cellWidth: 12 },
-            4: { halign: 'right', cellWidth: 25 },
-            5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
-        },
-        foot: [['', '', '', '', 'TOTAL ANTES DE IMP.', (cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (Number(cot.transporte) || 0)).toLocaleString('es-CO')]],
-        footStyles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [30, 41, 59], halign: 'right', lineWidth: 0.1, lineColor: [30, 41, 59] },
-    });
+        y += 18;
+        autoTable(doc, {
+            startY: y,
+            margin: { left: margin, right: margin },
+            head: [['ITE', 'EQUIPO / HERRAMIENTA', 'CAN.', 'DÍAS', 'TARIFA/DÍA', 'SUBTOTAL']],
+            body: cot.items.map((i, idx) => [
+                idx + 1,
+                i.nombre.toUpperCase(),
+                i.cantidad,
+                i.dias,
+                i.tarifaDia.toLocaleString('es-CO'),
+                (i.cantidad * i.dias * i.tarifaDia).toLocaleString('es-CO')
+            ]),
+            theme: 'plain',
+            headStyles: { 
+                fillColor: [241, 245, 249], 
+                textColor: [30, 41, 59], 
+                fontSize: 7.5, 
+                fontStyle: 'bold', 
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [30, 41, 59]
+            },
+            styles: { 
+                fontSize: 7.5, 
+                cellPadding: 2, 
+                textColor: [30, 41, 59], 
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [30, 41, 59]
+            },
+            columnStyles: {
+                0: { cellWidth: 8 },
+                1: { halign: 'left', cellWidth: 'auto' },
+                2: { cellWidth: 12 },
+                3: { cellWidth: 12 },
+                4: { halign: 'right', cellWidth: 25 },
+                5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
+            },
+            foot: [['', '', '', '', 'TOTAL ANTES DE IMP.', (cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (Number(cot.transporte) || 0)).toLocaleString('es-CO')]],
+            footStyles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [30, 41, 59], halign: 'right', lineWidth: 0.1, lineColor: [30, 41, 59] },
+        });
 
-    let currentY = doc.lastAutoTable.finalY + 12;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-    doc.text('CLÁUSULAS GENERALES', margin, currentY);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-    
-    currentY += 8;
-    const clausulas = (cot.clausulas && cot.clausulas.length > 0) ? cot.clausulas : [
-        '1. El ARRENDATARIO se compromete a utilizar los equipos únicamente en la obra indicada y a devolverlos en perfectas condiciones de funcionamiento.',
-        '2. Cualquier daño, pérdida o robo de los equipos será de responsabilidad exclusiva del ARRENDATARIO.',
-        '3. Los días de alquiler se calculan desde la fecha indicada en cada remisión hasta su correspondiente devolución (lógica PEPS).',
-        '4. El incumplimiento en el pago generará intereses de mora del 1.5% mensual sobre el saldo pendiente.',
-        '5. Este contrato se rige por las leyes colombianas. Las partes se someten a los jueces competentes de la ciudad de Bogotá D.C.',
-        '6. Forma de pago: ' + (cot.metodoPago || 'Acordada entre las partes.'),
-        '7. Transporte: ' + (cot.responsableTransporte || 'Acordado entre las partes.'),
-    ];
+        let currentY = doc.lastAutoTable.finalY + 12;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+        doc.text('CLÁUSULAS GENERALES', margin, currentY);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+        
+        currentY += 8;
+        const clausulas = (cot.clausulas && cot.clausulas.length > 0) ? cot.clausulas : [
+            '1. El ARRENDATARIO se compromete a utilizar los equipos únicamente en la obra indicada y a devolverlos en perfectas condiciones de funcionamiento.',
+            '2. Cualquier daño, pérdida o robo de los equipos será de responsabilidad exclusiva del ARRENDATARIO.',
+            '3. Los días de alquiler se calculan desde la fecha indicada en cada remisión hasta su correspondiente devolución (lógica PEPS).',
+            '4. El incumplimiento en el pago generará intereses de mora del 1.5% mensual sobre el saldo pendiente.',
+            '5. Este contrato se rige por las leyes colombianas. Las partes se someten a los jueces competentes de la ciudad de Bogotá D.C.',
+            '6. Forma de pago: ' + (cot.metodoPago || 'Acordada entre las partes.'),
+            '7. Transporte: ' + (cot.responsableTransporte || 'Acordado entre las partes.'),
+        ];
 
-    clausulas.forEach((c, idx) => { 
-        if (!c) return;
-        const splitText = doc.splitTextToSize(c, W - margin * 2);
-        doc.text(splitText, margin, currentY);
-        currentY += (splitText.length * 4) + 2;
-    });
+        clausulas.forEach((c, idx) => { 
+            if (!c) return;
+            const splitText = doc.splitTextToSize(c, W - margin * 2);
+            // Salto de página si no cabe la cláusula
+            if (currentY + (splitText.length * 4) > H - 40) {
+                doc.addPage();
+                currentY = applyStandardLayout(doc, 'Contrato de Alquiler', settings, cot.id);
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+            }
+            doc.text(splitText, margin, currentY);
+            currentY += (splitText.length * 4) + 2;
+        });
 
-    const sigY = Math.min(H - 40, currentY + 20);
-    doc.setDrawColor(30, 41, 59);
-    doc.line(margin, sigY, margin + 60, sigY); 
-    doc.line(W - margin - 60, sigY, W - margin, sigY);
-    doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
-    doc.text(`ARRENDADOR: ${settings?.shortName || settings?.companyName || 'CIELO'}`, margin, sigY + 5); 
-    doc.text(`ARRENDATARIO: ${client?.name || '—'}`, W - margin, sigY + 5, { align: 'right' });
+        // Asegurarse de que las firmas no queden cortadas al final
+        if (currentY + 25 > H) {
+            doc.addPage();
+            currentY = applyStandardLayout(doc, 'Contrato de Alquiler', settings, cot.id);
+        }
 
-    doc.save(`Contrato_${cot.id}.pdf`);
+        // Firmas y Huella
+        const sigY = Math.min(H - 40, currentY + 20);
+        doc.setDrawColor(30, 41, 59);
+        doc.line(margin, sigY, margin + 60, sigY); 
+        doc.line(W - margin - 60, sigY, W - margin, sigY);
+
+        // Si hay firma digital, dibujarla sobre la línea del arrendatario
+        if (cot.firma) {
+            try {
+                doc.addImage(cot.firma, 'PNG', W - margin - 60, sigY - 25, 60, 25);
+            } catch (e) { console.error('Error adding signature to Contrato', e); }
+        }
+
+        doc.setFontSize(7.5); doc.setFont('helvetica', 'normal');
+        doc.text(`ARRENDADOR: ${settings?.shortName || settings?.companyName || 'CIELO'}`, margin, sigY + 5); 
+        doc.text(`ARRENDATARIO: ${client?.name || '—'}`, W - margin, sigY + 5, { align: 'right' });
+
+        doc.save(`Contrato_${cot.id}.pdf`);
+    } catch (error) {
+        console.error('Error generating Contrato PDF:', error);
+        alert('Error al generar el PDF del contrato.');
+    }
 }
 
 
@@ -332,6 +359,14 @@ function generatePagarePDF(cot, client, settings) {
     doc.setDrawColor(30, 41, 59);
     doc.line(margin, y, margin + 60, y); 
     doc.line(W - margin - 60, y, W - margin, y);
+
+    // Firma digital si existe
+    if (cot.firma) {
+        try {
+            doc.addImage(cot.firma, 'PNG', margin, y - 25, 60, 25);
+        } catch (e) { console.error('Error adding signature to Pagare', e); }
+    }
+
     doc.setFontSize(7.5);
     doc.text('Firma del Deudor', margin + 30, y + 4, { align: 'center' }); 
     doc.text('Huella Digital', W - margin - 30, y + 4, { align: 'center' });
@@ -364,6 +399,14 @@ function generateCartaPDF(cot, client, settings) {
     doc.setDrawColor(30, 41, 59);
     doc.line(margin, y, margin + 60, y); 
     doc.line(W - margin - 60, y, W - margin, y);
+
+    // Firma digital si existe (Cargada sobre la línea del otorgante/cliente)
+    if (cot.firma) {
+        try {
+            doc.addImage(cot.firma, 'PNG', margin, y - 25, 60, 25);
+        } catch (e) { console.error('Error adding signature to Carta', e); }
+    }
+
     doc.setFontSize(7.5);
     doc.text(`OTORGANTE: ${client?.name || '—'}`, margin + 30, y + 4, { align: 'center' }); 
     doc.text(`REPRESENTANTE ${settings?.shortName || 'CIELO'}`, W - margin - 30, y + 4, { align: 'center' });

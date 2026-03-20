@@ -3,7 +3,8 @@ import {
     FilePlus, Search, CheckCircle, XCircle, Clock, Send,
     X, FileText, Shield, Download, Copy, Share2,
     PenTool, Fingerprint, MapPin, ChevronRight, Upload, Eye,
-    Plus, List, Edit2
+    Plus, List, Edit2,
+    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format } from 'date-fns';
@@ -399,7 +400,7 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
                             </button>
                         )}
 
-                        {(cot.estado === 'Aprobada' || cot.estado === 'Facturada') && (
+                        {(cot.estado === 'Aprobada' || cot.estado === 'Facturada' || cot.estado === 'Enviada') && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981', textAlign: 'center' }}>Documentos Legales:</p>
                                 {[
@@ -466,8 +467,18 @@ export default function Cotizaciones() {
         }).sort((a, b) => b.fecha.localeCompare(a.fecha))
         , [cotizaciones, search, filterE, clients]);
 
-    const kpi = (e) => cotizaciones.filter(c => c.estado === e).length;
     const total = (c) => c.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (c.transporte || 0);
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+
+    const paginatedCotizaciones = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filtered.slice(start, start + itemsPerPage);
+    }, [filtered, currentPage, itemsPerPage]);
+
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
 
     const IS = { padding: '0.55rem 0.75rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' };
 
@@ -531,7 +542,7 @@ export default function Cotizaciones() {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map(cot => {
+                            {paginatedCotizaciones.map(cot => {
                                 const client = getClient(cot.clientId);
                                 const obra = getObra(cot);
                                 const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
@@ -559,6 +570,12 @@ export default function Cotizaciones() {
                                             <button onClick={() => setSelected(cot.id)} className="btn btn-sm" style={{ background: 'rgba(35, 101, 171, 0.1)', color: '#2365AB', border: '1px solid rgba(35, 101, 171, 0.3)', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.6rem', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: 4 }}>
                                                 <Eye size={12} /> Ver
                                             </button>
+                                            
+                                            {/* Shortcut to Quote PDF */}
+                                            <button onClick={() => generateCotizacionPDF(cot, getClient(cot.clientId), getObra(cot), settings)} className="btn btn-sm" title="Imprimir Cotización" style={{ background: 'rgba(35, 101, 171, 0.1)', color: '#2365AB', border: '1px solid rgba(35, 101, 171, 0.3)', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.6rem' }}>
+                                                <Download size={12} />
+                                            </button>
+
                                             {(cot.estado === 'Borrador' || cot.estado === 'Enviada') && (
                                                 <button onClick={() => setApproving(cot.id)} className="btn btn-sm" style={{ background: '#10b981', color: 'white', border: 'none', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.75rem', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
                                                     <CheckCircle size={12} /> Aprobar
@@ -569,15 +586,10 @@ export default function Cotizaciones() {
                                                     <FileText size={12} /> Facturar
                                                 </button>
                                             )}
-                                            {cot.estado === 'Aprobada' && cot.facturaId && (
-                                                <button onClick={() => generateContratoPDF(cot, getClient(cot.clientId), getObra(cot), settings)} className="btn btn-sm" style={{ background: 'rgba(35, 101, 171,0.1)', color: '#2365AB', border: '1px solid rgba(35, 101, 171,0.3)', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.75rem', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                    <Download size={12} /> PDF
+                                            {(cot.estado === 'Aprobada' || cot.estado === 'Facturada') && (
+                                                <button onClick={() => generateContratoPDF(cot, getClient(cot.clientId), getObra(cot), settings)} className="btn btn-sm" title="Imprimir Contrato" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', cursor: 'pointer', borderRadius: 6, padding: '0.35rem 0.6rem', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    <FileText size={12} /> Contrato
                                                 </button>
-                                            )}
-                                            {cot.estado === 'Facturada' && (
-                                                <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: 'rgba(99,102,241,0.12)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                    <FileText size={11} /> Facturada: {cot.facturaId}
-                                                </span>
                                             )}
                                         </td>
                                     </tr>
@@ -586,6 +598,88 @@ export default function Cotizaciones() {
                             {filtered.length === 0 && <tr><td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron cotizaciones</td></tr>}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex justify-between items-center mt-6 py-4 px-2" style={{ borderTop: '1px solid var(--surface-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>Mostrar:</span>
+                            <div style={{ position: 'relative' }}>
+                                <select 
+                                    value={itemsPerPage} 
+                                    onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                                    className="input-base"
+                                    style={{ padding: '0.3rem 1.8rem 0.3rem 0.6rem', fontSize: '0.8rem', width: 'auto', minWidth: '70px', height: '32px' }}
+                                >
+                                    {[5, 10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                                <ChevronDown size={14} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+                            </div>
+                            <span>por página</span>
+                        </div>
+                        <div style={{ width: '1px', height: '16px', background: 'var(--surface-border)' }}></div>
+                        <div>
+                            Mostrando {filtered.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, filtered.length)} de {filtered.length} registros
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(1)}
+                            title="Primera página"
+                        >
+                            <ChevronsLeft size={16} />
+                        </button>
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(prev => prev - 1)}
+                            title="Página anterior"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        
+                        <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                let pageNum;
+                                if (totalPages <= 5) pageNum = i + 1;
+                                else if (currentPage <= 3) pageNum = i + 1;
+                                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                else pageNum = currentPage - 2 + i;
+                                
+                                return (
+                                    <button 
+                                        key={pageNum}
+                                        onClick={() => setCurrentPage(pageNum)}
+                                        className={`btn btn-sm ${currentPage === pageNum ? 'btn-primary' : 'btn-secondary'}`}
+                                        style={{ minWidth: '32px', height: '32px', padding: 0 }}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(prev => prev + 1)}
+                            title="Siguiente página"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(totalPages)}
+                            title="Última página"
+                        >
+                            <ChevronsRight size={16} />
+                        </button>
+                    </div>
                 </div>
             </div>
 

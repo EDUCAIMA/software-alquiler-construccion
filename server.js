@@ -207,6 +207,7 @@ async function initDB() {
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS short_name VARCHAR(100)`);
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS name_complement VARCHAR(255)`);
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS header_extra TEXT`);
+        await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS logo_ui TEXT`);
 
         // Seed inicial de settings si está vacío
         const { rows: sRows } = await client.query('SELECT COUNT(*) FROM settings');
@@ -331,6 +332,7 @@ const mapSettings = r => ({
     phone: r.phone,
     email: r.email,
     logo: r.logo,
+    logoUI: r.logo_ui,
     address: r.address,
     headerExtra: r.header_extra || ''
 });
@@ -679,14 +681,14 @@ app.put('/api/liquidaciones/:id', async (req, res) => {
 app.get('/api/settings', async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM settings WHERE id = $1', ['main']);
-        if (rows.length === 0) return res.json({ companyName: 'CIELO', shortName: 'CIELO', nameComplement: '', nit: '', phone: '', email: '', logo: '', address: '' });
+        if (rows.length === 0) return res.json({ companyName: 'CIELO', shortName: 'CIELO', nameComplement: '', nit: '', phone: '', email: '', logo: '', logoUI: '', address: '' });
         res.json(mapSettings(rows[0]));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/settings', async (req, res) => {
     try {
-        const { companyName, shortName, nameComplement, nit, phone, email, logo, address, headerExtra } = req.body;
+        const { companyName, shortName, nameComplement, nit, phone, email, logo, logoUI, address, headerExtra } = req.body;
         
         // Identificar el ID único de settings
         const { rows: currentRows } = await pool.query('SELECT id FROM settings LIMIT 1');
@@ -694,9 +696,9 @@ app.put('/api/settings', async (req, res) => {
 
         await pool.query(
             `UPDATE settings SET 
-             company_name = $1, short_name = $2, name_complement = $3, nit = $4, phone = $5, email = $6, logo = $7, address = $8, header_extra = $9 
-             WHERE id = $10`,
-            [companyName, shortName, nameComplement, nit, phone, email, logo, address, headerExtra || '', targetId]
+             company_name = $1, short_name = $2, name_complement = $3, nit = $4, phone = $5, email = $6, logo = $7, logo_ui = $8, address = $9, header_extra = $10 
+             WHERE id = $11`,
+            [companyName, shortName, nameComplement, nit, phone, email, logo, logoUI, address, headerExtra || '', targetId]
         );
         res.json({ success: true });
     } catch (e) { 

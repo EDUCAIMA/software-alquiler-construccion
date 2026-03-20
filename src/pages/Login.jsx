@@ -28,9 +28,9 @@ export default function Login() {
             <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
                 {/* Logo */}
-                {settings?.logo && (
+                {(settings?.logo || settings?.logoUI) && (
                     <div style={{ textAlign: 'center' }}>
-                        <img src={settings.logo} alt="Logo" style={{ maxHeight: 220, width: 'auto', filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.3))' }} />
+                        <img src={settings.logoUI || settings.logo} alt="Logo" style={{ maxHeight: 220, width: 'auto', filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.3))' }} />
                     </div>
                 )}
 

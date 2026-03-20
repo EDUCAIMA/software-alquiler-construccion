@@ -13,6 +13,7 @@ export default function Settings() {
     email: '',
     address: '',
     logo: '',
+    logoUI: '',
     headerExtra: ''
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -48,12 +49,12 @@ export default function Settings() {
     }
   };
 
-  const handleLogoChange = (e) => {
+  const handleLogoChange = (e, field) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, logo: reader.result }));
+        setFormData(prev => ({ ...prev, [field]: reader.result }));
       };
       reader.readAsDataURL(file);
     }
@@ -80,37 +81,83 @@ export default function Settings() {
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
           {/* Logo Section */}
-          <section>
-            <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Upload size={18} /> Logo de la Empresa
-            </h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-              <div style={{
-                width: '120px',
-                height: '120px',
-                borderRadius: '12px',
-                border: '2px dashed rgba(255,255,255,0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                background: 'rgba(0,0,0,0.2)'
-              }}>
-                {formData.logo ? (
-                  <img src={formData.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                ) : (
-                  <Building2 size={40} style={{ opacity: 0.3 }} />
-                )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+            <section>
+              <h3 style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Upload size={18} /> Logo para Documentos (PDF)
+              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                <div style={{
+                  width: '100px',
+                  height: '100px',
+                  borderRadius: '12px',
+                  border: '2px dashed var(--surface-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  background: 'var(--surface)'
+                }}>
+                  {formData.logo ? (
+                    <img src={formData.logo} alt="Logo Doc" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  ) : (
+                    <Building2 size={32} style={{ color: 'var(--text-muted)' }} />
+                  )}
+                </div>
+                <div>
+                  <input
+                    type="file"
+                    id="logo-upload"
+                    accept="image/*"
+                    onChange={(e) => handleLogoChange(e, 'logo')}
+                    style={{ display: 'none' }}
+                  />
+                  <label htmlFor="logo-upload" className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                    <Upload size={16} /> Subir Logo PDF
+                  </label>
+                  <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Fondo blanco recomendado</p>
+                </div>
               </div>
-              <div style={{ flex: 1 }}>
-                <label className="btn btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex', gap: '0.5rem' }}>
-                  <Upload size={16} /> Subir Logo
-                  <input type="file" accept="image/*" onChange={handleLogoChange} style={{ display: 'none' }} />
-                </label>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Recomendado: PNG o JPG de 200x200px</p>
+            </section>
+
+            <section>
+              <h3 style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Upload size={18} /> Logo para Interfaz (App)
+              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                <div style={{
+                  width: '100px',
+                  height: '100px',
+                  borderRadius: '12px',
+                  border: '2px dashed var(--surface-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  background: 'var(--surface)'
+                }}>
+                  {formData.logoUI ? (
+                    <img src={formData.logoUI} alt="Logo UI" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  ) : (
+                    <Building2 size={32} style={{ color: 'var(--text-muted)' }} />
+                  )}
+                </div>
+                <div>
+                  <input
+                    type="file"
+                    id="logo-ui-upload"
+                    accept="image/*"
+                    onChange={(e) => handleLogoChange(e, 'logoUI')}
+                    style={{ display: 'none' }}
+                  />
+                  <label htmlFor="logo-ui-upload" className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                    <Upload size={16} /> Subir Logo App
+                  </label>
+                  <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Utilizado en Login y Menú Lateral</p>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          </div>
 
           <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.05)' }} />
 

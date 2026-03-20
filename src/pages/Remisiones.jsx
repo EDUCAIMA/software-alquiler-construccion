@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import {
     Plus, Search, Truck, Package, RotateCcw, CheckCircle,
     AlertTriangle, Clock, X, ChevronRight, Filter, FileText,
-    MapPin, ArrowDownCircle, Info, CreditCard
+    MapPin, ArrowDownCircle, Info, CreditCard,
+    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
@@ -514,6 +515,17 @@ export default function Remisiones() {
         }).sort((a, b) => b.fecha.localeCompare(a.fecha));
     }, [remisiones, search, filterEstado, filterClient, clients]);
 
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+
+    const paginatedRemisiones = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filtered.slice(start, start + itemsPerPage);
+    }, [filtered, currentPage, itemsPerPage]);
+
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+
     const handleSaveRemision = (data) => {
         try {
             setBlockMsg('');
@@ -652,7 +664,7 @@ export default function Remisiones() {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map(rem => {
+                            {paginatedRemisiones.map(rem => {
                                 const client = clients.find(c => c.id === rem.clientId);
                                 const obra = client?.obras?.find(o => o.id === rem.obraId);
                                 const cfg = ESTADO_CFG[rem.estado] || ESTADO_CFG['Activa'];
@@ -708,6 +720,88 @@ export default function Remisiones() {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex justify-between items-center mt-6 py-4 px-2" style={{ borderTop: '1px solid var(--surface-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>Mostrar:</span>
+                            <div style={{ position: 'relative' }}>
+                                <select 
+                                    value={itemsPerPage} 
+                                    onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                                    className="input-base"
+                                    style={{ padding: '0.3rem 1.8rem 0.3rem 0.6rem', fontSize: '0.8rem', width: 'auto', minWidth: '70px', height: '32px' }}
+                                >
+                                    {[5, 10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                                <ChevronDown size={14} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+                            </div>
+                            <span>por página</span>
+                        </div>
+                        <div style={{ width: '1px', height: '16px', background: 'var(--surface-border)' }}></div>
+                        <div>
+                            Mostrando {filtered.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, filtered.length)} de {filtered.length} registros
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(1)}
+                            title="Primera página"
+                        >
+                            <ChevronsLeft size={16} />
+                        </button>
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(prev => prev - 1)}
+                            title="Página anterior"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        
+                        <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                let pageNum;
+                                if (totalPages <= 5) pageNum = i + 1;
+                                else if (currentPage <= 3) pageNum = i + 1;
+                                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                else pageNum = currentPage - 2 + i;
+                                
+                                return (
+                                    <button 
+                                        key={pageNum}
+                                        onClick={() => setCurrentPage(pageNum)}
+                                        className={`btn btn-sm ${currentPage === pageNum ? 'btn-primary' : 'btn-secondary'}`}
+                                        style={{ minWidth: '32px', height: '32px', padding: 0 }}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(prev => prev + 1)}
+                            title="Siguiente página"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(totalPages)}
+                            title="Última página"
+                        >
+                            <ChevronsRight size={16} />
+                        </button>
+                    </div>
                 </div>
             </div>
 

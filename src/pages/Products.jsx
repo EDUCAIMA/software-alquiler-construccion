@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
     PackagePlus, UploadCloud, QrCode,
     AlertTriangle, X, Wrench, Trash2, ArrowDownCircle,
-    ShieldCheck, ShieldAlert, Download, Factory, Pencil
+    ShieldCheck, ShieldAlert, Download, Factory, Pencil,
+    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import QRCode from 'qrcode';
@@ -269,14 +270,14 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
 
 // ─── Modal: Dar de Baja ───────────────────────────────────────────────────────
 function BajaModal({ product, onClose, onConfirm }) {
-    const { verifyPassword } = useAppContext();
+    const { checkPassword } = useAppContext();
     const [motivo, setMotivo] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const motivos = ['Pérdida total por siniestro', 'Obsolescencia técnica', 'Robo o hurto', 'Deterioro irreparable', 'Venta del equipo', 'Otro'];
 
     const handleConfirm = () => {
-        if (!verifyPassword(password)) {
+        if (!checkPassword(password)) {
             setError('Contraseña incorrecta');
             return;
         }
@@ -336,12 +337,12 @@ function BajaModal({ product, onClose, onConfirm }) {
 
 // ─── Modal: Confirmar Eliminación ─────────────────────────────────────────────
 function DeleteModal({ product, onClose, onConfirm }) {
-    const { verifyPassword } = useAppContext();
+    const { checkPassword } = useAppContext();
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
 
     const handleConfirm = () => {
-        if (!verifyPassword(password)) {
+        if (!checkPassword(password)) {
             setError('Contraseña incorrecta');
             return;
         }
@@ -404,6 +405,16 @@ export default function Products() {
     const [newProduct, setNewProduct] = useState({ name: '', category: '', value: '', tipoCobro: 'Día', esquemaCobro: 'Calendario', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
     const fileInputRef = useRef(null);
 
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+
+    const paginatedProducts = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return products.slice(start, start + itemsPerPage);
+    }, [products, currentPage, itemsPerPage]);
+
+    const totalPages = Math.ceil(products.length / itemsPerPage);
+
     const hasPendingMaint = (productId) =>
         maintenances.some(m => m.productId === productId && (m.status === 'Pendiente' || m.status === 'En Proceso'));
 
@@ -444,7 +455,7 @@ export default function Products() {
                             </tr>
                         </thead>
                         <tbody>
-                            {products.map(p => {
+                            {paginatedProducts.map(p => {
                                 const blocked = hasPendingMaint(p.id);
                                 const isBaja = p.estado === 'Dado de baja';
                                 return (
@@ -526,6 +537,88 @@ export default function Products() {
                             })}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex justify-between items-center mt-6 py-4 px-2" style={{ borderTop: '1px solid var(--surface-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>Mostrar:</span>
+                            <div style={{ position: 'relative' }}>
+                                <select 
+                                    value={itemsPerPage} 
+                                    onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                                    className="input-base"
+                                    style={{ padding: '0.3rem 1.8rem 0.3rem 0.6rem', fontSize: '0.8rem', width: 'auto', minWidth: '70px', height: '32px' }}
+                                >
+                                    {[5, 10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                                <ChevronDown size={14} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+                            </div>
+                            <span>por página</span>
+                        </div>
+                        <div style={{ width: '1px', height: '16px', background: 'var(--surface-border)' }}></div>
+                        <div>
+                            Mostrando {products.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, products.length)} de {products.length} registros
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(1)}
+                            title="Primera página"
+                        >
+                            <ChevronsLeft size={16} />
+                        </button>
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(prev => prev - 1)}
+                            title="Página anterior"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        
+                        <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                let pageNum;
+                                if (totalPages <= 5) pageNum = i + 1;
+                                else if (currentPage <= 3) pageNum = i + 1;
+                                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                else pageNum = currentPage - 2 + i;
+                                
+                                return (
+                                    <button 
+                                        key={pageNum}
+                                        onClick={() => setCurrentPage(pageNum)}
+                                        className={`btn btn-sm ${currentPage === pageNum ? 'btn-primary' : 'btn-secondary'}`}
+                                        style={{ minWidth: '32px', height: '32px', padding: 0 }}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(prev => prev + 1)}
+                            title="Siguiente página"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                        <button 
+                            className="btn btn-secondary btn-sm p-2" 
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            onClick={() => setCurrentPage(totalPages)}
+                            title="Última página"
+                        >
+                            <ChevronsRight size={16} />
+                        </button>
+                    </div>
                 </div>
             </div>
 

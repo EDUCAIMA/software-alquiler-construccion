@@ -40,7 +40,7 @@ export const AppProvider = ({ children }) => {
   const isGerente = currentUser?.role === 'gerente';
   const canViewDashboard = isAdmin || isGerente;
 
-  const verifyPassword = (password) => {
+  const checkPassword = (password) => {
     const user = USERS.find(u => u.username === currentUser?.username);
     return user && user.password === password;
   };
@@ -501,10 +501,7 @@ export const AppProvider = ({ children }) => {
     logAction('Nómina Pagada', id, '', 'system');
   };
   
-  const checkPassword = (password) => {
-    const user = USERS.find(u => u.username === currentUser?.username);
-    return user && user.password === password;
-  };
+
 
   const updateSettings = async (data) => {
     await api.put('/api/settings', data);
@@ -539,6 +536,8 @@ export const AppProvider = ({ children }) => {
       liquidaciones, addLiquidacion, pagarLiquidacion,
       // Settings
       settings, updateSettings,
+      // Auth Utils
+      checkPassword,
     }}>
       {children}
     </AppContext.Provider>
