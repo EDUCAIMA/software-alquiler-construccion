@@ -3,7 +3,7 @@ import {
     PackagePlus, UploadCloud, QrCode,
     AlertTriangle, X, Wrench, Trash2, ArrowDownCircle,
     ShieldCheck, ShieldAlert, Download, Factory, Pencil,
-    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown
+    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Search
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import QRCode from 'qrcode';
@@ -405,15 +405,20 @@ export default function Products() {
     const [newProduct, setNewProduct] = useState({ name: '', category: '', value: '', tipoCobro: 'Día', esquemaCobro: 'Calendario', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
     const fileInputRef = useRef(null);
 
+    const [search, setSearch] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
+    const filtered = useMemo(() => products.filter(p => {
+        const q = search.toLowerCase();
+        return (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q);
+    }), [products, search]);
 
     const paginatedProducts = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
-        return products.slice(start, start + itemsPerPage);
-    }, [products, currentPage, itemsPerPage]);
+        return filtered.slice(start, start + itemsPerPage);
+    }, [filtered, currentPage, itemsPerPage]);
 
-    const totalPages = Math.ceil(products.length / itemsPerPage);
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
 
     const hasPendingMaint = (productId) =>
         maintenances.some(m => m.productId === productId && (m.status === 'Pendiente' || m.status === 'En Proceso'));
@@ -442,6 +447,20 @@ export default function Products() {
                     <p className="text-muted">Gestión de maquinaria y hoja de vida</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => setShowAddModal(true)}><PackagePlus size={20} /> Nuevo Equipo</button>
+            </div>
+
+            {/* Filters */}
+            <div className="glass-panel p-6 mb-6" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+                    <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input 
+                        value={search} 
+                        onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} 
+                        placeholder="Buscar por nombre, categoría o ID…" 
+                        style={{ padding: '0.55rem 0.75rem', paddingLeft: '2rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', width: '100%', boxSizing: 'border-box' }} 
+                    />
+                </div>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{filtered.length} equipo(s) encontrado(s)</span>
             </div>
 
             {/* Table */}

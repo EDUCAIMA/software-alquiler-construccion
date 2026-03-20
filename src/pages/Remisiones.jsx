@@ -508,10 +508,10 @@ export default function Remisiones() {
             const client = clients.find(c => c.id === r.clientId);
             const obra = client?.obras?.find(o => o.id === r.obraId);
             const q = search.toLowerCase();
-            const matchQ = r.id.toLowerCase().includes(q) || client?.name?.toLowerCase().includes(q) || obra?.nombre?.toLowerCase().includes(q);
+            const matchSearch = r.id.toLowerCase().includes(q) || client?.name?.toLowerCase()?.includes(q) || obra?.nombre?.toLowerCase()?.includes(q);
             const matchE = filterEstado === 'Todos' || r.estado === filterEstado;
             const matchC = !filterClient || r.clientId === filterClient;
-            return matchQ && matchE && matchC;
+            return matchSearch && matchE && matchC;
         }).sort((a, b) => b.fecha.localeCompare(a.fecha));
     }, [remisiones, search, filterEstado, filterClient, clients]);
 

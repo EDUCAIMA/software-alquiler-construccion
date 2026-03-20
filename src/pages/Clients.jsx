@@ -671,7 +671,7 @@ export default function Clients() {
     // Search + filter
     const filtered = useMemo(() => clients.filter(c => {
         const q = search.toLowerCase();
-        const matchSearch = c.name.toLowerCase().includes(q) || (c.nit || '').toLowerCase().includes(q);
+        const matchSearch = (c.name || '').toLowerCase().includes(q) || (c.nit || '').toLowerCase().includes(q);
         const matchDeuda = filterDeuda === 'Todos' || (filterDeuda === 'Con Deuda' ? c.debt > 0 : c.debt === 0);
         const matchReg = filterRegimen === 'Todos' || c.regimen === filterRegimen;
         return matchSearch && matchDeuda && matchReg;

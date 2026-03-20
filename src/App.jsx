@@ -68,7 +68,7 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <div className="logo-icon" style={{ background: '#ffffff' }}>
+        <div className="logo-icon">
           {settings?.logoUI ? (
             <img src={settings.logoUI} alt="Logo" className="sidebar-logo-img" />
           ) : settings?.logo ? (

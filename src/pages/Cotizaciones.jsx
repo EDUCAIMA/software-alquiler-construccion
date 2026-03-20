@@ -462,12 +462,13 @@ export default function Cotizaciones() {
         cotizaciones.filter(c => {
             const cl = clients.find(x => x.id === c.clientId);
             const q = search.toLowerCase();
-            return (c.id.toLowerCase().includes(q) || cl?.name?.toLowerCase().includes(q)) &&
+            return (c.id.toLowerCase().includes(q) || cl?.name?.toLowerCase()?.includes(q)) &&
                 (filterE === 'Todos' || c.estado === filterE);
-        }).sort((a, b) => b.fecha.localeCompare(a.fecha))
+        }).sort((a, b) => b.fecha?.localeCompare(a.fecha || '') || 0)
         , [cotizaciones, search, filterE, clients]);
 
     const total = (c) => c.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (c.transporte || 0);
+    const kpi = (est) => cotizaciones.filter(c => c.estado === est).length;
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
