@@ -107,6 +107,10 @@ export default function Login() {
                         </button>
                     </form>
                 </div>
+                
+                <div style={{ marginTop: '0.4rem', textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.9)', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                    Versión 1.3.1
+                </div>
 
             </div>
         </div>

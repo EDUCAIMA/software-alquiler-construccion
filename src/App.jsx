@@ -119,8 +119,8 @@ function Sidebar() {
         >
           <LogOut size={14} /> Cerrar Sesión
         </button>
-        <div style={{ marginTop: '0.75rem', textAlign: 'center', opacity: 0.35, fontSize: '0.62rem', fontWeight: 700, color: 'white', letterSpacing: '0.08em' }}>
-          VERSIÓN 1.2.5
+        <div style={{ marginTop: '0.75rem', textAlign: 'center', width: '100%', fontSize: '0.65rem', fontWeight: 700, color: 'white', letterSpacing: '0.1em' }}>
+          VERSIÓN 1.3.1
         </div>
       </div>
     </aside>

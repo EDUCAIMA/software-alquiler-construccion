@@ -3,7 +3,7 @@ import {
     Plus, Search, Truck, Package, RotateCcw, CheckCircle,
     AlertTriangle, Clock, X, ChevronRight, Filter, FileText,
     MapPin, ArrowDownCircle, Info, CreditCard,
-    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown
+    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
@@ -503,8 +503,17 @@ export default function Remisiones() {
     }, [remisiones]);
 
     // Filtered
-    const filtered = useMemo(() => {
-        return remisiones.filter(r => {
+    const [sortConfig, setSortConfig] = useState({ key: 'fecha', direction: 'desc' });
+
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+        setSortConfig({ key, direction });
+    };
+
+    // Filter + Sort
+    const sortedRemisiones = useMemo(() => {
+        const filtered = remisiones.filter(r => {
             const client = clients.find(c => c.id === r.clientId);
             const obra = client?.obras?.find(o => o.id === r.obraId);
             const q = search.toLowerCase();
@@ -512,8 +521,29 @@ export default function Remisiones() {
             const matchE = filterEstado === 'Todos' || r.estado === filterEstado;
             const matchC = !filterClient || r.clientId === filterClient;
             return matchSearch && matchE && matchC;
-        }).sort((a, b) => b.fecha.localeCompare(a.fecha));
-    }, [remisiones, search, filterEstado, filterClient, clients]);
+        });
+
+        if (sortConfig.key) {
+            filtered.sort((a, b) => {
+                let aVal, bVal;
+                
+                if (sortConfig.key === 'clientName') {
+                    aVal = (clients.find(x => x.id === a.clientId)?.name || '').toLowerCase();
+                    bVal = (clients.find(x => x.id === b.clientId)?.name || '').toLowerCase();
+                } else {
+                    aVal = a[sortConfig.key] || '';
+                    bVal = b[sortConfig.key] || '';
+                    if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                    if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+                }
+
+                if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return filtered;
+    }, [remisiones, search, filterEstado, filterClient, clients, sortConfig]);
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -521,10 +551,10 @@ export default function Remisiones() {
 
     const paginatedRemisiones = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
-        return filtered.slice(start, start + itemsPerPage);
-    }, [filtered, currentPage, itemsPerPage]);
+        return sortedRemisiones.slice(start, start + itemsPerPage);
+    }, [sortedRemisiones, currentPage, itemsPerPage]);
 
-    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    const totalPages = Math.ceil(sortedRemisiones.length / itemsPerPage);
 
     const handleSaveRemision = (data) => {
         try {
@@ -649,7 +679,7 @@ export default function Remisiones() {
                     <option value="">Todos los clientes</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{filtered.length} registro(s)</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{sortedRemisiones.length} registro(s)</span>
             </div>
 
             {/* Table */}
@@ -658,8 +688,32 @@ export default function Remisiones() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                {['ID', 'Cliente / Obra', 'Fecha', 'Equipos', 'Transporte', 'Estado', 'Días activo', 'Acciones'].map(h => (
-                                    <th key={h} style={{ padding: '0.75rem 0.85rem', textAlign: 'left', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                                {[
+                                    { label: 'ID', key: 'id' },
+                                    { label: 'Cliente / Obra', key: 'clientName' },
+                                    { label: 'Fecha', key: 'fecha' },
+                                    { label: 'Equipos', key: null },
+                                    { label: 'Transporte', key: 'transporte' },
+                                    { label: 'Estado', key: 'estado' },
+                                    { label: 'Días activo', key: null },
+                                    { label: 'Acciones', key: null }
+                                ].map(({ label, key }) => (
+                                    <th 
+                                        key={label} 
+                                        onClick={() => key && handleSort(key)}
+                                        style={{ 
+                                            padding: '0.75rem 0.85rem', textAlign: 'left', fontSize: '0.7rem', color: 'var(--text-muted)', 
+                                            fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
+                                            cursor: key ? 'pointer' : 'default', userSelect: 'none'
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            {label}
+                                            {key && sortConfig.key === key && (
+                                                sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                                            )}
+                                        </div>
+                                    </th>
                                 ))}
                             </tr>
                         </thead>
@@ -715,7 +769,7 @@ export default function Remisiones() {
                                     </tr>
                                 );
                             })}
-                            {filtered.length === 0 && (
+                            {sortedRemisiones.length === 0 && (
                                 <tr><td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron remisiones</td></tr>
                             )}
                         </tbody>
@@ -742,7 +796,7 @@ export default function Remisiones() {
                         </div>
                         <div style={{ width: '1px', height: '16px', background: 'var(--surface-border)' }}></div>
                         <div>
-                            Mostrando {filtered.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, filtered.length)} de {filtered.length} registros
+                            Mostrando {sortedRemisiones.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, sortedRemisiones.length)} de {sortedRemisiones.length} registros
                         </div>
                     </div>
 

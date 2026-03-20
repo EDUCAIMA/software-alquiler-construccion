@@ -4,7 +4,7 @@ import {
     X, FileText, Shield, Download, Copy, Share2,
     PenTool, Fingerprint, MapPin, ChevronRight, Upload, Eye,
     Plus, List, Edit2,
-    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown
+    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format } from 'date-fns';
@@ -61,6 +61,7 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
     const [copied, setCopied] = useState(false);
 
     const shareLink = `${window.location.origin}/public/cotizacion/${cot.id}`;
+    console.log('🏛️ RENDER ApprovalModal:', { cotId: cot.id, mode, loading });
 
     const handleFileChange = (e) => {
         const f = e.target.files[0];
@@ -71,10 +72,19 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
         reader.readAsDataURL(f);
     };
 
-    const handleConfirmInternal = () => {
-        setLoading(true);
-        onApprove({ firma: file, notas: notes || cot.notes });
-        onClose();
+    const handleConfirmInternal = async () => {
+        try {
+            console.log('📝 INICIANDO APROBACIÓN INTERNA:', { cotId: cot.id, fileLength: file?.length, notes });
+            setLoading(true);
+            await onApprove({ firma: file, notas: notes || cot.notas });
+            console.log('✅ APROBACIÓN INTERNA COMPLETADA');
+            onClose();
+        } catch (e) {
+            console.error('❌ ERROR EN handleConfirmInternal:', e);
+            alert('Error al procesar la aprobación interna: ' + e.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleCopy = () => {
@@ -151,7 +161,7 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
                             <div style={{ marginBottom: '1.5rem' }}>
                                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#104166', marginBottom: '0.6rem', textTransform: 'uppercase' }}>Soporte de Aprobación (Opcional)</label>
                                 <div style={{ position: 'relative', border: '2px dashed #cbd5e1', borderRadius: 14, padding: '1.5rem', textAlign: 'center', background: '#f1f5f9', cursor: 'pointer' }} 
-                                     onClick={() => document.getElementById('support-file').click()}>
+                                     onClick={() => { console.log('📂 CLIC EN SUBIR ARCHIVO'); document.getElementById('support-file').click(); }}>
                                     <input id="support-file" type="file" hidden accept=".pdf,image/*" onChange={handleFileChange} />
                                     {fileName ? 
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
@@ -167,8 +177,17 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
                                 <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Ej: Aprobado según correo..." style={{ width: '100%', padding: '0.75rem', borderRadius: 12, border: '1px solid #cbd5e1', color: '#000', fontSize: '0.9rem', minHeight: 90, boxSizing: 'border-box' }} />
                             </div>
                             <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button onClick={() => setMode(null)} className="btn btn-secondary" style={{ flex: 1 }}>Volver</button>
-                                <button onClick={handleConfirmInternal} disabled={loading} className="btn btn-primary" style={{ flex: 2, background: 'linear-gradient(135deg,#2365AB,#104166)', border: 'none', color: 'white' }}>
+                                <button type="button" onClick={() => { console.log('◀️ VOLVER CLICADO'); setMode(null); }} className="btn btn-secondary" style={{ flex: 1 }}>Volver</button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => { 
+                                        console.log('🔘 BOTÓN CONFIRMAR CLICADO'); 
+                                        handleConfirmInternal(); 
+                                    }} 
+                                    disabled={loading} 
+                                    className="btn btn-primary" 
+                                    style={{ flex: 2, background: 'linear-gradient(135deg,#2365AB,#104166)', border: 'none', color: 'white' }}
+                                >
                                     {loading ? 'Procesando...' : 'Confirmar Aprobación'}
                                 </button>
                             </div>
@@ -458,17 +477,50 @@ export default function Cotizaciones() {
         setSharing(cotId);
     };
 
-    const filtered = useMemo(() =>
-        cotizaciones.filter(c => {
+    const total = (c) => (c.items || []).reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (c.transporte || 0);
+    const kpi = (est) => cotizaciones.filter(c => c.estado === est).length;
+
+    const [sortConfig, setSortConfig] = useState({ key: 'fecha', direction: 'desc' });
+
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+        setSortConfig({ key, direction });
+    };
+
+    const sortedCotizaciones = useMemo(() => {
+        const filtered = cotizaciones.filter(c => {
             const cl = clients.find(x => x.id === c.clientId);
             const q = search.toLowerCase();
             return (c.id.toLowerCase().includes(q) || cl?.name?.toLowerCase()?.includes(q)) &&
                 (filterE === 'Todos' || c.estado === filterE);
-        }).sort((a, b) => b.fecha?.localeCompare(a.fecha || '') || 0)
-        , [cotizaciones, search, filterE, clients]);
+        });
 
-    const total = (c) => c.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (c.transporte || 0);
-    const kpi = (est) => cotizaciones.filter(c => c.estado === est).length;
+        if (sortConfig.key) {
+            filtered.sort((a, b) => {
+                let aVal, bVal;
+                
+                if (sortConfig.key === 'clientName') {
+                    aVal = (clients.find(x => x.id === a.clientId)?.name || '').toLowerCase();
+                    bVal = (clients.find(x => x.id === b.clientId)?.name || '').toLowerCase();
+                } else if (sortConfig.key === 'total') {
+                    aVal = total(a);
+                    bVal = total(b);
+                } else {
+                    aVal = a[sortConfig.key] || '';
+                    bVal = b[sortConfig.key] || '';
+                    if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                    if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+                }
+
+                if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return filtered;
+    }, [cotizaciones, search, filterE, clients, sortConfig]);
+
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -476,10 +528,10 @@ export default function Cotizaciones() {
 
     const paginatedCotizaciones = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
-        return filtered.slice(start, start + itemsPerPage);
-    }, [filtered, currentPage, itemsPerPage]);
+        return sortedCotizaciones.slice(start, start + itemsPerPage);
+    }, [sortedCotizaciones, currentPage, itemsPerPage]);
 
-    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    const totalPages = Math.ceil(sortedCotizaciones.length / itemsPerPage);
 
     const IS = { padding: '0.55rem 0.75rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none' };
 
@@ -528,7 +580,7 @@ export default function Cotizaciones() {
                 <select value={filterE} onChange={e => setFilterE(e.target.value)} style={{ ...IS, minWidth: 140 }}>
                     {['Todos', 'Borrador', 'Enviada', 'Aprobada', 'Facturada', 'Rechazada'].map(v => <option key={v}>{v}</option>)}
                 </select>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{filtered.length} registro(s)</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{sortedCotizaciones.length} registro(s)</span>
             </div>
 
             {/* Table */}
@@ -537,8 +589,32 @@ export default function Cotizaciones() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                {['ID', 'Cliente / Obra', 'Fecha', 'Válida hasta', 'Ítems', 'Total Est.', 'Estado', 'Acción'].map(h => (
-                                    <th key={h} style={{ padding: '0.75rem 0.8rem', textAlign: 'left', fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                                {[
+                                    { label: 'ID', key: 'id' },
+                                    { label: 'Cliente / Obra', key: 'clientName' },
+                                    { label: 'Fecha', key: 'fecha' },
+                                    { label: 'Válida hasta', key: null },
+                                    { label: 'Ítems', key: null },
+                                    { label: 'Total Est.', key: 'total' },
+                                    { label: 'Estado', key: 'estado' },
+                                    { label: 'Acción', key: null }
+                                ].map(({ label, key }) => (
+                                    <th 
+                                        key={label} 
+                                        onClick={() => key && handleSort(key)}
+                                        style={{ 
+                                            padding: '0.75rem 0.8rem', textAlign: 'left', fontSize: '0.68rem', color: 'var(--text-muted)', 
+                                            fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
+                                            cursor: key ? 'pointer' : 'default', userSelect: 'none'
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            {label}
+                                            {key && sortConfig.key === key && (
+                                                sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                                            )}
+                                        </div>
+                                    </th>
                                 ))}
                             </tr>
                         </thead>
@@ -596,7 +672,7 @@ export default function Cotizaciones() {
                                     </tr>
                                 );
                             })}
-                            {filtered.length === 0 && <tr><td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron cotizaciones</td></tr>}
+                            {sortedCotizaciones.length === 0 && <tr><td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron cotizaciones</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -621,7 +697,7 @@ export default function Cotizaciones() {
                         </div>
                         <div style={{ width: '1px', height: '16px', background: 'var(--surface-border)' }}></div>
                         <div>
-                            Mostrando {filtered.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, filtered.length)} de {filtered.length} registros
+                            Mostrando {sortedCotizaciones.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, sortedCotizaciones.length)} de {sortedCotizaciones.length} registros
                         </div>
                     </div>
 

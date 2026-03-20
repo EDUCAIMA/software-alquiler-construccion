@@ -3,7 +3,7 @@ import {
     PackagePlus, UploadCloud, QrCode,
     AlertTriangle, X, Wrench, Trash2, ArrowDownCircle,
     ShieldCheck, ShieldAlert, Download, Factory, Pencil,
-    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Search
+    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Search, ChevronUp
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import QRCode from 'qrcode';
@@ -406,19 +406,46 @@ export default function Products() {
     const fileInputRef = useRef(null);
 
     const [search, setSearch] = useState('');
+    const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
+
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+        setSortConfig({ key, direction });
+    };
+
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
-    const filtered = useMemo(() => products.filter(p => {
-        const q = search.toLowerCase();
-        return (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q);
-    }), [products, search]);
+    
+    // Filter + Sort
+    const sorted = useMemo(() => {
+        const filtered = products.filter(p => {
+            const q = search.toLowerCase();
+            return (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q);
+        });
+
+        if (sortConfig.key) {
+            filtered.sort((a, b) => {
+                let aVal = a[sortConfig.key] || '';
+                let bVal = b[sortConfig.key] || '';
+                
+                if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+                if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return filtered;
+    }, [products, search, sortConfig]);
 
     const paginatedProducts = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
-        return filtered.slice(start, start + itemsPerPage);
-    }, [filtered, currentPage, itemsPerPage]);
+        return sorted.slice(start, start + itemsPerPage);
+    }, [sorted, currentPage, itemsPerPage]);
 
-    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    const totalPages = Math.ceil(sorted.length / itemsPerPage);
 
     const hasPendingMaint = (productId) =>
         maintenances.some(m => m.productId === productId && (m.status === 'Pendiente' || m.status === 'En Proceso'));
@@ -460,7 +487,7 @@ export default function Products() {
                         style={{ padding: '0.55rem 0.75rem', paddingLeft: '2rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', width: '100%', boxSizing: 'border-box' }} 
                     />
                 </div>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{filtered.length} equipo(s) encontrado(s)</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{sorted.length} equipo(s) encontrado(s)</span>
             </div>
 
             {/* Table */}
@@ -468,9 +495,34 @@ export default function Products() {
                 <div className="glass-table-container">
                     <table className="glass-table">
                         <thead>
-                            <tr>
-                                <th>Cod.</th><th>Imagen</th><th>Nombre</th><th>Categoría</th>
-                                <th>Stock</th><th>Tarifa Alquiler</th><th>Estado</th><th>Acción</th>
+                            <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                                {[
+                                    { label: 'Cod.', key: 'id' },
+                                    { label: 'Imagen', key: null },
+                                    { label: 'Nombre', key: 'name' },
+                                    { label: 'Categoría', key: 'category' },
+                                    { label: 'Stock', key: 'totalStock' },
+                                    { label: 'Tarifa Alquiler', key: 'value' },
+                                    { label: 'Estado', key: 'estado' },
+                                    { label: 'Acción', key: null }
+                                ].map(({ label, key }) => (
+                                    <th 
+                                        key={label} 
+                                        onClick={() => key && handleSort(key)}
+                                        style={{ 
+                                            padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', 
+                                            color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', 
+                                            letterSpacing: '0.05em', cursor: key ? 'pointer' : 'default', userSelect: 'none'
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            {label}
+                                            {key && sortConfig.key === key && (
+                                                sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                                            )}
+                                        </div>
+                                    </th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody>

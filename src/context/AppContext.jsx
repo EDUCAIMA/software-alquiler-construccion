@@ -15,7 +15,14 @@ const USERS = [
 const api = {
   get: (url) => fetch(url).then(r => r.json()),
   post: (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
-  put: (url, body) => fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
+  put: async (url, data) => {
+    const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error en PUT ${url} (${res.status})`);
+    }
+    return res.json();
+  },
   del: (url) => fetch(url, { method: 'DELETE' }).then(r => r.json()),
 };
 
@@ -235,46 +242,51 @@ export const AppProvider = ({ children }) => {
 
   // ─── Crear factura directamente desde una cotización aprobada ─────────────
   const createInvoiceFromCotizacion = async (cotizacionId) => {
-    const cot = cotizaciones.find(c => c.id === cotizacionId);
-    if (!cot) return;
+    try {
+      console.log('🚀 CREATE INVOICE FROM COTIZACION:', cotizacionId);
+      const cot = cotizaciones.find(c => c.id === cotizacionId);
+      if (!cot) throw new Error('Cotización no encontrada');
 
-    const items = cot.items.map(i => ({
-      productId: i.productId,
-      quantity: i.cantidad,
-      days: i.dias,
-      price: i.tarifaDia,
-    }));
-    const subtotal = items.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
-    const client = clients.find(c => c.id === cot.clientId);
-    const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
-    const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
-    const amount = subtotal + iva + ret + (Number(cot.transporte) || 0);
+      const items = cot.items.map(i => ({
+        productId: i.productId,
+        quantity: i.cantidad,
+        days: i.dias,
+        price: i.tarifaDia,
+      }));
+      const subtotal = items.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
+      const client = clients.find(c => c.id === cot.clientId);
+      const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
+      const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
+      const amount = subtotal + iva + ret + (Number(cot.transporte) || 0);
 
-    const newInvoice = {
-      clientId: cot.clientId,
-      obraId: cot.obraId,
-      cotizacionId,
-      items,
-      amount,
-      status: 'Pending',
-      date: format(new Date(), 'yyyy-MM-dd'),
-      remisionEnabled: false,
-      remisionCreada: false,
-      id: nextId(invoices, 'INV'),
-    };
-    await api.post('/api/invoices', newInvoice);
+      const newInvoice = {
+        clientId: cot.clientId,
+        obraId: cot.obraId,
+        cotizacionId,
+        items,
+        amount,
+        status: 'Pending',
+        date: format(new Date(), 'yyyy-MM-dd'),
+        remisionEnabled: false,
+        remisionCreada: false,
+        id: nextId(invoices, 'INV'),
+      };
+      await api.post('/api/invoices', newInvoice);
 
-    // Actualizar deuda del cliente
-    if (client) {
-      await api.put(`/api/clients/${client.id}`, { ...client, debt: client.debt + amount });
+      // Actualizar deuda del cliente
+      if (client) {
+        await api.put(`/api/clients/${client.id}`, { ...client, debt: (client.debt || 0) + amount });
+      }
+
+      // Marcar cotización como Facturada
+      await api.put(`/api/cotizaciones/${cotizacionId}`, { ...cot, estado: 'Facturada', facturaId: newInvoice.id });
+
+      await reloadAll();
+      alert('✅ Factura creada con éxito. Puede verla en el módulo de facturación.');
+    } catch (e) {
+      console.error('ERROR FACTURANDO:', e);
+      alert('❌ Error al facturar: ' + e.message);
     }
-
-    // Marcar cotización como Facturada
-    await api.put(`/api/cotizaciones/${cotizacionId}`, { ...cot, estado: 'Facturada', facturaId: newInvoice.id });
-
-    await reloadAll();
-    logAction('Factura desde Cotización', `${newInvoice.id} ← ${cotizacionId}`, client?.name || 'Unknown', 'exit');
-    return newInvoice;
   };
 
   const payInvoice = async (invoiceId) => {
@@ -443,11 +455,19 @@ export const AppProvider = ({ children }) => {
   };
 
   const actualizarEstadoCotizacion = async (cotId, nuevoEstado, extra = {}) => {
-    const current = cotizaciones.find(c => c.id === cotId);
-    if (!current) return;
-    await api.put(`/api/cotizaciones/${cotId}`, { ...current, estado: nuevoEstado, ...extra });
-    await reloadAll();
-    logAction(`Cotización ${nuevoEstado}`, cotId, '', 'system');
+    try {
+      console.log('🚀 ACTUALIZAR ESTADO COTIZACION:', { cotId, nuevoEstado, extra });
+      const current = cotizaciones.find(c => c.id === cotId);
+      if (!current) throw new Error('Cotización no encontrada localmente');
+      console.log('🚀 PROCESANDO API.PUT:', `/api/cotizaciones/${cotId}`, { ...current, estado: nuevoEstado, ...extra });
+      await api.put(`/api/cotizaciones/${cotId}`, { ...current, estado: nuevoEstado, ...extra });
+      await reloadAll();
+      logAction(`Cotización ${nuevoEstado}`, cotId, '', 'system');
+      alert(`✅ Cotización ${nuevoEstado} con éxito.`);
+    } catch (e) {
+      console.error('❌ ERROR ACTUALIZANDO ESTADO:', e);
+      alert('❌ Error al actualizar estado: ' + e.message);
+    }
   };
 
   const updateCotizacion = async (cotId, data) => {

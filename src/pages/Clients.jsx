@@ -3,7 +3,7 @@ import {
     Plus, Search, Printer, FileText, X, Building2, MapPin,
     Phone, Mail, Edit3, ChevronDown, ChevronRight, CheckCircle,
     Clock, AlertTriangle, Receipt, Percent, User, Download, Trash2, ShieldAlert,
-    ChevronLeft, ChevronsLeft, ChevronsRight
+    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronUp
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import jsPDF from 'jspdf';
@@ -667,15 +667,39 @@ export default function Clients() {
     const [editingClient, setEditingClient] = useState(null);
     const [selectedClient, setSelectedClient] = useState(null);
     const [deletingClient, setDeletingClient] = useState(null);
+    const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
 
-    // Search + filter
-    const filtered = useMemo(() => clients.filter(c => {
-        const q = search.toLowerCase();
-        const matchSearch = (c.name || '').toLowerCase().includes(q) || (c.nit || '').toLowerCase().includes(q);
-        const matchDeuda = filterDeuda === 'Todos' || (filterDeuda === 'Con Deuda' ? c.debt > 0 : c.debt === 0);
-        const matchReg = filterRegimen === 'Todos' || c.regimen === filterRegimen;
-        return matchSearch && matchDeuda && matchReg;
-    }), [clients, search, filterDeuda, filterRegimen]);
+    const handleSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+        setSortConfig({ key, direction });
+    };
+
+    // Search + filter + Sort
+    const sorted = useMemo(() => {
+        const filtered = clients.filter(c => {
+            const q = search.toLowerCase();
+            const matchSearch = (c.name || '').toLowerCase().includes(q) || (c.nit || '').toLowerCase().includes(q);
+            const matchDeuda = filterDeuda === 'Todos' || (filterDeuda === 'Con Deuda' ? c.debt > 0 : c.debt === 0);
+            const matchReg = filterRegimen === 'Todos' || c.regimen === filterRegimen;
+            return matchSearch && matchDeuda && matchReg;
+        });
+
+        if (sortConfig.key) {
+            filtered.sort((a, b) => {
+                let aVal = a[sortConfig.key] || '';
+                let bVal = b[sortConfig.key] || '';
+                
+                if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+                if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return filtered;
+    }, [clients, search, filterDeuda, filterRegimen, sortConfig]);
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -683,10 +707,10 @@ export default function Clients() {
 
     const paginatedClients = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
-        return filtered.slice(start, start + itemsPerPage);
-    }, [filtered, currentPage, itemsPerPage]);
+        return sorted.slice(start, start + itemsPerPage);
+    }, [sorted, currentPage, itemsPerPage]);
 
-    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    const totalPages = Math.ceil(sorted.length / itemsPerPage);
 
     // KPIs
     const totalDeuda = clients.reduce((s, c) => s + c.debt, 0);
@@ -769,7 +793,7 @@ export default function Clients() {
                 <select value={filterRegimen} onChange={e => setFilterRegimen(e.target.value)} style={{ ...inputStyle, minWidth: 140 }}>
                     <option>Todos</option><option value="Común">Régimen Común</option><option value="Simplificado">Simplificado</option>
                 </select>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{filtered.length} cliente{filtered.length !== 1 ? 's' : ''}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{sorted.length} cliente{sorted.length !== 1 ? 's' : ''}</span>
             </div>
 
             {/* Table */}
@@ -778,8 +802,31 @@ export default function Clients() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                {['Cliente', 'NIT', 'Tipo / Régimen', 'IVA%  Ret%', 'Obras', 'Cartera', 'Acciones'].map(h => (
-                                    <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                                {[
+                                    { label: 'Cliente', key: 'name' },
+                                    { label: 'NIT', key: 'nit' },
+                                    { label: 'Tipo / Régimen', key: null },
+                                    { label: 'IVA% Ret%', key: null },
+                                    { label: 'Obras', key: null },
+                                    { label: 'Cartera', key: 'debt' },
+                                    { label: 'Acciones', key: null }
+                                ].map(({ label, key }) => (
+                                    <th 
+                                        key={label} 
+                                        onClick={() => key && handleSort(key)}
+                                        style={{ 
+                                            padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.72rem', color: 'var(--text-muted)', 
+                                            fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
+                                            cursor: key ? 'pointer' : 'default', userSelect: 'none' 
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            {label}
+                                            {key && sortConfig.key === key && (
+                                                sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                                            )}
+                                        </div>
+                                    </th>
                                 ))}
                             </tr>
                         </thead>
@@ -846,7 +893,7 @@ export default function Clients() {
                                     </tr>
                                 );
                             })}
-                            {filtered.length === 0 && (
+                            {sorted.length === 0 && (
                                 <tr><td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron clientes</td></tr>
                             )}
                         </tbody>
@@ -873,7 +920,7 @@ export default function Clients() {
                         </div>
                         <div style={{ width: '1px', height: '16px', background: 'var(--surface-border)' }}></div>
                         <div>
-                            Mostrando {filtered.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, filtered.length)} de {filtered.length} registros
+                            Mostrando {sorted.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, sorted.length)} de {sorted.length} registros
                         </div>
                     </div>
 
