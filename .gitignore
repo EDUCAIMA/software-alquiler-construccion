@@ -7,24 +7,31 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
+node_modules/
+.expo/
+dist/
 dist-ssr
+web-build/
 *.local
 
 # Editor directories and files
-.vscode/*
+.vscode/
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
 
-# Variables de entorno (credenciales de Railway - NO subir a git)
+# Variables de entorno
 .env
 .env.local
 .env.production
 
+# Proyecto específico
+backend/node_modules/
+backend/.env
