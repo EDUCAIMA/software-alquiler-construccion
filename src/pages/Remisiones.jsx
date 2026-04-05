@@ -3,7 +3,7 @@ import {
     Plus, Search, Truck, Package, RotateCcw, CheckCircle,
     AlertTriangle, Clock, X, ChevronRight, Filter, FileText,
     MapPin, ArrowDownCircle, Info, CreditCard,
-    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Trash2
+    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Trash2, Ban
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
@@ -472,7 +472,7 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Remisiones() {
-    const { clients, products, remisiones, invoices, addRemision, registrarDevolucion, maintenances, marcarRemisionCreada, deleteRemision } = useAppContext();
+    const { clients, products, remisiones, invoices, addRemision, registrarDevolucion, maintenances, marcarRemisionCreada, deleteRemision, cancelRemision } = useAppContext();
 
     const [search, setSearch] = useState('');
     const [filterEstado, setFilterEstado] = useState('Todos');
@@ -725,7 +725,7 @@ export default function Remisiones() {
                                 const dias = rem.estado !== 'Cerrada' ? differenceInDays(new Date(), new Date(rem.fecha)) : '—';
                                 const totalItems = rem.items.reduce((s, i) => s + i.cantidad, 0);
                                 const totalDev = rem.items.reduce((s, i) => s + i.cantidadDevuelta, 0);
-                                const canReturn = rem.estado !== 'Cerrada';
+                                const canReturn = rem.estado !== 'Cerrada' && rem.estado !== 'Cancelada';
                                 return (
                                     <tr key={rem.id} style={{ borderBottom: '1px solid var(--surface-border)' }}
                                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
@@ -764,6 +764,20 @@ export default function Remisiones() {
                                                         className="btn btn-secondary btn-sm"
                                                         style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
                                                         <RotateCcw size={13} /> Devolución
+                                                    </button>
+                                                )}
+                                                {rem.estado !== 'Cancelada' && rem.estado !== 'Cerrada' && (
+                                                    <button
+                                                        onClick={() => {
+                                                            if (window.confirm(`¿Está seguro de ANULAR la remisión ${rem.id}? Esto devolverá todo el stock al inventario.`)) {
+                                                                cancelRemision(rem.id);
+                                                            }
+                                                        }}
+                                                        className="btn btn-sm"
+                                                        style={{ background: 'rgba(249,115,22,0.08)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)', padding: '0.4rem', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                        title="Anular Remisión (Retornar Stock)"
+                                                    >
+                                                        <Ban size={13} />
                                                     </button>
                                                 )}
                                                 <button

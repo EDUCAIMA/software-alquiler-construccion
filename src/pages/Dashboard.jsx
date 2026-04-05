@@ -305,15 +305,6 @@ export default function Dashboard() {
           <div className="stat-mini-value">${totalDebt.toLocaleString()}</div>
           <div className="stat-mini-label">Cartera Pendiente</div>
         </div>
-
-        {/* Mantenimientos */}
-        <div className="mini-stat-dashboard purple">
-          <div className="stat-mini-value">{maintIndex}%</div>
-          <div className="stat-mini-label">Índice Mantenimientos</div>
-          <div className="stat-mini-subtext">
-            {activeMaintenances} activos · {pendingMaintenances} pendientes
-          </div>
-        </div>
       </div>
 
       {/* ── Categorías KPI Cards ───────────────────────────────────────────── */}
