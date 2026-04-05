@@ -2,7 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Package, FileText, Activity,
-  Wrench, LogOut, ShieldAlert, Truck, Calculator, FileSignature, DollarSign, Settings, Menu, X
+  Wrench, LogOut, ShieldAlert, Truck, Calculator, FileSignature, DollarSign, Settings, Menu, X,
+  ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import clsx from 'clsx';
 import { AppProvider, useAppContext } from './context/AppContext';
@@ -77,15 +78,15 @@ function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
         />
       )}
       <aside className={clsx("sidebar", isOpen && "open", isCollapsed && "collapsed")}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0.4rem', position: 'relative' }}>
           <button 
             onClick={onToggleCollapse} 
-            className="desktop-only"
-            style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', cursor: 'pointer', padding: '0.4rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            className="collapse-toggle desktop-only"
+            title={isCollapsed ? "Expandir menú" : "Contraer menú"}
           >
-            <Menu size={18} />
+            {isCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
           </button>
-          <button onClick={onClose} className="mobile-only" style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0.5rem', display: 'none' }}>
+          <button onClick={onClose} className="mobile-only-btn" style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0.5rem' }}>
             <X size={24} />
           </button>
         </div>
@@ -145,8 +146,8 @@ function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
           <LogOut size={14} /> {!isCollapsed && <span>Cerrar Sesión</span>}
         </button>
         {!isCollapsed && (
-          <div className="version-text" style={{ marginTop: '0.75rem', textAlign: 'center', width: '100%', fontSize: '0.65rem', fontWeight: 700, color: 'white', letterSpacing: '0.1em' }}>
-            VERSIÓN 1.3.1
+          <div className="version-text" style={{ marginTop: '0.75rem', textAlign: 'center', width: '100%', fontSize: '0.65rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em' }}>
+            VERSIÓN 1.3.2-REFRESH
           </div>
         )}
       </div>
