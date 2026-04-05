@@ -307,43 +307,39 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Categorías KPI Cards ───────────────────────────────────────────── */}
+      {/* ── Categorías Mini KPI Items ───────────────────────────────────────── */}
       <h3 className="mb-4" style={{ marginTop: '1rem' }}>Indicadores por Categoría (En Calle / Total)</h3>
-      <div className="grid-cards" style={{ marginBottom: '1.5rem' }}>
+      <div className="mini-stat-grid">
         {/* Maquinaria Pesada */}
-        <div className="stat-card blue">
-          <div className="icon-wrapper blue"><Wrench size={24} /></div>
-          <div>
-            <div className="stat-value">{maqPesada.rented} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ {maqPesada.total}</span></div>
-            <div className="stat-label">Maquinaria pesada</div>
+        <div className="mini-stat-dashboard blue">
+          <div className="stat-mini-value">
+            {maqPesada.rented} <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>/ {maqPesada.total}</span>
           </div>
+          <div className="stat-mini-label">Maquinaria pesada</div>
         </div>
 
         {/* Herramientas Eléctricas */}
-        <div className="stat-card orange">
-          <div className="icon-wrapper orange"><Wrench size={24} /></div>
-          <div>
-            <div className="stat-value">{maqElectricas.rented} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ {maqElectricas.total}</span></div>
-            <div className="stat-label">Herramientas eléctricas</div>
+        <div className="mini-stat-dashboard orange">
+          <div className="stat-mini-value">
+            {maqElectricas.rented} <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>/ {maqElectricas.total}</span>
           </div>
+          <div className="stat-mini-label">Herramientas eléctricas</div>
         </div>
 
         {/* Estructuras y andamios */}
-        <div className="stat-card purple">
-          <div className="icon-wrapper purple"><Package size={24} /></div>
-          <div>
-            <div className="stat-value">{estAndamios.rented} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ {estAndamios.total}</span></div>
-            <div className="stat-label">Estructuras y andamios</div>
+        <div className="mini-stat-dashboard purple">
+          <div className="stat-mini-value">
+            {estAndamios.rented} <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>/ {estAndamios.total}</span>
           </div>
+          <div className="stat-mini-label">Estructuras y andamios</div>
         </div>
 
         {/* Otros */}
-        <div className="stat-card green">
-          <div className="icon-wrapper green"><Package size={24} /></div>
-          <div>
-            <div className="stat-value">{otros.rented} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ {otros.total}</span></div>
-            <div className="stat-label">Otros</div>
+        <div className="mini-stat-dashboard green">
+          <div className="stat-mini-value">
+            {otros.rented} <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>/ {otros.total}</span>
           </div>
+          <div className="stat-mini-label">Otros</div>
         </div>
       </div>
 
