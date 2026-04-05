@@ -14,7 +14,14 @@ const USERS = [
 // ─── Helper genérico de API ───────────────────────────────────────────────────
 const api = {
   get: (url) => fetch(url).then(r => r.json()),
-  post: (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
+  post: async (url, body) => {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Error en POST ${url} (${res.status})`);
+    }
+    return res.json();
+  },
   put: async (url, data) => {
     const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     if (!res.ok) {
@@ -23,7 +30,14 @@ const api = {
     }
     return res.json();
   },
-  del: (url) => fetch(url, { method: 'DELETE' }).then(r => r.json()),
+  del: async (url) => {
+    const res = await fetch(url, { method: 'DELETE' });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Error en DELETE ${url} (${res.status})`);
+    }
+    return res.json();
+  },
 };
 
 export const AppProvider = ({ children }) => {
@@ -435,6 +449,34 @@ export const AppProvider = ({ children }) => {
     logAction('Devolución PEPS', `Obra ${obraId}`, client?.name || 'N/A', 'entry');
   };
 
+  const deleteRemision = async (remId) => {
+    const rem = remisiones.find(r => r.id === remId);
+    if (!rem) return;
+
+    // 1. Reintegrar stock de lo que NO se ha devuelto aún
+    for (const item of rem.items) {
+      const prod = products.find(p => p.id === item.productId);
+      const pendiente = item.cantidad - (item.cantidadDevuelta || 0);
+      if (prod && pendiente > 0) {
+        await api.put(`/api/products/${prod.id}`, { 
+          ...prod, 
+          availableStock: Math.min(prod.totalStock, prod.availableStock + pendiente) 
+        });
+      }
+    }
+
+    // 2. Si venía de una factura, marcarla como "remisión no creada" (opcional si hay rastro)
+    const inv = invoices.find(i => i.id === rem.invoiceId || i.id === rem.id.replace('REM', 'INV')); // Heurística simple
+    if (inv) {
+      await api.put(`/api/invoices/${inv.id}`, { ...inv, remisionCreada: false });
+    }
+
+    // 3. Eliminar
+    await api.del(`/api/remisiones/${remId}`);
+    await reloadAll();
+    logAction('Remisión Eliminada', remId, '', 'system');
+  };
+
   // ─── COTIZACIONES CRUD ────────────────────────────────────────────────────
   const addCotizacion = async (data) => {
     const id = nextId(cotizaciones, 'COT');
@@ -476,6 +518,19 @@ export const AppProvider = ({ children }) => {
     await api.put(`/api/cotizaciones/${cotId}`, { ...current, ...data });
     await reloadAll();
     logAction('Cotización Actualizada', cotId, '', 'system');
+  };
+
+  const deleteCotizacion = async (cotId) => {
+    const cot = cotizaciones.find(c => c.id === cotId);
+    if (!cot) return;
+    
+    if (cot.facturaId) {
+      throw new Error('No se puede eliminar una cotización que ya tiene factura asociada.');
+    }
+
+    await api.del(`/api/cotizaciones/${cotId}`);
+    await reloadAll();
+    logAction('Cotización Eliminada', cotId, '', 'system');
   };
 
   // ─── GASTOS CRUD ──────────────────────────────────────────────────────────
@@ -547,9 +602,9 @@ export const AppProvider = ({ children }) => {
       // Other
       logs, maintenances, addMaintenance, editMaintenance,
       // Remisiones
-      remisiones, addRemision, registrarDevolucion,
+      remisiones, addRemision, registrarDevolucion, deleteRemision,
       // Cotizaciones
-      cotizaciones, addCotizacion, actualizarEstadoCotizacion, updateCotizacion,
+      cotizaciones, addCotizacion, actualizarEstadoCotizacion, updateCotizacion, deleteCotizacion,
       // Gastos
       gastos, addGasto, pagarGasto,
       empleados, addEmpleado,

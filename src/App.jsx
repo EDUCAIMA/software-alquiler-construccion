@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Package, FileText, Activity,
-  Wrench, LogOut, ShieldAlert, Truck, Calculator, FileSignature, DollarSign, Settings
+  Wrench, LogOut, ShieldAlert, Truck, Calculator, FileSignature, DollarSign, Settings, Menu, X
 } from 'lucide-react';
 import clsx from 'clsx';
 import { AppProvider, useAppContext } from './context/AppContext';
@@ -43,7 +43,7 @@ function AccessDenied() {
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
-function Sidebar() {
+function Sidebar({ isOpen, onClose }) {
   const location = useLocation();
   const { currentUser, logout, canViewDashboard, settings } = useAppContext();
   console.log('Sidebar render. Settings:', settings);
@@ -66,7 +66,22 @@ function Sidebar() {
   const roleLabels = { admin: 'Administrador', gerente: 'Gerente', operativo: 'Operativo' };
 
   return (
-    <aside className="sidebar">
+    <>
+      {isOpen && (
+        <div 
+          onClick={onClose}
+          style={{ 
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 45,
+            backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s'
+          }} 
+        />
+      )}
+      <aside className={clsx("sidebar", isOpen && "open")}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-1rem', padding: '0.5rem' }}>
+          <button onClick={onClose} className="mobile-only" style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0.5rem', display: 'none' }}>
+            <X size={24} />
+          </button>
+        </div>
       <div className="sidebar-header">
         <div className="logo-icon">
           {settings?.logoUI ? (
@@ -123,19 +138,34 @@ function Sidebar() {
           VERSIÓN 1.3.1
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 
 function Layout({ children }) {
+  const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+
   return (
     <div className="layout-container">
-      <Sidebar />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <main className="main-content">
+        <div className="mobile-header" style={{ display: 'none', padding: '1rem', borderBottom: '1px solid var(--surface-border)', background: 'white', marginBottom: '1rem', borderRadius: '12px' }}>
+          <button onClick={() => setIsSidebarOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}>
+            <Menu size={24} />
+          </button>
+          <span style={{ fontWeight: 800, color: 'var(--primary)', marginLeft: '1rem' }}>CIELO ARQUILER</span>
+        </div>
         <div className="page-container page-animate">
           {children}
         </div>
       </main>
+      <style>{`
+        @media (max-width: 1024px) {
+          .mobile-header { display: flex !important; align-items: center; }
+          .mobile-only { display: block !important; }
+        }
+      `}</style>
     </div>
   );
 }

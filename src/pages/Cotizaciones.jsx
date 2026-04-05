@@ -303,7 +303,7 @@ function ContratoEditorModal({ cot, onClose, onSave }) {
 
 
 // ─── Detail Panel ─────────────────────────────────────────────────────────────
-function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, onOpenApproval, onFacturar, onSendLink, onEditContrato, onEdit }) {
+function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, onOpenApproval, onFacturar, onSendLink, onEditContrato, onEdit, onDelete }) {
     const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
     const subtotal = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0);
     const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
@@ -312,7 +312,7 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
 
     return (
         <>
-            <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 520, zIndex: 900, background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 40px rgba(0,0,0,0.4)', overflowY: 'auto', overflowX: 'auto' }}>
+            <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: '100%', maxWidth: 520, zIndex: 900, background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 40px rgba(0,0,0,0.4)', overflowY: 'auto', overflowX: 'auto' }}>
                 {/* Header */}
                 <div style={{ background: 'linear-gradient(135deg,#104166,#154272)', padding: '1.5rem', flexShrink: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -447,6 +447,20 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
                                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>Ver en Facturación para gestionar el pago</div>
                             </div>
                         )}
+
+                        {/* Botón Eliminar — Solo si no hay factura y el usuario confirma */}
+                        {!cot.facturaId && (
+                            <button 
+                                onClick={() => {
+                                    if (window.confirm(`¿Está seguro de eliminar la cotización ${cot.id}? Esta acción no se puede deshacer.`)) {
+                                        onDelete(cot.id);
+                                    }
+                                }} 
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: 8, background: 'rgba(239,68,68,0.05)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: '0.5rem' }}
+                            >
+                                <XCircle size={15} /> Eliminar Cotización
+                            </button>
+                        )}
                     </div>
 
                     {/* Footer */}
@@ -462,7 +476,7 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function Cotizaciones() {
-    const { clients, products, cotizaciones, settings, addCotizacion, updateCotizacion, actualizarEstadoCotizacion, createInvoiceFromCotizacion } = useAppContext();
+    const { clients, products, cotizaciones, settings, addCotizacion, updateCotizacion, actualizarEstadoCotizacion, createInvoiceFromCotizacion, deleteCotizacion } = useAppContext();
     const [search, setSearch] = useState('');
     const [filterE, setFilterE] = useState('Todos');
     const [showNew, setShowNew] = useState(false);
@@ -774,6 +788,14 @@ export default function Cotizaciones() {
                     onSendLink={handleSendQuote}
                     onEditContrato={() => setEditingContrato(selectedCot.id)}
                     onEdit={() => { setEditing(selectedCot); setSelected(null); }}
+                    onDelete={async (id) => {
+                        try {
+                            await deleteCotizacion(id);
+                            setSelected(null);
+                        } catch (e) {
+                            alert(e.message);
+                        }
+                    }}
                 />
             )}
 

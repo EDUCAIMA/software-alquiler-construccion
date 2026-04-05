@@ -3,7 +3,7 @@ import {
     Plus, Search, Truck, Package, RotateCcw, CheckCircle,
     AlertTriangle, Clock, X, ChevronRight, Filter, FileText,
     MapPin, ArrowDownCircle, Info, CreditCard,
-    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp
+    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Trash2
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
@@ -472,7 +472,7 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Remisiones() {
-    const { clients, products, remisiones, invoices, addRemision, registrarDevolucion, maintenances, marcarRemisionCreada } = useAppContext();
+    const { clients, products, remisiones, invoices, addRemision, registrarDevolucion, maintenances, marcarRemisionCreada, deleteRemision } = useAppContext();
 
     const [search, setSearch] = useState('');
     const [filterEstado, setFilterEstado] = useState('Todos');
@@ -757,14 +757,28 @@ export default function Remisiones() {
                                             {rem.estado !== 'Cerrada' ? `${dias}d` : '—'}
                                         </td>
                                         <td style={{ padding: '0.85rem' }}>
-                                            {canReturn && (
+                                            <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                                {canReturn && (
+                                                    <button
+                                                        onClick={() => setDevolucionTarget({ clientId: rem.clientId, obraId: rem.obraId })}
+                                                        className="btn btn-secondary btn-sm"
+                                                        style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                        <RotateCcw size={13} /> Devolución
+                                                    </button>
+                                                )}
                                                 <button
-                                                    onClick={() => setDevolucionTarget({ clientId: rem.clientId, obraId: rem.obraId })}
-                                                    className="btn btn-secondary btn-sm"
-                                                    style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                    <RotateCcw size={13} /> Devolución
+                                                    onClick={() => {
+                                                        if (window.confirm(`¿Está seguro de eliminar la remisión ${rem.id}? Esto devolverá los equipos no devueltos al stock.`)) {
+                                                            deleteRemision(rem.id);
+                                                        }
+                                                    }}
+                                                    className="btn btn-sm"
+                                                    style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', padding: '0.4rem', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    title="Eliminar Remisión"
+                                                >
+                                                    <Trash2 size={13} />
                                                 </button>
-                                            )}
+                                            </div>
                                         </td>
                                     </tr>
                                 );

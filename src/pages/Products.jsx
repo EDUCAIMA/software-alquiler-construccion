@@ -152,7 +152,7 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
 
     return (
         <>
-            <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 480, zIndex: 900, background: '#ffffff', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 40px rgba(0,0,0,0.35)', overflowY: 'auto', animation: 'slideInRight 0.25s ease' }}>
+            <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: '100%', maxWidth: 480, zIndex: 900, background: '#ffffff', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 40px rgba(0,0,0,0.35)', overflowY: 'auto', animation: 'slideInRight 0.25s ease' }}>
                 {/* Header */}
                 <div style={{ background: 'linear-gradient(135deg, #104166, #154272)', padding: '1.5rem 1.75rem', flexShrink: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -468,7 +468,7 @@ export default function Products() {
     return (
         <>
             {/* Header */}
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 gap-4" style={{ flexWrap: 'wrap' }}>
                 <div>
                     <h1>Inventario &amp; Alquiler</h1>
                     <p className="text-muted">Gestión de maquinaria y hoja de vida</p>

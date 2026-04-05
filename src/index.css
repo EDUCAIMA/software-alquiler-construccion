@@ -77,6 +77,24 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   color: white;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.2) transparent;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.25);
 }
 
 .main-content {
@@ -89,6 +107,54 @@ body {
 .page-container {
   max-width: 1200px;
   margin: 0 auto;
+  min-width: 0; /* Asegura que flexbox no lo expanda */
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+  
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  
+  .main-content {
+    margin-left: 0;
+    padding: 1rem;
+    width: 100%;
+  }
+
+  .page-container {
+    padding: 0;
+  }
+
+  .grid-cards {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  
+  .grid-2, .grid-3 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .grid-cards {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .stat-card {
+    padding: 1rem;
+  }
+
+  .btn-action-standard span {
+    display: none; /* Iconos solos en móvil para ahorrar espacio en tablas */
+  }
+  
+  .btn-action-standard {
+    min-width: 40px;
+  }
 }
 
 .sidebar-header {
@@ -214,7 +280,7 @@ body {
 /* Grid Layouts */
 .grid-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1.5rem;
   margin-bottom: 2rem;
 }
@@ -403,12 +469,31 @@ h3 {
   -webkit-overflow-scrolling: touch; /* Suavidad en Mac/iOS */
 }
 
+/* Mejora visibilidad de scrollbars en Windows */
+.glass-table-container::-webkit-scrollbar {
+  height: 8px;
+}
+.glass-table-container::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.05);
+  border-radius: 10px;
+}
+.glass-table-container::-webkit-scrollbar-thumb {
+  background: var(--primary-light);
+  border-radius: 10px;
+}
+
 .glass-table {
   width: 100%;
-  min-width: 1000px; /* Forzamos el ancho para que aparezca el scroll horizontal */
+  min-width: 800px; /* Reducimos min-width para que sea un poco más cómodo en pantallas medianas */
   border-collapse: collapse;
   text-align: left;
   table-layout: auto;
+}
+
+@media (max-width: 768px) {
+  .glass-panel {
+    padding: 1rem !important;
+  }
 }
 
 .glass-table th {

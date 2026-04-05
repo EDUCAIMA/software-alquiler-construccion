@@ -279,7 +279,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── KPI Cards ─────────────────────────────────────────────────────── */}
-      <div className="grid-cards" style={{ gridTemplateColumns: 'repeat(5, 1fr)', marginBottom: '1.5rem' }}>
+      <div className="grid-cards" style={{ marginBottom: '1.5rem' }}>
         {/* Clientes */}
         <div className="stat-card blue">
           <div className="icon-wrapper blue"><Users size={24} /></div>
@@ -331,7 +331,7 @@ export default function Dashboard() {
 
       {/* ── Categorías KPI Cards ───────────────────────────────────────────── */}
       <h3 className="mb-4" style={{ marginTop: '1rem' }}>Indicadores por Categoría (En Calle / Total)</h3>
-      <div className="grid-cards" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1.5rem' }}>
+      <div className="grid-cards" style={{ marginBottom: '1.5rem' }}>
         {/* Maquinaria Pesada */}
         <div className="stat-card blue">
           <div className="icon-wrapper blue"><Wrench size={24} /></div>
