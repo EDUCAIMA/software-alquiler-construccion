@@ -507,6 +507,13 @@ app.put('/api/cotizaciones/:id', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.delete('/api/cotizaciones/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM cotizaciones WHERE id=$1', [req.params.id]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── PUBLIC COTIZACIONES (Sin Auth) ──────────────────────────────────────────
 app.get('/api/public/cotizaciones/:id', async (req, res) => {
     try {
@@ -568,6 +575,13 @@ app.put('/api/remisiones/:id', async (req, res) => {
             `UPDATE remisiones SET client_id = $1, obra_id = $2, fecha = $3, transporte = $4, estado = $5, notas = $6, items = $7 WHERE id = $8`,
             [clientId, obraId, fecha || null, transporte, estado, notas, JSON.stringify(items || []), req.params.id]
         );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/remisiones/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM remisiones WHERE id=$1', [req.params.id]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
