@@ -278,53 +278,40 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── KPI Cards ─────────────────────────────────────────────────────── */}
-      <div className="grid-cards" style={{ marginBottom: '1.5rem' }}>
-        {/* Clientes */}
-        <div className="stat-card blue">
-          <div className="icon-wrapper blue"><Users size={24} /></div>
-          <div>
-            <div className="stat-value">{clients.length}</div>
-            <div className="stat-label">Total Clientes</div>
-          </div>
+      {/* ── Mini KPI Items ─────────────────────────────────────────────────── */}
+      <div className="mini-stat-grid">
+        {/* Total Clientes */}
+        <div className="mini-stat-dashboard blue">
+          <div className="stat-mini-value">{clients.length}</div>
+          <div className="stat-mini-label">Total Clientes</div>
         </div>
 
-        {/* En Calle vs Total */}
-        <div className="stat-card orange">
-          <div className="icon-wrapper orange"><ArrowUpRight size={24} /></div>
-          <div>
-            <div className="stat-value">{rentedUnits} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ {totalUnits}</span></div>
-            <div className="stat-label">En Calle / Total Unidades</div>
+        {/* En Calle / Total */}
+        <div className="mini-stat-dashboard orange">
+          <div className="stat-mini-value">
+            {rentedUnits} <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>/ {totalUnits}</span>
           </div>
+          <div className="stat-mini-label">En Calle / Total Unidades</div>
         </div>
 
-        {/* Ingresos cobrados */}
-        <div className="stat-card green">
-          <div className="icon-wrapper green"><TrendingUp size={24} /></div>
-          <div>
-            <div className="stat-value">${totalRevenue.toLocaleString()}</div>
-            <div className="stat-label">Ingresos Cobrados</div>
-          </div>
+        {/* Ingresos Cobrados */}
+        <div className="mini-stat-dashboard green">
+          <div className="stat-mini-value">${totalRevenue.toLocaleString()}</div>
+          <div className="stat-mini-label">Ingresos Cobrados</div>
         </div>
 
-        {/* Cartera pendiente */}
-        <div className="stat-card red">
-          <div className="icon-wrapper red"><FileText size={24} /></div>
-          <div>
-            <div className="stat-value">${totalDebt.toLocaleString()}</div>
-            <div className="stat-label">Cartera Pendiente</div>
-          </div>
+        {/* Cartera Pendiente */}
+        <div className="mini-stat-dashboard red">
+          <div className="stat-mini-value">${totalDebt.toLocaleString()}</div>
+          <div className="stat-mini-label">Cartera Pendiente</div>
         </div>
 
         {/* Mantenimientos */}
-        <div className="stat-card" style={{ borderColor: 'rgba(139,92,246,0.3)', background: 'rgba(139,92,246,0.07)' }}>
-          <div className="icon-wrapper" style={{ background: '#8b5cf6', marginBottom: 0 }}><Wrench size={24} /></div>
-          <div>
-            <div className="stat-value" style={{ color: '#8b5cf6' }}>{maintIndex}%</div>
-            <div className="stat-label">Índice Mantenimientos</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>
-              {activeMaintenances} activos · {pendingMaintenances} pendientes
-            </div>
+        <div className="mini-stat-dashboard purple">
+          <div className="stat-mini-value">{maintIndex}%</div>
+          <div className="stat-mini-label">Índice Mantenimientos</div>
+          <div className="stat-mini-subtext">
+            {activeMaintenances} activos · {pendingMaintenances} pendientes
           </div>
         </div>
       </div>

@@ -876,6 +876,87 @@ h3 {
   box-shadow: 0 4px 12px rgba(0,0,0,0.03);
 }
 
+/* Mini Statistics for Dashboard Layout */
+.mini-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 1200px) {
+  .mini-stat-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .mini-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .mini-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mini-stat-dashboard {
+  background: white;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.mini-stat-dashboard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+}
+
+.mini-stat-dashboard::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.mini-stat-dashboard.blue::before { background: var(--primary); }
+.mini-stat-dashboard.orange::before { background: var(--warning); }
+.mini-stat-dashboard.green::before { background: var(--success); }
+.mini-stat-dashboard.red::before { background: var(--danger); }
+.mini-stat-dashboard.purple::before { background: #8b5cf6; }
+
+.stat-mini-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.stat-mini-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-top: 0.2rem;
+}
+
+.stat-mini-subtext {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
 .mini-kpi-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0,0,0,0.06);

@@ -478,6 +478,35 @@ export const AppProvider = ({ children }) => {
     logAction('Remisión Eliminada', remId, '', 'system');
   };
 
+  const cancelRemision = async (remId) => {
+    const rem = remisiones.find(r => r.id === remId);
+    if (!rem || rem.estado === 'Cancelada') return;
+
+    // 1. Reintegrar stock de lo pendiente
+    for (const item of rem.items) {
+      const prod = products.find(p => p.id === item.productId);
+      const pendiente = item.cantidad - (item.cantidadDevuelta || 0);
+      if (prod && pendiente > 0) {
+        await api.put(`/api/products/${prod.id}`, { 
+          ...prod, 
+          availableStock: Math.min(prod.totalStock, prod.availableStock + pendiente) 
+        });
+      }
+    }
+
+    // 2. Desvincular de la factura (permitir re-remisionar)
+    const potentialInvId = rem.invoiceId || (typeof rem.id === 'string' ? rem.id.replace('REM-', 'INV-') : null);
+    const inv = invoices.find(i => i.id === potentialInvId);
+    if (inv) {
+      await api.put(`/api/invoices/${inv.id}`, { ...inv, remisionCreada: false });
+    }
+
+    // 3. Marcar como Cancelada
+    await api.put(`/api/remisiones/${remId}`, { ...rem, estado: 'Cancelada' });
+    await reloadAll();
+    logAction('Anular Remisión', remId, '', 'system');
+  };
+
   // ─── COTIZACIONES CRUD ────────────────────────────────────────────────────
   const addCotizacion = async (data) => {
     const id = nextId(cotizaciones, 'COT');
@@ -603,7 +632,7 @@ export const AppProvider = ({ children }) => {
       // Other
       logs, maintenances, addMaintenance, editMaintenance,
       // Remisiones
-      remisiones, addRemision, registrarDevolucion, deleteRemision,
+      remisiones, addRemision, registrarDevolucion, deleteRemision, cancelRemision,
       // Cotizaciones
       cotizaciones, addCotizacion, actualizarEstadoCotizacion, updateCotizacion, deleteCotizacion,
       // Gastos
