@@ -465,8 +465,9 @@ export const AppProvider = ({ children }) => {
       }
     }
 
-    // 2. Si venía de una factura, marcarla como "remisión no creada" (opcional si hay rastro)
-    const inv = invoices.find(i => i.id === rem.invoiceId || i.id === rem.id.replace('REM', 'INV')); // Heurística simple
+    // 2. Si venía de una factura, intentar desmarcarla
+    const potentialInvId = rem.invoiceId || (typeof rem.id === 'string' ? rem.id.replace('REM-', 'INV-') : null);
+    const inv = invoices.find(i => i.id === potentialInvId);
     if (inv) {
       await api.put(`/api/invoices/${inv.id}`, { ...inv, remisionCreada: false });
     }
