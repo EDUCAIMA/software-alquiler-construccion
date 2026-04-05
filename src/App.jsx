@@ -57,9 +57,9 @@ function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
     { icon: FileText, label: 'Facturación', path: '/invoices', restricted: false },
     { icon: Truck, label: 'Remisiones', path: '/remisiones', restricted: false },
     { icon: Calculator, label: 'Cortes de Obra', path: '/cortes', restricted: false },
-    { icon: DollarSign, label: 'Financiero', path: '/financiero', restricted: false },
-    { icon: Wrench, label: 'Mantenimientos', path: '/maintenance', restricted: false },
-    { icon: Activity, label: 'Trazabilidad', path: '/trazability', restricted: false },
+    { icon: DollarSign, label: 'Financiero (Próximamente)', path: '/financiero', restricted: false, disabled: true },
+    { icon: Wrench, label: 'Mantenimientos (Próximamente)', path: '/maintenance', restricted: false, disabled: true },
+    { icon: Activity, label: 'Trazabilidad (Próximamente)', path: '/trazability', restricted: false, disabled: true },
     { icon: Settings, label: 'Ajustes App', path: '/settings', restricted: true },
   ].filter(item => !item.restricted || canViewDashboard);
 
@@ -106,6 +106,19 @@ function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
         {menuItems.map((item) => {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
+          if (item.disabled) {
+            return (
+              <div 
+                key={item.path} 
+                className="nav-item disabled" 
+                style={{ opacity: 0.4, cursor: 'not-allowed', filter: 'grayscale(1)' }}
+                title={isCollapsed ? item.label : ''}
+              >
+                <Icon size={20} />
+                {!isCollapsed && <span>{item.label}</span>}
+              </div>
+            );
+          }
           return (
             <Link key={item.path} to={item.path} className={clsx('nav-item', isActive && 'active')} title={isCollapsed ? item.label : ''}>
               <Icon size={20} />
