@@ -27,6 +27,7 @@
   --text-muted: #64748b;
 
   --sidebar-width: 280px;
+  --sidebar-collapsed-width: 80px;
 
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
@@ -102,6 +103,43 @@ body {
   flex: 1;
   padding: 2rem;
   min-height: 100vh;
+  transition: margin-left 0.3s ease;
+}
+
+.main-content.collapsed-sidebar {
+  margin-left: var(--sidebar-collapsed-width);
+}
+
+.sidebar.collapsed {
+  width: var(--sidebar-collapsed-width);
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 0.75rem;
+}
+
+.sidebar.collapsed .nav-item span {
+  display: none;
+}
+
+.sidebar.collapsed .user-profile {
+  padding: 0.75rem;
+  justify-content: center;
+}
+
+.sidebar.collapsed .user-profile .profile-details,
+.sidebar.collapsed .user-profile button span,
+.sidebar.collapsed .user-profile .version-text {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-header {
+  padding: 0.5rem;
+}
+
+.sidebar.collapsed .logo-icon {
+  max-width: 45px;
 }
 
 .page-container {

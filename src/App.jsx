@@ -43,7 +43,7 @@ function AccessDenied() {
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
-function Sidebar({ isOpen, onClose }) {
+function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   const location = useLocation();
   const { currentUser, logout, canViewDashboard, settings } = useAppContext();
   console.log('Sidebar render. Settings:', settings);
@@ -76,8 +76,15 @@ function Sidebar({ isOpen, onClose }) {
           }} 
         />
       )}
-      <aside className={clsx("sidebar", isOpen && "open")}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-1rem', padding: '0.5rem' }}>
+      <aside className={clsx("sidebar", isOpen && "open", isCollapsed && "collapsed")}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', alignItems: 'center' }}>
+          <button 
+            onClick={onToggleCollapse} 
+            className="desktop-only"
+            style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', cursor: 'pointer', padding: '0.4rem', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Menu size={18} />
+          </button>
           <button onClick={onClose} className="mobile-only" style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0.5rem', display: 'none' }}>
             <X size={24} />
           </button>
@@ -99,9 +106,9 @@ function Sidebar({ isOpen, onClose }) {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
           return (
-            <Link key={item.path} to={item.path} className={clsx('nav-item', isActive && 'active')}>
+            <Link key={item.path} to={item.path} className={clsx('nav-item', isActive && 'active')} title={isCollapsed ? item.label : ''}>
               <Icon size={20} />
-              {item.label}
+              {!isCollapsed && <span>{item.label}</span>}
             </Link>
           );
         })}
@@ -109,34 +116,39 @@ function Sidebar({ isOpen, onClose }) {
 
       <div className="user-profile" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%' }}>
-          <div className="avatar" style={{ background: roleColors[currentUser?.role] || '#64748b' }}>
+          <div className="avatar" style={{ background: roleColors[currentUser?.role] || '#64748b', flexShrink: 0 }}>
             {currentUser?.avatar || '?'}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {currentUser?.name || 'Usuario'}
-            </p>
-            <p style={{ fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.8)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {roleLabels[currentUser?.role] || currentUser?.role}
-            </p>
-          </div>
+          {!isCollapsed && (
+            <div className="profile-details" style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {currentUser?.name || 'Usuario'}
+              </p>
+              <p style={{ fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.8)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {roleLabels[currentUser?.role] || currentUser?.role}
+              </p>
+            </div>
+          )}
         </div>
         <button onClick={logout}
           style={{
             display: 'flex', alignItems: 'center', gap: '0.5rem',
-            width: '100%', padding: '0.45rem 0.75rem',
+            width: '100%', padding: '0.45rem',
             background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
             borderRadius: 8, color: '#ef4444', fontSize: '0.8rem', fontWeight: 600,
-            cursor: 'pointer', transition: 'background 0.2s',
+            cursor: 'pointer', transition: 'background 0.2s', justifyContent: isCollapsed ? 'center' : 'flex-start'
           }}
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.18)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
+          title={isCollapsed ? 'Cerrar Sesión' : ''}
         >
-          <LogOut size={14} /> Cerrar Sesión
+          <LogOut size={14} /> {!isCollapsed && <span>Cerrar Sesión</span>}
         </button>
-        <div style={{ marginTop: '0.75rem', textAlign: 'center', width: '100%', fontSize: '0.65rem', fontWeight: 700, color: 'white', letterSpacing: '0.1em' }}>
-          VERSIÓN 1.3.1
-        </div>
+        {!isCollapsed && (
+          <div className="version-text" style={{ marginTop: '0.75rem', textAlign: 'center', width: '100%', fontSize: '0.65rem', fontWeight: 700, color: 'white', letterSpacing: '0.1em' }}>
+            VERSIÓN 1.3.1
+          </div>
+        )}
       </div>
       </aside>
     </>
@@ -145,11 +157,17 @@ function Sidebar({ isOpen, onClose }) {
 
 function Layout({ children }) {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
 
   return (
     <div className="layout-container">
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-      <main className="main-content">
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)} 
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+      />
+      <main className={clsx("main-content", isSidebarCollapsed && "collapsed-sidebar")}>
         <div className="mobile-header" style={{ display: 'none', padding: '1rem', borderBottom: '1px solid var(--surface-border)', background: 'white', marginBottom: '1rem', borderRadius: '12px' }}>
           <button onClick={() => setIsSidebarOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}>
             <Menu size={24} />
