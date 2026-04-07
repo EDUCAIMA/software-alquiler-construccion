@@ -398,7 +398,7 @@ export const AppProvider = ({ children }) => {
     logAction('Remisión Creada', `${id} — ${nueva.items.length} equipo(s)`, client?.name || 'N/A', 'exit');
   };
 
-  const registrarDevolucion = async (clientId, obraId, devoluciones) => {
+  const registrarDevolucion = async (clientId, obraId, devoluciones, fecha) => {
     let updatedRems = remisiones.map(r => ({ ...r, items: r.items.map(i => ({ ...i })) }));
     const stockReintegrar = {};
 
@@ -446,7 +446,7 @@ export const AppProvider = ({ children }) => {
 
     await reloadAll();
     const client = clients.find(c => c.id === clientId);
-    logAction('Devolución PEPS', `Obra ${obraId}`, client?.name || 'N/A', 'entry');
+    logAction('Devolución PEPS', `Obra ${obraId} - Fecha Devolución: ${fecha || format(new Date(), 'yyyy-MM-dd')}`, client?.name || 'N/A', 'entry');
   };
 
   const deleteRemision = async (remId) => {

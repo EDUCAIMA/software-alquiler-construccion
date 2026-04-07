@@ -324,7 +324,7 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
     }, [remisiones, clientId, obraId, products]);
 
     const [quantities, setQuantities] = useState(() => Object.fromEntries(enCampo.map(i => [i.productId, 0])));
-    const [fechaDevolucion] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [fechaDevolucion, setFechaDevolucion] = useState(format(new Date(), 'yyyy-MM-dd'));
 
     const setQ = (productId, val) => {
         const item = enCampo.find(i => i.productId === productId);
@@ -368,7 +368,7 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
             .filter(([, v]) => v > 0)
             .map(([productId, cantidad]) => ({ productId, cantidad }));
         if (devoluciones.length === 0) return;
-        onSave(devoluciones);
+        onSave(devoluciones, fechaDevolucion);
         onClose();
     };
 
@@ -402,6 +402,18 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            {/* Fecha de Devolución */}
+                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem' }}>
+                                <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Fecha de Devolución</label>
+                                <input 
+                                    type="date" 
+                                    value={fechaDevolucion} 
+                                    onChange={e => setFechaDevolucion(e.target.value)} 
+                                    style={{ ...inputStyle, textAlign: 'left', maxWidth: '200px' }} 
+                                />
+                                <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.4rem' }}>Esta fecha se usará para el registro de la devolución.</p>
+                            </div>
+
                             {/* Quantities to return */}
                             <div>
                                 <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#f97316', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -905,7 +917,7 @@ export default function Remisiones() {
                     products={products}
                     clients={clients}
                     onClose={() => setDevolucionTarget(null)}
-                    onSave={(devoluciones) => registrarDevolucion(devolucionTarget.clientId, devolucionTarget.obraId, devoluciones)}
+                    onSave={(devoluciones, fecha) => registrarDevolucion(devolucionTarget.clientId, devolucionTarget.obraId, devoluciones, fecha)}
                 />
             )}
         </>
