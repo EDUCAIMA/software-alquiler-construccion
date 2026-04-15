@@ -70,9 +70,17 @@ async function initDB() {
             contacto_principal VARCHAR(255),
             joined DATE DEFAULT CURRENT_DATE,
             debt NUMERIC(12, 2) DEFAULT 0,
-            obras JSONB DEFAULT '[]'
+            obras JSONB DEFAULT '[]',
+            foto TEXT,
+            foto_cc TEXT,
+            foto_cc_back TEXT
         )
             `);
+
+        // Migración: agregar columnas foto, foto_cc y foto_cc_back si no existen
+        await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS foto TEXT`);
+        await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS foto_cc TEXT`);
+        await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS foto_cc_back TEXT`);
 
         // --- Facturas ---
         await client.query(`
@@ -114,6 +122,7 @@ async function initDB() {
                 habeas_data_timestamp TIMESTAMPTZ,
                 firma TEXT,
                 foto TEXT,
+                foto_cc TEXT,
                 clausulas JSONB DEFAULT '[]'
             )
             `);
@@ -121,6 +130,8 @@ async function initDB() {
         await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS habeas_data_timestamp TIMESTAMPTZ`);
         await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS firma TEXT`);
         await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS foto TEXT`);
+        await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS foto_cc TEXT`);
+        await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS foto_cc_back TEXT`);
         await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS clausulas JSONB DEFAULT '[]'`);
         await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS factura_id VARCHAR(50)`);
 
@@ -269,7 +280,10 @@ const mapClient = r => ({
     contactoPrincipal: r.contacto_principal,
     joined: r.joined ? r.joined.toISOString().split('T')[0] : '',
     debt: Number(r.debt),
-    obras: r.obras || []
+    obras: r.obras || [],
+    foto: r.foto,
+    fotoCC: r.foto_cc,
+    fotoCCBack: r.foto_cc_back
 });
 
 const mapInvoice = r => ({
@@ -291,7 +305,7 @@ const mapCot = r => ({
     transporte: Number(r.transporte), notas: r.notas, estado: r.estado,
     items: r.items || [],
     habeasData: r.habeas_data, habeasDataTimestamp: r.habeas_data_timestamp,
-    firma: r.firma, foto: r.foto,
+    firma: r.firma, foto: r.foto, fotoCC: r.foto_cc, fotoCCBack: r.foto_cc_back,
     clausulas: r.clausulas || [],
     facturaId: r.factura_id || null
 });
@@ -397,12 +411,12 @@ app.get('/api/clients', async (req, res) => {
 app.post('/api/clients', async (req, res) => {
     try {
         const { id, name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
-            email, phone, direccion, ciudad, departamento, contactoPrincipal, joined, debt, obras } = req.body;
+            email, phone, direccion, ciudad, departamento, contactoPrincipal, joined, debt, obras, foto, fotoCC, fotoCCBack } = req.body;
         await pool.query(
-            `INSERT INTO clients(id, name, tipo_persona, nit, regimen, responsable_iva, porc_iva, porc_retencion, email, phone, direccion, ciudad, departamento, contacto_principal, joined, debt, obras)
-       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+            `INSERT INTO clients(id, name, tipo_persona, nit, regimen, responsable_iva, porc_iva, porc_retencion, email, phone, direccion, ciudad, departamento, contacto_principal, joined, debt, obras, foto, foto_cc, foto_cc_back)
+       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
             [id, name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
-                email, phone, direccion, ciudad, departamento, contactoPrincipal, joined || null, debt || 0, JSON.stringify(obras || [])]
+                email, phone, direccion, ciudad, departamento, contactoPrincipal, joined || null, debt || 0, JSON.stringify(obras || []), foto || null, fotoCC || null, fotoCCBack || null]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -411,12 +425,12 @@ app.post('/api/clients', async (req, res) => {
 app.put('/api/clients/:id', async (req, res) => {
     try {
         const { name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
-            email, phone, direccion, ciudad, departamento, contactoPrincipal, joined, debt, obras } = req.body;
+            email, phone, direccion, ciudad, departamento, contactoPrincipal, joined, debt, obras, foto, fotoCC, fotoCCBack } = req.body;
         await pool.query(
             `UPDATE clients SET name = $1, tipo_persona = $2, nit = $3, regimen = $4, responsable_iva = $5, porc_iva = $6, porc_retencion = $7,
-            email = $8, phone = $9, direccion = $10, ciudad = $11, departamento = $12, contacto_principal = $13, joined = $14, debt = $15, obras = $16 WHERE id = $17`,
+            email = $8, phone = $9, direccion = $10, ciudad = $11, departamento = $12, contacto_principal = $13, joined = $14, debt = $15, obras = $16, foto = $17, foto_cc = $18, foto_cc_back = $19 WHERE id = $20`,
             [name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
-                email, phone, direccion, ciudad, departamento, contactoPrincipal, joined || null, debt || 0, JSON.stringify(obras || []), req.params.id]
+                email, phone, direccion, ciudad, departamento, contactoPrincipal, joined || null, debt || 0, JSON.stringify(obras || []), foto || null, fotoCC || null, fotoCCBack || null, req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -479,14 +493,14 @@ app.get('/api/cotizaciones', async (req, res) => {
 app.post('/api/cotizaciones', async (req, res) => {
     try {
         const { id, clientId, obraId, fecha, validezDias, metodoPago, responsableTransporte,
-            plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto, clausulas, facturaId } = req.body;
+            plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto, fotoCC, fotoCCBack, clausulas, facturaId } = req.body;
         await pool.query(
             `INSERT INTO cotizaciones(id, client_id, obra_id, fecha, validez_dias, metodo_pago, responsable_transporte,
-                plazo_entrega, transporte, notas, estado, items, habeas_data, habeas_data_timestamp, firma, foto, clausulas, factura_id)
-                VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+                plazo_entrega, transporte, notas, estado, items, habeas_data, habeas_data_timestamp, firma, foto, foto_cc, foto_cc_back, clausulas, factura_id)
+                VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
             [id, clientId, obraId, fecha || null, validezDias, metodoPago, responsableTransporte,
                 plazoEntrega, transporte, notas, estado, JSON.stringify(items || []),
-                habeasData || false, habeasDataTimestamp || null, firma || null, foto || null, JSON.stringify(clausulas || []), facturaId || null]
+                habeasData || false, habeasDataTimestamp || null, firma || null, foto || null, fotoCC || null, fotoCCBack || null, JSON.stringify(clausulas || []), facturaId || null]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -496,12 +510,12 @@ app.put('/api/cotizaciones/:id', async (req, res) => {
     try {
         console.log('📬 PUT /api/cotizaciones/', req.params.id, req.body);
         const { clientId, obraId, fecha, validezDias, metodoPago, responsableTransporte,
-            plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto, clausulas, facturaId } = req.body;
+            plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto, fotoCC, fotoCCBack, clausulas, facturaId } = req.body;
         await pool.query(
-            `UPDATE cotizaciones SET client_id = $1, obra_id = $2, fecha = $3, validez_dias = $4, metodo_pago = $5, responsable_transporte = $6, plazo_entrega = $7, transporte = $8, notas = $9, estado = $10, items = $11, habeas_data = $12, habeas_data_timestamp = $13, firma = $14, foto = $15, clausulas = $16, factura_id = $17 WHERE id = $18`,
+            `UPDATE cotizaciones SET client_id = $1, obra_id = $2, fecha = $3, validez_dias = $4, metodo_pago = $5, responsable_transporte = $6, plazo_entrega = $7, transporte = $8, notas = $9, estado = $10, items = $11, habeas_data = $12, habeas_data_timestamp = $13, firma = $14, foto = $15, foto_cc = $16, foto_cc_back = $17, clausulas = $18, factura_id = $19 WHERE id = $20`,
             [clientId, obraId, fecha || null, validezDias, metodoPago, responsableTransporte,
                 plazoEntrega, transporte, notas, estado, JSON.stringify(items || []),
-                habeasData || false, habeasDataTimestamp || null, firma || null, foto || null, JSON.stringify(clausulas || []), facturaId || null, req.params.id]
+                habeasData || false, habeasDataTimestamp || null, firma || null, foto || null, fotoCC || null, fotoCCBack || null, JSON.stringify(clausulas || []), facturaId || null, req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -537,10 +551,10 @@ app.get('/api/public/cotizaciones/:id', async (req, res) => {
 
 app.post('/api/public/cotizaciones/:id/approve', async (req, res) => {
     try {
-        const { firma, foto, habeasData, habeasDataTimestamp } = req.body;
+        const { firma, foto, fotoCC, fotoCCBack, habeasData, habeasDataTimestamp } = req.body;
         await pool.query(
-            `UPDATE cotizaciones SET estado = 'Aprobada', firma = $1, foto = $2, habeas_data = $3, habeas_data_timestamp = $4 WHERE id = $5`,
-            [firma, foto, habeasData !== undefined ? habeasData : true, habeasDataTimestamp || new Date(), req.params.id]
+            `UPDATE cotizaciones SET estado = 'Aprobada', firma = $1, foto = $2, foto_cc = $3, foto_cc_back = $4, habeas_data = $5, habeas_data_timestamp = $6 WHERE id = $7`,
+            [firma, foto, fotoCC, fotoCCBack, habeasData !== undefined ? habeasData : true, habeasDataTimestamp || new Date(), req.params.id]
         );
         res.json({ success: true });
     } catch (e) { 

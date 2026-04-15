@@ -174,14 +174,20 @@ function generateCotizacionPDF(cot, client, obra, settings) {
         doc.setDrawColor(30, 41, 59);
         doc.line(margin, y, margin + 60, y);
         doc.line(W - margin - 60, y, W - margin, y);
+
+        // Dibujar firma del cliente si existe
+        if (cot.firma) {
+            try {
+                // Dibujamos la firma centrada sobre la línea de la derecha
+                doc.addImage(cot.firma, 'PNG', W - margin - 60, y - 25, 60, 25);
+            } catch (e) {
+                console.error('Error adding client signature to PDF:', e);
+            }
+        }
+
         doc.setFontSize(7.5);
         doc.text('Firma Autorizada', margin + 30, y + 4, { align: 'center' });
         doc.text('Aceptado Cliente', W - margin - 30, y + 4, { align: 'center' });
-
-        // Footer meta
-        doc.setFontSize(6);
-        doc.setTextColor(100, 116, 139);
-        doc.text(`Página 1 de 1  |  Generado por Sistema de Gestión ${settings?.shortName || ''}`, W / 2, H - 10, { align: 'center' });
 
         doc.save(`Cotizacion_${cot.id}.pdf`);
     } catch (error) {
@@ -422,7 +428,15 @@ function SignatureCanvas({ onSave, onClear }) {
     const getPos = (e, canvas) => {
         const rect = canvas.getBoundingClientRect();
         const src = e.touches ? e.touches[0] : e;
-        return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+        
+        // Calcular la escala entre el tamaño visual (CSS) y el tamaño interno del canvas
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        return { 
+            x: (src.clientX - rect.left) * scaleX, 
+            y: (src.clientY - rect.top) * scaleY 
+        };
     };
 
     const start = useCallback((e) => {
@@ -565,5 +579,93 @@ function HabeasDataModal({ onAccept, onClose }) {
     );
 }
 
-export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP };
+// ─── PDF Remisión de Despacho ──────────────────────────────────────────────────
+function generateRemisionPDF(rem, client, obra, settings) {
+    try {
+        const doc = new jsPDF();
+        const W = doc.internal.pageSize.getWidth();
+        const margin = 10;
+        
+        // Encabezado estándar
+        let y = applyStandardLayout(doc, 'Remisión de Despacho', settings, rem.id);
+        
+        // Grid de información
+        y = drawInfoGrid(doc, y, client, {
+            valTopLeft: rem.fecha,
+            labelTopLeft: 'Fecha Despacho',
+            valTopRight: rem.estado?.toUpperCase(),
+            labelTopRight: 'Estado',
+            valMidLeft: obra?.nombre?.substring(0, 25) || rem.obraId || '—',
+            valMidRight: rem.transporte > 0 ? `$${rem.transporte.toLocaleString()}` : '—',
+            labelMidRight: 'Costo Transp.',
+            valBottom: rem.notas?.substring(0, 50) || 'Sin observaciones',
+            labelBottom: 'Notas:',
+            obraDireccion: obra?.ubicacion || client?.direccion
+        });
+
+        // Tabla de ítems
+        autoTable(doc, {
+            startY: y,
+            margin: { left: margin, right: margin },
+            head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANTIDAD', 'DEVUELTA', 'PENDIENTE']],
+            body: rem.items.map((i, idx) => [
+                idx + 1,
+                i.nombre.toUpperCase(),
+                i.cantidad,
+                i.cantidadDevuelta || 0,
+                i.cantidad - (i.cantidadDevuelta || 0)
+            ]),
+            theme: 'plain',
+            headStyles: { 
+                fillColor: [241, 245, 249], 
+                textColor: [30, 41, 59], 
+                fontSize: 8, 
+                fontStyle: 'bold', 
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [30, 41, 59]
+            },
+            styles: { 
+                fontSize: 8, 
+                cellPadding: 3, 
+                textColor: [30, 41, 59], 
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [30, 41, 59]
+            },
+            columnStyles: {
+                0: { cellWidth: 10 },
+                1: { halign: 'left', cellWidth: 'auto' },
+                2: { cellWidth: 25 },
+                3: { cellWidth: 25 },
+                4: { cellWidth: 25, fontStyle: 'bold' }
+            }
+        });
+
+        y = doc.lastAutoTable.finalY + 20;
+
+        // Espacios de firmas
+        doc.setLineWidth(0.5);
+        doc.setDrawColor(30, 41, 59);
+        doc.line(margin, y, margin + 60, y);
+        doc.line(W - margin - 60, y, W - margin, y);
+
+        doc.setFontSize(8);
+        doc.text('Entregado por (Bodega)', margin + 30, y + 5, { align: 'center' });
+        doc.text('Recibido por (Cliente)', W - margin - 30, y + 5, { align: 'center' });
+
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        const disclaimer = "Certifico que los equipos descritos en este documento han sido entregados en buen estado de funcionamiento. El cliente se hace responsable por el cuidado y custodia de los mismos desde este momento.";
+        doc.text(doc.splitTextToSize(disclaimer, W - margin * 2), margin, y + 15);
+
+        doc.save(`Remision_${rem.id}.pdf`);
+    } catch (error) {
+        console.error('Error generating Remision PDF:', error);
+        alert('Error al generar el PDF de la remisión.');
+    }
+}
+
+export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP };
+
 

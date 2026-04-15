@@ -12,6 +12,8 @@ export default function PublicCotizacionApproval() {
     const [approved, setApproved] = useState(false);
     const [firma, setFirma] = useState(null);
     const [foto, setFoto] = useState(null);
+    const [fotoCC, setFotoCC] = useState(null);
+    const [fotoCCBack, setFotoCCBack] = useState(null);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -36,12 +38,16 @@ export default function PublicCotizacionApproval() {
             alert('Por favor, realice la firma antes de confirmar.');
             return;
         }
+        if (!foto || !fotoCC || !fotoCCBack) {
+            alert('Por favor, capture todas las fotografías de seguridad (Rostro, CC Frontal y CC Posterior).');
+            return;
+        }
         setSaving(true);
         try {
             const res = await fetch(`/api/public/cotizaciones/${id}/approve`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ firma, foto })
+                body: JSON.stringify({ firma, foto, fotoCC, fotoCCBack })
             });
             if (res.ok) {
                 setApproved(true);
@@ -208,13 +214,28 @@ export default function PublicCotizacionApproval() {
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#334155', marginBottom: '0.75rem' }}>2. Registro Fotográfico (Opcional)</div>
-                                        <div style={{ border: '1px solid #e2e8f0', borderRadius: 16, padding: '1.5rem', background: '#f8fafc' }}>
-                                            <WebcamCapture onCapture={setFoto} />
+                                    <div className="security-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                                        <div>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '0.6rem' }}>1. Foto Rostro</div>
+                                            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem', background: '#f8fafc', display: 'flex', justifyContent: 'center' }}>
+                                                <WebcamCapture onCapture={setFoto} />
+                                            </div>
                                         </div>
-                                        <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.75rem', textAlign: 'center' }}>Ideal para capturar soportes de pago, órdenes impresas o su documento de identidad.</p>
+                                        <div>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '0.6rem' }}>2. CC Frontal</div>
+                                            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem', background: '#f8fafc', display: 'flex', justifyContent: 'center' }}>
+                                                <WebcamCapture onCapture={setFotoCC} />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '0.6rem' }}>3. CC Posterior</div>
+                                            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem', background: '#f8fafc', display: 'flex', justifyContent: 'center' }}>
+                                                <WebcamCapture onCapture={setFotoCCBack} />
+                                            </div>
+                                        </div>
                                     </div>
+                                    <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.75rem', textAlign: 'center' }}>Capture su rostro y su documento de identidad para validar la transacción.</p>
+
                                 </div>
 
                                 <div style={{ display: 'flex', gap: '1rem', marginTop: '3rem' }}>
@@ -251,10 +272,12 @@ export default function PublicCotizacionApproval() {
             </div>
             {/* Simple CSS Hack for Responsive Mobile */}
             <style>{`
-                @media (max-width: 600px) {
+                @media (max-width: 650px) {
+                    .security-grid { grid-template-columns: 1fr !important; gap: 1rem !important; }
                     table { font-size: 0.8rem !important; }
                     th, td { padding: 0.75rem 0.5rem !important; }
-                    h1 { fontSize: 1.2rem !important; }
+                    h1 { font-size: 1.2rem !important; }
+                    .canvas-container canvas { height: 120px !important; }
                 }
             `}</style>
         </div>

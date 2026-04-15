@@ -3,7 +3,7 @@ import {
     FilePlus, Search, CheckCircle, XCircle, Clock, Send,
     X, FileText, Shield, Download, Copy, Share2,
     PenTool, Fingerprint, MapPin, ChevronRight, Upload, Eye,
-    Plus, List, Edit2,
+    Plus, List, Edit2, User,
     ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
@@ -49,42 +49,40 @@ class ModalErrorBoundary extends React.Component {
 }
 
 // ─── Approval Modal ───────────────────────────────────────────────────────────
-// ─── Approval Modal ───────────────────────────────────────────────────────────
-// ─── Approval Modal ───────────────────────────────────────────────────────────
-// ─── Approval Modal ───────────────────────────────────────────────────────────
 function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
     const [mode, setMode] = useState(null); // 'internal', 'external'
     const [file, setFile] = useState(null);
     const [fileName, setFileName] = useState('');
+    const [fileRostro, setFileRostro] = useState(null);
+    const [fileCC, setFileCC] = useState(null);
+    const [nameRostro, setNameRostro] = useState('');
+    const [nameCC, setNameCC] = useState('');
     const [notes, setNotes] = useState('');
     const [loading, setLoading] = useState(false);
     const [copied, setCopied] = useState(false);
 
     const shareLink = `${window.location.origin}/public/cotizacion/${cot.id}`;
-    console.log('🏛️ RENDER ApprovalModal:', { cotId: cot.id, mode, loading });
-
-    const handleFileChange = (e) => {
-        const f = e.target.files[0];
-        if (!f) return;
-        setFileName(f.name);
-        const reader = new FileReader();
-        reader.onload = (event) => setFile(event.target.result);
-        reader.readAsDataURL(f);
-    };
 
     const handleConfirmInternal = async () => {
         try {
-            console.log('📝 INICIANDO APROBACIÓN INTERNA:', { cotId: cot.id, fileLength: file?.length, notes });
             setLoading(true);
-            await onApprove({ firma: file, notas: notes || cot.notas });
-            console.log('✅ APROBACIÓN INTERNA COMPLETADA');
+            await onApprove({ firma: file, foto: fileRostro, fotoCC: fileCC, notas: notes || cot.notas });
             onClose();
         } catch (e) {
-            console.error('❌ ERROR EN handleConfirmInternal:', e);
+            console.error('Error en handleConfirmInternal:', e);
             alert('Error al procesar la aprobación interna: ' + e.message);
         } finally {
             setLoading(false);
         }
+    };
+
+    const onFile = (e, setSrc, setName) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        setName(f.name);
+        const reader = new FileReader();
+        reader.onload = (ev) => setSrc(ev.target.result);
+        reader.readAsDataURL(f);
     };
 
     const handleCopy = () => {
@@ -100,9 +98,8 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
 
     return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-            <div className="glass-panel" style={{ padding: 0, width: '100%', maxWidth: mode ? 500 : 600, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', background: 'white', transition: 'all 0.3s ease' }}>
-                
-                {/* Header */}
+            <div className="glass-panel" style={{ padding: 0, width: '100%', maxWidth: mode ? 550 : 600, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', background: 'white', transition: 'all 0.3s ease' }}>
+
                 <div style={{ background: 'linear-gradient(135deg,#104166,#2365AB)', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         <div style={{ fontWeight: 800, color: 'white', fontSize: '1.2rem', letterSpacing: '-0.02em' }}>
@@ -113,8 +110,7 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
                     <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: 34, height: 34, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
                 </div>
 
-                <div style={{ padding: '2rem' }}>
-                    
+                <div style={{ padding: '2rem', maxHeight: '80vh', overflowY: 'auto' }}>
                     {!mode && (
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                             <div className="select-card" onClick={() => setMode('external')} style={{ border: '2px solid #f1f5f9', borderRadius: 16, padding: '1.5rem', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
@@ -124,17 +120,14 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
                                 <h4 style={{ margin: '0 0 0.5rem', color: '#1e293b' }}>Por el Cliente</h4>
                                 <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>Envía un link para que el cliente firme desde su celular.</p>
                             </div>
-
                             <div className="select-card" onClick={() => setMode('internal')} style={{ border: '2px solid #f1f5f9', borderRadius: 16, padding: '1.5rem', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
                                 <div style={{ background: '#dcfce7', width: 60, height: 60, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
                                     <Shield size={28} color="#10b981" />
                                 </div>
                                 <h4 style={{ margin: '0 0 0.5rem', color: '#1e293b' }}>Interna / Manual</h4>
-                                <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>Carga un soporte o registra una nota administrativa.</p>
+                                <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>Carga soportes, fotos de identidad o notas.</p>
                             </div>
-                            <style>{`
-                                .select-card:hover { border-color: #2365AB !important; background: #f8fafc; transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
-                            `}</style>
+                            <style>{`.select-card:hover { border-color: #2365AB !important; background: #f8fafc; transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); }`}</style>
                         </div>
                     )}
 
@@ -158,36 +151,38 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
 
                     {mode === 'internal' && (
                         <>
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#104166', marginBottom: '0.6rem', textTransform: 'uppercase' }}>Soporte de Aprobación (Opcional)</label>
-                                <div style={{ position: 'relative', border: '2px dashed #cbd5e1', borderRadius: 14, padding: '1.5rem', textAlign: 'center', background: '#f1f5f9', cursor: 'pointer' }} 
-                                     onClick={() => { console.log('📂 CLIC EN SUBIR ARCHIVO'); document.getElementById('support-file').click(); }}>
-                                    <input id="support-file" type="file" hidden accept=".pdf,image/*" onChange={handleFileChange} />
-                                    {fileName ? 
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                                            <FileText size={20} color="#10b981" />
-                                            <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>{fileName}</span>
-                                        </div> :
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: '0.8rem', color: '#64748b' }}><Upload size={18} /> Subir PDF o Imagen</div>
-                                    }
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.4rem', textTransform: 'uppercase' }}>1. Soporte / Documento Firmado</label>
+                                    <div style={{ border: '1px dashed #cbd5e1', borderRadius: 10, padding: '0.8rem', textAlign: 'center', background: '#f8fafc', cursor: 'pointer' }} onClick={() => document.getElementById('f-sop').click()}>
+                                        <input id="f-sop" type="file" hidden accept=".pdf,image/*" onChange={e => onFile(e, setFile, setFileName)} />
+                                        <div style={{ fontSize: '0.8rem', color: fileName ? '#10b981' : '#64748b', fontWeight: 600 }}>{fileName || 'Subir PDF o Imagen'}</div>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.4rem', textTransform: 'uppercase' }}>2. Foto Rostro Cliente</label>
+                                        <div style={{ border: '1px dashed #cbd5e1', borderRadius: 10, padding: '0.8rem', textAlign: 'center', background: '#f8fafc', cursor: 'pointer' }} onClick={() => document.getElementById('f-ros').click()}>
+                                            <input id="f-ros" type="file" hidden accept="image/*" onChange={e => onFile(e, setFileRostro, setNameRostro)} />
+                                            <div style={{ fontSize: '0.75rem', color: nameRostro ? '#10b981' : '#64748b', fontWeight: 600 }}>{nameRostro || 'Cargar Foto'}</div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.4rem', textTransform: 'uppercase' }}>3. Foto Cédula CC</label>
+                                        <div style={{ border: '1px dashed #cbd5e1', borderRadius: 10, padding: '0.8rem', textAlign: 'center', background: '#f8fafc', cursor: 'pointer' }} onClick={() => document.getElementById('f-cc').click()}>
+                                            <input id="f-cc" type="file" hidden accept="image/*" onChange={e => onFile(e, setFileCC, setNameCC)} />
+                                            <div style={{ fontSize: '0.75rem', color: nameCC ? '#10b981' : '#64748b', fontWeight: 600 }}>{nameCC || 'Cargar Foto'}</div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#104166', marginBottom: '0.6rem', textTransform: 'uppercase' }}>Notas / Motivo</label>
-                                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Ej: Aprobado según correo..." style={{ width: '100%', padding: '0.75rem', borderRadius: 12, border: '1px solid #cbd5e1', color: '#000', fontSize: '0.9rem', minHeight: 90, boxSizing: 'border-box' }} />
+                                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.4rem', textTransform: 'uppercase' }}>Notas Administrativas</label>
+                                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Ej: Recibido por correo, validado por gerencia..." style={{ width: '100%', padding: '0.75rem', borderRadius: 10, border: '1px solid #cbd5e1', fontSize: '0.85rem', minHeight: 70, boxSizing: 'border-box' }} />
                             </div>
                             <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button type="button" onClick={() => { console.log('◀️ VOLVER CLICADO'); setMode(null); }} className="btn btn-secondary" style={{ flex: 1 }}>Volver</button>
-                                <button 
-                                    type="button" 
-                                    onClick={() => { 
-                                        console.log('🔘 BOTÓN CONFIRMAR CLICADO'); 
-                                        handleConfirmInternal(); 
-                                    }} 
-                                    disabled={loading} 
-                                    className="btn btn-primary" 
-                                    style={{ flex: 2, background: 'linear-gradient(135deg,#2365AB,#104166)', border: 'none', color: 'white' }}
-                                >
+                                <button type="button" onClick={() => setMode(null)} className="btn btn-secondary" style={{ flex: 1 }}>Volver</button>
+                                <button type="button" onClick={handleConfirmInternal} disabled={loading} className="btn btn-primary" style={{ flex: 2, background: 'linear-gradient(135deg,#2365AB,#104166)', border: 'none', color: 'white', fontWeight: 700 }}>
                                     {loading ? 'Procesando...' : 'Confirmar Aprobación'}
                                 </button>
                             </div>
@@ -198,7 +193,6 @@ function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
         </div>
     );
 }
-
 function ShareModal({ cotId, onClose }) {
     const shareLink = `${window.location.origin}/public/cotizacion/${cotId}`;
     const [copied, setCopied] = useState(false);
@@ -379,6 +373,85 @@ function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, 
 
                     {/* notas */}
                     {cot.notas && <div style={{ fontSize: '0.78rem', color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.65rem 0.85rem' }}>{cot.notas}</div>}
+
+                    {/* Registro Digital y Biométrico (Si está aprobada) */}
+                    {(cot.firma || cot.foto || cot.fotoCC || cot.fotoCCBack) && (
+                        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Shield size={16} /> Identidad del Firmante (Audit Log)
+                            </div>
+                            
+                            {/* Fotos Grid */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                                {cot.foto && (
+                                    <div className="security-photo-container">
+                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>ROSTRO</div>
+                                        <img src={cot.foto} alt="Rostro" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(cot.foto, '_blank')} />
+                                    </div>
+                                )}
+                                {cot.fotoCC && (
+                                    <div className="security-photo-container">
+                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>CC FRONTAL</div>
+                                        <img src={cot.fotoCC} alt="CC Frontal" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(cot.fotoCC, '_blank')} />
+                                    </div>
+                                )}
+                                {cot.fotoCCBack && (
+                                    <div className="security-photo-container">
+                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>CC REVERSO</div>
+                                        <img src={cot.fotoCCBack} alt="CC Posterior" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(cot.fotoCCBack, '_blank')} />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Firma */}
+                            {cot.firma && (
+                                <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '1rem', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: 6, fontWeight: 700 }}>FIRMA DIGITAL REGISTRADA</div>
+                                    <div style={{ background: '#f8fafc', borderRadius: 10, padding: '0.75rem', border: '1px solid #f1f5f9', display: 'inline-block', minWidth: '200px' }}>
+                                        <img src={cot.firma} alt="Firma" style={{ maxHeight: 70, maxWidth: '100%', objectFit: 'contain' }} />
+                                    </div>
+                                    {cot.habeasDataTimestamp && (
+                                        <div style={{ fontSize: '0.6rem', color: '#10b981', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center', fontWeight: 600 }}>
+                                            <CheckCircle size={10} /> Consentimiento Habeas Data Capturado: {format(new Date(cot.habeasDataTimestamp), 'dd/MM/yyyy HH:mm')}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            <style>{`
+                                .security-photo-container img:hover { transform: scale(1.05); transition: transform 0.2s; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 10; position: relative; }
+                            `}</style>
+                        </div>
+                    )}
+
+                    {/* Datos Guardados del Cliente (Fotos Perfil) */}
+                    {(client?.foto || client?.fotoCC) && (
+                        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <User size={16} /> Datos de Perfil del Cliente
+                            </div>
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+                                {client.foto && (
+                                    <div className="security-photo-container">
+                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>FOTO PERFIL</div>
+                                        <img src={client.foto} alt="Perfil" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(client.foto, '_blank')} />
+                                    </div>
+                                )}
+                                {client.fotoCC && (
+                                    <div className="security-photo-container">
+                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>CC REGISTRADA (F)</div>
+                                        <img src={client.fotoCC} alt="CC Perfil" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(client.fotoCC, '_blank')} />
+                                    </div>
+                                )}
+                                {client.fotoCCBack && (
+                                    <div className="security-photo-container">
+                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>CC REGISTRADA (P)</div>
+                                        <img src={client.fotoCCBack} alt="CC Perfil Post" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(client.fotoCCBack, '_blank')} />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Actions */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>

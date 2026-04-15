@@ -3,13 +3,14 @@ import {
     Plus, Search, Printer, FileText, X, Building2, MapPin,
     Phone, Mail, Edit3, ChevronDown, ChevronRight, CheckCircle,
     Clock, AlertTriangle, Receipt, Percent, User, Download, Trash2, ShieldAlert,
-    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronUp
+    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronUp, Camera
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { applyStandardLayout } from './pdfTheme';
+import { WebcamCapture } from './CotizacionesHelpers';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const OBRA_ESTADO = {
@@ -123,6 +124,7 @@ const EMPTY_CLIENT = {
     responsableIVA: true, porcIVA: 19, porcRetencion: 2.5,
     email: '', phone: '', direccion: '', ciudad: '', departamento: '', contactoPrincipal: '',
     primeraObra: '', obraUbicacion: '', obraPresupuesto: '',
+    foto: null, fotoCC: null, fotoCCBack: null
 };
 
 function ClientModal({ initial, onSave, onClose, isEdit }) {
@@ -183,7 +185,10 @@ function ClientModal({ initial, onSave, onClose, isEdit }) {
                                     <option value="Común">Régimen Común</option>
                                     <option value="Simplificado">Régimen Simplificado</option>
                                 </SelectField>
-                                <SelectField label="Responsable de IVA" value={form.responsableIVA ? 'si' : 'no'} onChange={e => set('responsableIVA', e.target.value === 'si')}>
+                                <SelectField label="Responsable de IVA" value={form.responsableIVA ? 'si' : 'no'} onChange={e => {
+                                    const isResp = e.target.value === 'si';
+                                    setForm(f => ({ ...f, responsableIVA: isResp, porcIVA: isResp ? (f.porcIVA || 19) : 0 }));
+                                }}>
                                     <option value="si">Sí, responsable de IVA (Factura c/ IVA)</option>
                                     <option value="no">No responsable de IVA</option>
                                 </SelectField>
@@ -193,26 +198,48 @@ function ClientModal({ initial, onSave, onClose, isEdit }) {
                                 </div>
                             </div>
                         </div>
-
-                        {/* Sección: Primera Obra (solo en creación) */}
+                        {/* Sección: Obra Inicial (Solo para nuevos registros) */}
                         {!isEdit && (
                             <>
                                 <div style={{ borderTop: '1px solid #e2e8f0' }} />
                                 <div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                                        <MapPin size={16} color="#f97316" />
-                                        <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#f97316', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Opcional: Registrar Primera Obra</h4>
+                                        <Building2 size={16} color="#f97316" />
+                                        <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#f97316', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Obra / Proyecto Inicial</h4>
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem' }}>
+                                        <InputField label="Nombre de la Primera Obra *" value={form.primeraObra} onChange={e => set('primeraObra', e.target.value)} placeholder="Ej. Proyecto Altamira" />
+                                        <InputField label="Presupuesto Inicial ($)" type="number" value={form.obraPresupuesto} onChange={e => set('obraPresupuesto', e.target.value)} placeholder="0" />
                                         <div style={{ gridColumn: '1 / -1' }}>
-                                            <InputField label="Nombre de la Obra" value={form.primeraObra} onChange={e => set('primeraObra', e.target.value)} placeholder="Ej. Edificio Los Alamos" />
+                                            <InputField label="Ubicación de la Obra" value={form.obraUbicacion} onChange={e => set('obraUbicacion', e.target.value)} placeholder="Ciudad o dirección de la obra" />
                                         </div>
-                                        <InputField label="Ubicación" value={form.obraUbicacion} onChange={e => set('obraUbicacion', e.target.value)} placeholder="Calle 100 # 50-20, Bogotá" />
-                                        <InputField label="Presupuesto Asignado ($)" type="number" min="0" value={form.obraPresupuesto} onChange={e => set('obraPresupuesto', e.target.value)} placeholder="0" />
                                     </div>
                                 </div>
                             </>
                         )}
+                        <div style={{ borderTop: '1px solid #e2e8f0' }} />
+                        
+                        {/* Sección: Fotos del Cliente */}
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                                <Camera size={16} color="#6366f1" />
+                                <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#6366f1', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Documentación Biométrica</h4>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem', fontWeight: 700, textAlign: 'center' }}>FOTO DEL CLIENTE (ROSTRO)</label>
+                                    <WebcamCapture onCapture={pic => set('foto', pic)} initial={form.foto} />
+                                </div>
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem', fontWeight: 700, textAlign: 'center' }}>FOTO DE LA CC (FRONTAL)</label>
+                                    <WebcamCapture onCapture={pic => set('fotoCC', pic)} initial={form.fotoCC} />
+                                </div>
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem' }}>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem', fontWeight: 700, textAlign: 'center' }}>FOTO DE LA CC (POSTERIOR)</label>
+                                    <WebcamCapture onCapture={pic => set('fotoCCBack', pic)} initial={form.fotoCCBack} />
+                                </div>
+                            </div>
+                        </div>
 
                     </form>
                 </div>
@@ -411,6 +438,28 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
                                     <Field label="Teléfono">{client.phone || 'N/A'}</Field>
                                     <Field label="Dirección" full>{client.direccion ? `${client.direccion}, ${client.ciudad} – ${client.departamento}` : 'N/A'}</Field>
                                 </Grid2>
+                                {(client.foto || client.fotoCC) && (
+                                    <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
+                                        {client.foto && (
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: 4, textAlign: 'center' }}>FOTO CLIENTE</div>
+                                                <img src={client.foto} alt="Cliente" style={{ width: '100%', borderRadius: 10, border: '1px solid #e2e8f0', aspectRatio: '4/3', objectFit: 'cover' }} />
+                                            </div>
+                                        )}
+                                        {client.fotoCC && (
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: 4, textAlign: 'center' }}>CC FRONTAL</div>
+                                                <img src={client.fotoCC} alt="CC Front" style={{ width: '100%', borderRadius: 10, border: '1px solid #e2e8f0', aspectRatio: '4/3', objectFit: 'cover' }} />
+                                            </div>
+                                        )}
+                                        {client.fotoCCBack && (
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, marginBottom: 4, textAlign: 'center' }}>CC POSTERIOR</div>
+                                                <img src={client.fotoCCBack} alt="CC Back" style={{ width: '100%', borderRadius: 10, border: '1px solid #e2e8f0', aspectRatio: '4/3', objectFit: 'cover' }} />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </SectionCard>
 
                             {/* Bloque azul de tributaria — idéntico al "TOTAL" de la factura */}

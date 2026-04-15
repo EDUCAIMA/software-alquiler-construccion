@@ -396,6 +396,7 @@ export const AppProvider = ({ children }) => {
     await reloadAll();
     const client = clients.find(c => c.id === data.clientId);
     logAction('Remisión Creada', `${id} — ${nueva.items.length} equipo(s)`, client?.name || 'N/A', 'exit');
+    return nueva;
   };
 
   const registrarDevolucion = async (clientId, obraId, devoluciones, fecha) => {
@@ -409,7 +410,7 @@ export const AppProvider = ({ children }) => {
         .filter(({ r }) => r.clientId === clientId && r.obraId === obraId && (r.estado === 'Activa' || r.estado === 'Parcial'))
         .sort((a, b) => a.r.fecha.localeCompare(b.r.fecha));
 
-      for (const { idx } of activas) {
+        for (const { idx } of activas) {
         if (restante <= 0) break;
         const itemIdx = updatedRems[idx].items.findIndex(i => i.productId === productId);
         if (itemIdx === -1) continue;
@@ -417,7 +418,12 @@ export const AppProvider = ({ children }) => {
         const pendiente = item.cantidad - item.cantidadDevuelta;
         if (pendiente <= 0) continue;
         const descuento = Math.min(restante, pendiente);
-        updatedRems[idx].items[itemIdx].cantidadDevuelta += descuento;
+        
+        // Registrar la devolución con su fecha
+        item.cantidadDevuelta += descuento;
+        if (!item.devoluciones) item.devoluciones = [];
+        item.devoluciones.push({ cantidad: descuento, fecha: fecha || format(new Date(), 'yyyy-MM-dd') });
+        
         restante -= descuento;
         stockReintegrar[productId] = (stockReintegrar[productId] || 0) + descuento;
       }

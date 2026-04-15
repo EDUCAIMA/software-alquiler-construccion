@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { format, eachDayOfInterval, isSunday, isSaturday } from 'date-fns';
+import React, { useState, useEffect, useRef } from 'react';
+import { format, addDays, eachDayOfInterval, isSunday, isSaturday } from 'date-fns';
 import {
     FilePlus, CheckCircle, X, ChevronRight, Plus,
     MapPin, Package, Truck, CreditCard, Clock
@@ -38,13 +38,32 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
         } catch (e) { return 1; }
     };
 
+    // Ref para evitar loop circular entre los dos useEffects
+    const daysChangedByUser = useRef(false);
+
+    // Cuando cambian las FECHAS → recalcular días (solo si el usuario no cambió días directamente)
     useEffect(() => {
+        if (daysChangedByUser.current) {
+            daysChangedByUser.current = false;
+            return;
+        }
         if (selProd && fInicio && fFin) {
             const prod = products.find(p => p.id === selProd);
             const scheme = prod?.esquemaCobro || 'Calendario';
             setSelDias(calculateBillableDays(fInicio, fFin, scheme));
         }
     }, [selProd, fInicio, fFin, products]);
+
+    // Cuando cambia DÍAS manualmente → recalcular fecha fin
+    const handleDiasChange = (newDias) => {
+        const dias = Number(newDias) || 1;
+        setSelDias(dias);
+        if (fInicio) {
+            daysChangedByUser.current = true;
+            const fechaFin = addDays(new Date(fInicio + 'T00:00:00'), dias - 1);
+            setFFin(format(fechaFin, 'yyyy-MM-dd'));
+        }
+    };
 
     // Cálculos con protección total contra NaN/undefined
     const subtotal = items.reduce((s, i) => s + (Number(i.cantidad) || 0) * (Number(i.dias) || 0) * (Number(i.tarifaDia) || 0), 0);
@@ -216,7 +235,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                     </div>
                                     <div>
                                         <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Días</label>
-                                        <input type="number" min="1" value={selDias} onChange={e => setSelDias(Number(e.target.value) || 1)} style={{ ...IS, padding: '0.6rem 0.4rem' }} />
+                                        <input type="number" min="1" value={selDias} onChange={e => handleDiasChange(e.target.value)} style={{ ...IS, padding: '0.6rem 0.4rem' }} />
                                     </div>
                                     <button onClick={addItem} disabled={!selProd}
                                         style={{ height: 42, padding: '0 0.8rem', background: selProd ? '#2365AB' : '#e2e8f0', color: selProd ? 'white' : '#94a3b8', border: 'none', borderRadius: 8, cursor: selProd ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>

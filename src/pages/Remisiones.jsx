@@ -3,8 +3,10 @@ import {
     Plus, Search, Truck, Package, RotateCcw, CheckCircle,
     AlertTriangle, Clock, X, ChevronRight, Filter, FileText,
     MapPin, ArrowDownCircle, Info, CreditCard,
-    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Trash2, Ban
+    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Trash2, Ban,
+    Printer, Download, Activity, TrendingUp
 } from 'lucide-react';
+import { generateRemisionPDF } from './CotizacionesHelpers';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
 
@@ -24,8 +26,10 @@ const sField = (label, value, color) => (
 );
 
 // ─── Modal: Nueva Remisión ────────────────────────────────────────────────────
-function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, facturaPreload }) {
+function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, facturaPreload, settings }) {
     const [step, setStep] = useState(facturaPreload ? 2 : 1);
+    const [loading, setLoading] = useState(false);
+    const [createdRem, setCreatedRem] = useState(null);
     const [clientId, setClientId] = useState(facturaPreload?.clientId || '');
     const [obraId, setObraId] = useState(facturaPreload?.obraId || '');
     const [fecha, setFecha] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -79,10 +83,18 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
 
     const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx));
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!clientId || !obraId || items.length === 0) return;
-        onSave({ clientId, obraId, fecha, transporte: Number(transporte), notas, items });
-        onClose();
+        setLoading(true);
+        try {
+            const rem = await onSave({ clientId, obraId, fecha, transporte: Number(transporte), notas, items });
+            setCreatedRem(rem);
+            setStep(4);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const IS = { width: '100%', padding: '0.65rem 0.8rem', boxSizing: 'border-box', background: 'var(--background)', border: '1px solid var(--surface-border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none' };
@@ -102,7 +114,7 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                         </h3>
                         {/* Step indicator */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            {['Destino', 'Equipos', 'Confirmar'].map((s, i) => (
+                            {['Destino', 'Equipos', 'Confirmar', 'Imprimir'].map((s, i) => (
                                 <React.Fragment key={s}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                         <div style={{ width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, background: step > i + 1 ? '#10b981' : step === i + 1 ? '#2365AB' : '#e2e8f0', color: step > i ? 'white' : '#64748b' }}>
@@ -110,7 +122,7 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                                         </div>
                                         <span style={{ fontSize: '0.75rem', color: step === i + 1 ? '#2365AB' : '#64748b', fontWeight: step === i + 1 ? 700 : 500 }}>{s}</span>
                                     </div>
-                                    {i < 2 && <div style={{ width: 24, height: 2, background: step > i + 1 ? '#10b981' : '#e2e8f0', borderRadius: 2 }} />}
+                                    {i < 3 && <div style={{ width: 24, height: 2, background: step > i + 1 ? '#10b981' : '#e2e8f0', borderRadius: 2 }} />}
                                 </React.Fragment>
                             ))}
                         </div>
@@ -289,8 +301,32 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
                                 <button className="btn btn-secondary" onClick={() => setStep(2)} style={{ minWidth: 120 }}>← Atrás</button>
-                                <button className="btn btn-primary" onClick={handleSave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', minWidth: 180 }}>
-                                    <Truck size={18} /> Despachar Remisión
+                                <button className="btn btn-primary" disabled={items.length === 0 || loading} onClick={handleSave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', minWidth: 180 }}>
+                                    {loading ? 'Procesando...' : <><Truck size={18} /> Despachar Remisión</>}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 4: Finalizado / Imprimir */}
+                    {step === 4 && (
+                        <div style={{ textAlign: 'center', padding: '2rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
+                            <div style={{ background: '#dcfce7', color: '#10b981', width: 64, height: 64, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <CheckCircle size={32} />
+                            </div>
+                            <div>
+                                <h4 style={{ margin: 0, color: '#104166', fontSize: '1.25rem', marginBottom: '0.5rem' }}>¡Remisión creada con éxito!</h4>
+                                <p style={{ color: '#64748b', fontSize: '0.9rem', maxWidth: 400, margin: '0 auto' }}>
+                                    La remisión <strong style={{ color: '#2365AB' }}>{createdRem?.id}</strong> ha sido registrada y el inventario ha sido actualizado.
+                                </p>
+                            </div>
+
+                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: '1.5rem', width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <button className="btn btn-secondary" onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: 48 }}>
+                                    Cerrar Ventana
+                                </button>
+                                <button className="btn btn-primary" onClick={() => generateRemisionPDF(createdRem, selectedClient, obrasDisp.find(o => o.id === obraId), settings)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: 48 }}>
+                                    <Printer size={18} /> Imprimir Remisión
                                 </button>
                             </div>
                         </div>
@@ -482,9 +518,131 @@ function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, produc
     );
 }
 
+// ─── Modal: Trazabilidad por Cliente/Obra ───────────────────────────────────
+function TrazabilidadModal({ clientId, obraId, onClose, remisiones, products, clients }) {
+    const client = clients.find(c => c.id === clientId);
+    const obra = client?.obras?.find(o => o.id === obraId);
+
+    const timeline = useMemo(() => {
+        const events = [];
+        const clientRems = remisiones.filter(r => r.clientId === clientId && r.obraId === obraId && r.estado !== 'Cancelada');
+
+        clientRems.forEach(r => {
+            // Evento: Despacho (Remisión)
+            events.push({
+                id: `rem-${r.id}`,
+                type: 'despacho',
+                date: r.fecha,
+                title: `Despacho de Equipos (REM-${r.id})`,
+                description: `Se enviaron ${r.items.reduce((s, i) => s + i.cantidad, 0)} unidades a la obra.`,
+                items: r.items,
+                icon: Truck,
+                color: '#2365AB',
+                bg: 'rgba(35, 101, 171, 0.1)'
+            });
+
+            // Eventos: Devoluciones detectadas en esta remisión
+            r.items.forEach(item => {
+                if (item.devoluciones && Array.isArray(item.devoluciones)) {
+                    item.devoluciones.forEach((dev, idx) => {
+                        events.push({
+                            id: `dev-${r.id}-${item.productId}-${idx}`,
+                            type: 'devolucion',
+                            date: dev.fecha,
+                            title: `Devolución: ${item.nombre || item.productId}`,
+                            description: `Reingreso a inventario: ${dev.cantidad} unidad(es).`,
+                            qty: dev.cantidad,
+                            remId: r.id,
+                            icon: RotateCcw,
+                            color: '#f97316',
+                            bg: 'rgba(249, 115, 22, 0.1)'
+                        });
+                    });
+                }
+            });
+        });
+
+        return events.sort((a, b) => b.date.localeCompare(a.date));
+    }, [remisiones, clientId, obraId]);
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '1rem' }}>
+            <div style={{ background: '#ffffff', borderRadius: '20px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', width: '100%', maxWidth: 600, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to right, #f8fafc, #ffffff)' }}>
+                    <div>
+                        <h3 style={{ margin: 0, color: '#104166', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div style={{ background: 'rgba(35,101,171,0.1)', padding: '0.5rem', borderRadius: '10px' }}><TrendingUp size={20} style={{ color: '#2365AB' }} /></div>
+                            Línea de Tiempo de Alquiler
+                        </h3>
+                        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                            Cliente: <strong>{client?.name}</strong> • Obra: <strong>{obra?.nombre}</strong>
+                        </p>
+                    </div>
+                    <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button>
+                </div>
+
+                <div style={{ padding: '2rem', overflowY: 'auto', flex: 1 }}>
+                    {timeline.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                            <Activity size={40} style={{ opacity: 0.2, marginBottom: '1rem' }} />
+                            <p>No se registran movimientos para este cliente y obra.</p>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {timeline.map((event, idx) => (
+                                <div key={event.id} style={{ display: 'flex', gap: '1.5rem', position: 'relative' }}>
+                                    {/* Line */}
+                                    {idx !== timeline.length - 1 && (
+                                        <div style={{ position: 'absolute', left: '19px', top: '40px', bottom: '-20px', width: '2px', background: '#e2e8f0', zIndex: 0 }}></div>
+                                    )}
+
+                                    {/* Icon container */}
+                                    <div style={{ zIndex: 1, flexShrink: 0 }}>
+                                        <div style={{ background: event.bg, color: event.color, width: '40px', height: '40px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${event.color}20` }}>
+                                            <event.icon size={20} />
+                                        </div>
+                                    </div>
+
+                                    {/* Content */}
+                                    <div style={{ flex: 1, paddingBottom: '2.5rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
+                                            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>{event.title}</div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, background: '#f1f5f9', padding: '0.2rem 0.6rem', borderRadius: '20px' }}>{event.date}</div>
+                                        </div>
+                                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', lineHeight: 1.5 }}>{event.description}</p>
+                                        
+                                        {event.type === 'despacho' && (
+                                            <div style={{ marginTop: '0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                {event.items.map((it, i) => (
+                                                    <span key={i} style={{ fontSize: '0.7rem', background: '#eff6ff', color: '#2365AB', padding: '0.2rem 0.6rem', borderRadius: '6px', border: '1px solid #dbeafe', fontWeight: 600 }}>
+                                                        {it.cantidad}x {it.nombre || it.productId}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {event.type === 'devolucion' && (
+                                            <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: '#f97316', fontWeight: 700, fontStyle: 'italic' }}>
+                                                Afecta a Remisión {event.remId}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ padding: '1.25rem 2rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderRadius: '0 0 20px 20px', textAlign: 'right' }}>
+                    <button className="btn btn-secondary" onClick={onClose} style={{ minWidth: 100 }}>Cerrar</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Remisiones() {
-    const { clients, products, remisiones, invoices, addRemision, registrarDevolucion, maintenances, marcarRemisionCreada, deleteRemision, cancelRemision } = useAppContext();
+    const { clients, products, remisiones, invoices, addRemision, registrarDevolucion, maintenances, marcarRemisionCreada, deleteRemision, cancelRemision, settings } = useAppContext();
 
     const [search, setSearch] = useState('');
     const [filterEstado, setFilterEstado] = useState('Todos');
@@ -492,6 +650,7 @@ export default function Remisiones() {
     const [showNueva, setShowNueva] = useState(false);
     const [facturaPreload, setFacturaPreload] = useState(null);
     const [devolucionTarget, setDevolucionTarget] = useState(null); // { clientId, obraId }
+    const [trazabilidadTarget, setTrazabilidadTarget] = useState(null); // { clientId, obraId }
     const [blockMsg, setBlockMsg] = useState('');
 
     // Facturas pagadas pendientes de remisión
@@ -568,17 +727,19 @@ export default function Remisiones() {
 
     const totalPages = Math.ceil(sortedRemisiones.length / itemsPerPage);
 
-    const handleSaveRemision = (data) => {
+    const handleSaveRemision = async (data) => {
         try {
             setBlockMsg('');
-            addRemision(data);
+            const res = await addRemision(data);
             // Si viene de una factura pre-cargada, marcarla como remisión creada
             if (facturaPreload?.id) {
-                marcarRemisionCreada(facturaPreload.id);
+                await marcarRemisionCreada(facturaPreload.id);
             }
             setFacturaPreload(null);
+            return res;
         } catch (e) {
             setBlockMsg(e.message);
+            throw e;
         }
     };
 
@@ -793,6 +954,14 @@ export default function Remisiones() {
                                                     </button>
                                                 )}
                                                 <button
+                                                    onClick={() => generateRemisionPDF(rem, client, obra, settings)}
+                                                    className="btn btn-sm"
+                                                    style={{ background: 'rgba(35, 101, 171, 0.08)', color: '#2365AB', border: '1px solid rgba(35, 101, 171, 0.2)', padding: '0.4rem', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    title="Imprimir Remisión"
+                                                >
+                                                    <Printer size={13} />
+                                                </button>
+                                                <button
                                                     onClick={() => {
                                                         if (window.confirm(`¿Está seguro de eliminar la remisión ${rem.id}? Esto devolverá los equipos no devueltos al stock.`)) {
                                                             deleteRemision(rem.id);
@@ -803,6 +972,14 @@ export default function Remisiones() {
                                                     title="Eliminar Remisión"
                                                 >
                                                     <Trash2 size={13} />
+                                                </button>
+                                                <button
+                                                    onClick={() => setTrazabilidadTarget({ clientId: rem.clientId, obraId: rem.obraId })}
+                                                    className="btn btn-sm"
+                                                    style={{ background: 'rgba(99, 102, 241, 0.08)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.2)', padding: '0.4rem', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    title="Ver Trazabilidad (Línea de Tiempo)"
+                                                >
+                                                    <Activity size={13} />
                                                 </button>
                                             </div>
                                         </td>
@@ -908,6 +1085,7 @@ export default function Remisiones() {
                     products={products}
                     maintenances={maintenances}
                     facturaPreload={facturaPreload}
+                    settings={settings}
                 />
             )}
             {devolucionTarget && (
@@ -918,6 +1096,16 @@ export default function Remisiones() {
                     clients={clients}
                     onClose={() => setDevolucionTarget(null)}
                     onSave={(devoluciones, fecha) => registrarDevolucion(devolucionTarget.clientId, devolucionTarget.obraId, devoluciones, fecha)}
+                />
+            )}
+
+            {trazabilidadTarget && (
+                <TrazabilidadModal
+                    {...trazabilidadTarget}
+                    onClose={() => setTrazabilidadTarget(null)}
+                    remisiones={remisiones}
+                    products={products}
+                    clients={clients}
                 />
             )}
         </>

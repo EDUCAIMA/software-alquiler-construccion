@@ -3,7 +3,8 @@ import {
     PackagePlus, UploadCloud, QrCode,
     AlertTriangle, X, Wrench, Trash2, ArrowDownCircle,
     ShieldCheck, ShieldAlert, Download, Factory, Pencil,
-    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Search, ChevronUp
+    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Search, ChevronUp,
+    User, MapPin
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import QRCode from 'qrcode';
@@ -393,11 +394,143 @@ function DeleteModal({ product, onClose, onConfirm }) {
     );
 }
 
+// ─── Modal: Equipos en Campo (Informe de Préstamo) ───────────────────────────
+function FieldInventoryModal({ onClose, products, remisiones, clients }) {
+    const [q, setQ] = useState('');
+
+    const equipmentInField = useMemo(() => {
+        const report = [];
+        remisiones
+            .filter(r => r.estado === 'Activa' || r.estado === 'Parcial')
+            .forEach(r => {
+                const client = clients.find(c => c.id === r.clientId);
+                const obra = client?.obras?.find(o => o.id === r.obraId);
+                
+                r.items.forEach(item => {
+                    const pend = item.cantidad - (item.cantidadDevuelta || 0);
+                    if (pend > 0) {
+                        const prod = products.find(p => p.id === item.productId);
+                        report.push({
+                            id: r.id,
+                            fecha: r.fecha,
+                            productId: item.productId,
+                            productName: prod?.name || item.productId,
+                            clientId: r.clientId,
+                            clientName: client?.name || 'N/A',
+                            obraName: obra?.nombre || 'N/A',
+                            cantidad: pend
+                        });
+                    }
+                });
+            });
+        
+        if (!q) return report;
+        const lowQ = q.toLowerCase();
+        return report.filter(r => 
+            r.productName.toLowerCase().includes(lowQ) || 
+            r.clientName.toLowerCase().includes(lowQ) || 
+            r.obraName.toLowerCase().includes(lowQ)
+        );
+    }, [remisiones, products, clients, q]);
+
+    return (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+            <div className="modal-content fadeIn" style={{ maxWidth: 850, padding: 0, overflow: 'hidden', height: '85vh', display: 'flex', flexDirection: 'column' }}>
+                {/* Header */}
+                <div style={{ background: 'linear-gradient(135deg, #2365AB, #154272)', padding: '1.5rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h3 style={{ margin: 0, color: 'white', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <ArrowDownCircle size={22} /> Equipos en Campo (Informe de Préstamo)
+                        </h3>
+                        <p style={{ margin: '0.25rem 0 0 0', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                            Vista detallada de qué equipos tienen los clientes actualmente
+                        </p>
+                    </div>
+                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
+                </div>
+
+                {/* Filters */}
+                <div style={{ padding: '1rem 2rem', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                    <div style={{ position: 'relative' }}>
+                        <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                        <input 
+                            value={q} 
+                            onChange={e => setQ(e.target.value)} 
+                            placeholder="Buscar por equipo, cliente u obra..."
+                            style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.9rem' }}
+                        />
+                    </div>
+                </div>
+
+                {/* Table Area */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 2rem' }}>
+                    {equipmentInField.length === 0 ? (
+                        <div style={{ padding: '4rem', textAlign: 'center', color: '#94a3b8' }}>
+                            <div style={{ opacity: 0.2, marginBottom: '1rem' }}><ArrowDownCircle size={48} /></div>
+                            No hay equipos en campo que coincidan con la búsqueda.
+                        </div>
+                    ) : (
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Equipo</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Cliente / Obra</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', textAlign: 'center' }}>Cant.</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>F. Despacho</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Remisión</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {equipmentInField.map((row, idx) => (
+                                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                        <td style={{ padding: '1rem 0.5rem' }}>
+                                            <div style={{ fontWeight: 700, color: '#104166', fontSize: '0.9rem' }}>{row.productName}</div>
+                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ID: {row.productId}</div>
+                                        </td>
+                                        <td style={{ padding: '1rem 0.5rem' }}>
+                                            <div style={{ fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                                                <User size={12} color="#2365AB" /> {row.clientName}
+                                            </div>
+                                            <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
+                                                <MapPin size={12} color="#f97316" /> {row.obraName}
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '1rem 0.5rem', textAlign: 'center' }}>
+                                            <span style={{ background: '#e0e7ff', color: '#4f46e5', padding: '0.25rem 0.6rem', borderRadius: 999, fontWeight: 800, fontSize: '0.85rem' }}>
+                                                {row.cantidad}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#64748b' }}>
+                                            {row.fecha}
+                                        </td>
+                                        <td style={{ padding: '1rem 0.5rem', fontFamily: 'monospace', fontWeight: 600, color: '#2365AB', fontSize: '0.85rem' }}>
+                                            {row.id}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding: '1.25rem 2rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>
+                        Total registros: <span style={{ color: '#104166', fontWeight: 800 }}>{equipmentInField.length}</span>
+                    </div>
+                    <button className="btn btn-primary" onClick={onClose} style={{ minWidth: 100 }}>Cerrar</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Products() {
-    const { products, addProduct, editProduct, deleteProduct, darDeBajaProduct, maintenances, settings } = useAppContext();
+    const { products, addProduct, editProduct, deleteProduct, darDeBajaProduct, maintenances, settings, remisiones, clients } = useAppContext();
     const [showAddModal, setShowAddModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showFieldModal, setShowFieldModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
     const [hojaProduct, setHojaProduct] = useState(null);
     const [bajaProduct, setBajaProduct] = useState(null);
@@ -473,7 +606,12 @@ export default function Products() {
                     <h1>Inventario &amp; Alquiler</h1>
                     <p className="text-muted">Gestión de maquinaria y hoja de vida</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setShowAddModal(true)}><PackagePlus size={20} /> Nuevo Equipo</button>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button className="btn btn-secondary" onClick={() => setShowFieldModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <ArrowDownCircle size={20} /> Ver Equipos en Campo
+                    </button>
+                    <button className="btn btn-primary" onClick={() => setShowAddModal(true)}><PackagePlus size={20} /> Nuevo Equipo</button>
+                </div>
             </div>
 
             {/* Filters */}
@@ -711,6 +849,16 @@ export default function Products() {
                     product={deleteProduct_}
                     onClose={() => setDeleteProduct(null)}
                     onConfirm={() => deleteProduct(deleteProduct_.id)}
+                />
+            )}
+
+            {/* Field Inventory Modal */}
+            {showFieldModal && (
+                <FieldInventoryModal 
+                    onClose={() => setShowFieldModal(false)} 
+                    products={products} 
+                    remisiones={remisiones} 
+                    clients={clients} 
                 />
             )}
 

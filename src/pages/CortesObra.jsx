@@ -4,7 +4,7 @@ import {
     Building2, Truck, ChevronRight, CheckCircle, AlertTriangle, Percent
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { differenceInDays, format, eachDayOfInterval, isSunday, isSaturday } from 'date-fns';
+import { differenceInDays, format, eachDayOfInterval, isSunday, isSaturday, addDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
@@ -127,6 +127,7 @@ export default function CortesObra() {
 
     const [clientId, setClientId] = useState('');
     const [obraId, setObraId] = useState('');
+    const [fechaInicio, setFechaInicio] = useState(format(addDays(new Date(), -30), 'yyyy-MM-dd'));
     const [fechaCorte, setFechaCorte] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [generado, setGenerado] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -135,54 +136,121 @@ export default function CortesObra() {
     const obrasDisp = selectedClient?.obras || [];
     const selectedObra = obrasDisp.find(o => o.id === obraId);
 
-    // Compute liquidación from PEPS remisiones
+    // Compute liquidación from PEPS remisiones within the selected period
     const resultado = useMemo(() => {
-        if (!clientId || !fechaCorte) return null;
+        if (!clientId || !fechaInicio || !fechaCorte) return null;
 
-        const fCorte = new Date(fechaCorte);
+        const parseUTCDate = (str) => {
+            if (!str) return null;
+            const [y, m, d] = str.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        };
+
+        const fStart = parseUTCDate(fechaInicio);
+        const fEnd = parseUTCDate(fechaCorte);
+        
+        // Obtenemos remisiones que pudieron tener actividad en el periodo
         const rems = remisiones.filter(r =>
-            r.clientId === clientId && (!obraId || r.obraId === obraId) && new Date(r.fecha) <= fCorte
+            r.clientId === clientId && 
+            (!obraId || r.obraId === obraId) && 
+            parseUTCDate(r.fecha) <= fEnd &&
+            r.estado !== 'Cancelada'
         );
 
         const lineas = [];
-        let subtotal = 0;
+        let subtotalTotal = 0;
         let totalTransporte = 0;
 
         rems.forEach(rem => {
-            totalTransporte += rem.transporte || 0;
+            // Solo cobrar transporte si la remisión se CREÓ dentro del periodo actual
+            const rDate = parseUTCDate(rem.fecha);
+            if (rDate >= fStart && rDate <= fEnd) {
+                totalTransporte += rem.transporte || 0;
+            }
+
             rem.items.forEach(item => {
                 const prod = products.find(p => p.id === item.productId);
-                if (!item.cantidad || !item.cantidadDevuelta !== undefined) {
-                    const startDate = new Date(rem.fecha);
-                    const endDate = fCorte;
+                if (item.cantidad > 0) {
+                    const equipStart = rDate; // Fecha de entrega
                     const scheme = prod?.esquemaCobro || 'Calendario';
-                    const dias = calculateBillableDays(startDate, endDate, scheme);
                     const tarifa = prod?.value || 0;
-                    const sub = item.cantidad * dias * tarifa;
-                    subtotal += sub;
-                    lineas.push({
-                        remId: rem.id,
-                        remFecha: rem.fecha,
-                        equipo: prod?.name || item.productId,
-                        cantidad: item.cantidad,
-                        dias,
-                        tarifaDia: tarifa,
-                        subtotal: sub,
-                        estado: rem.estado,
-                        esquema: scheme,
-                    });
+
+                    let totalUnitsDaysInPeriod = 0;
+                    let accountedQty = 0;
+
+                    // 1. Procesar devoluciones registradas con fecha exacta
+                    if (item.devoluciones && Array.isArray(item.devoluciones)) {
+                        item.devoluciones.forEach(dev => {
+                            const dDate = parseUTCDate(dev.fecha);
+                            
+                            // El periodo de vida de esta tajada de equipos es [equipStart, dDate]
+                            // Cruzamos esto con el periodo de cobro [fStart, fEnd]
+                            const effectiveStart = equipStart > fStart ? equipStart : fStart;
+                            const effectiveEnd = dDate < fEnd ? dDate : fEnd;
+
+                            if (effectiveStart <= effectiveEnd) {
+                                const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
+                                totalUnitsDaysInPeriod += dev.cantidad * dDays;
+                            }
+                            accountedQty += dev.cantidad;
+                        });
+                    }
+
+                    // 2. Manejar inconsistencias (devoluciones sin log histórico pero marcadas como devueltas)
+                    const orphanReturns = (item.cantidadDevuelta || 0) - accountedQty;
+                    if (orphanReturns > 0) {
+                        // Como no sabemos cuándo volvieron, no los cobramos en periodos futuros. 
+                        // Solo se cobrarían si la remisión es de este mismo periodo.
+                        const effectiveStart = equipStart > fStart ? equipStart : fStart;
+                        const effectiveEnd = equipStart < fEnd ? equipStart : fEnd; // Asumimos devolución inmediata
+                        if (effectiveStart <= effectiveEnd) {
+                            const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
+                            totalUnitsDaysInPeriod += orphanReturns * dDays;
+                        }
+                        accountedQty += orphanReturns;
+                    }
+
+                    // 3. Procesar lo que REALMENTE sigue en campo
+                    const remainingQty = item.cantidad - accountedQty;
+                    if (remainingQty > 0) {
+                        const effectiveStart = equipStart > fStart ? equipStart : fStart;
+                        const effectiveEnd = fEnd; // Sigue en campo hasta el final del periodo de corte
+
+                        if (effectiveStart <= effectiveEnd) {
+                            const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
+                            totalUnitsDaysInPeriod += remainingQty * dDays;
+                        }
+                    }
+
+                    if (totalUnitsDaysInPeriod > 0) {
+                        const sub = totalUnitsDaysInPeriod * tarifa;
+                        const weightedDays = (totalUnitsDaysInPeriod / item.cantidad).toFixed(1);
+
+                        subtotalTotal += sub;
+                        lineas.push({
+                            remId: rem.id,
+                            remFecha: rem.fecha,
+                            equipo: prod?.name || item.productId,
+                            cantidad: item.cantidad,
+                            dias: Number(weightedDays),
+                            tarifaDia: tarifa,
+                            subtotal: sub,
+                            estado: rem.estado,
+                            esquema: scheme,
+                        });
+                    }
                 }
             });
         });
 
         const porcIVA = selectedClient?.responsableIVA ? (selectedClient?.porcIVA || 0) : 0;
         const porcRet = selectedClient?.porcRetencion || 0;
-        const iva = Math.round(subtotal * porcIVA / 100);
-        const retencion = Math.round(subtotal * porcRet / 100);
-        const totalNeto = subtotal + iva + retencion + totalTransporte;
+        const iva = Math.round(subtotalTotal * porcIVA / 100);
+        const retencion = Math.round(subtotalTotal * porcRet / 100);
+        const totalNeto = subtotalTotal + iva + retencion + totalTransporte;
 
-        return { lineas, subtotal, iva, retencion, transporte: totalTransporte, totalNeto, porcIVA, porcRet };
-    }, [clientId, obraId, fechaCorte, remisiones, products, selectedClient]);
+        return { lineas, subtotal: subtotalTotal, iva, retencion, transporte: totalTransporte, totalNeto, porcIVA, porcRet };
+    }, [clientId, obraId, fechaInicio, fechaCorte, remisiones, products, selectedClient]);
 
     const handleGenerate = () => { if (resultado) setGenerado(true); };
     const handleSaveInvoice = () => {
@@ -244,9 +312,15 @@ export default function CortesObra() {
                                     </select>
                                 </div>
                             )}
-                            <div>
-                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Fecha de Corte</label>
-                                <input type="date" value={fechaCorte} onChange={e => { setFechaCorte(e.target.value); setGenerado(false); setSaved(false); }} style={inputStyle} />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Fecha Inicial</label>
+                                    <input type="date" value={fechaInicio} onChange={e => { setFechaInicio(e.target.value); setGenerado(false); setSaved(false); }} style={inputStyle} />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Fecha de Corte</label>
+                                    <input type="date" value={fechaCorte} onChange={e => { setFechaCorte(e.target.value); setGenerado(false); setSaved(false); }} style={inputStyle} />
+                                </div>
                             </div>
                             <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem' }}
                                 disabled={!clientId} onClick={handleGenerate}>
@@ -303,8 +377,10 @@ export default function CortesObra() {
                                     </div>
                                 </div>
                                 <div style={{ textAlign: 'right', background: '#f8fafc', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Fecha de corte</div>
-                                    <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#2365AB', marginTop: 2 }}>{fechaCorte}</div>
+                                <div>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Periodo de Liquidación</div>
+                                    <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#2365AB', marginTop: 2 }}>{fechaInicio} al {fechaCorte}</div>
+                                </div>
                                 </div>
                             </div>
 
