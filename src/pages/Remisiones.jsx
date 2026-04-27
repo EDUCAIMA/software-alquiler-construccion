@@ -9,12 +9,14 @@ import {
 import { generateRemisionPDF } from './CotizacionesHelpers';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
+import Swal from 'sweetalert2';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ESTADO_CFG = {
     'Activa': { color: '#2365AB', bg: 'rgba(35, 101, 171,0.12)', Icon: Truck },
     'Parcial': { color: '#f97316', bg: 'rgba(249,115,22,0.12)', Icon: Clock },
     'Cerrada': { color: '#10b981', bg: 'rgba(16,185,129,0.12)', Icon: CheckCircle },
+    'Pendiente': { color: '#6366f1', bg: 'rgba(99, 102, 241, 0.12)', Icon: AlertTriangle },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -525,7 +527,7 @@ function TrazabilidadModal({ clientId, obraId, onClose, remisiones, products, cl
 
     const timeline = useMemo(() => {
         const events = [];
-        const clientRems = remisiones.filter(r => r.clientId === clientId && r.obraId === obraId && r.estado !== 'Cancelada');
+        const clientRems = (remisiones || []).filter(r => r.clientId === clientId && r.obraId === obraId && r.estado !== 'Cancelada');
 
         clientRems.forEach(r => {
             // Evento: Despacho (Remisión)
@@ -534,8 +536,8 @@ function TrazabilidadModal({ clientId, obraId, onClose, remisiones, products, cl
                 type: 'despacho',
                 date: r.fecha,
                 title: `Despacho de Equipos (REM-${r.id})`,
-                description: `Se enviaron ${r.items.reduce((s, i) => s + i.cantidad, 0)} unidades a la obra.`,
-                items: r.items,
+                description: `Se enviaron ${(r.items || []).reduce((s, i) => s + (Number(i.cantidad) || 0), 0)} unidades a la obra.`,
+                items: r.items || [],
                 icon: Truck,
                 color: '#2365AB',
                 bg: 'rgba(35, 101, 171, 0.1)'
@@ -640,9 +642,78 @@ function TrazabilidadModal({ clientId, obraId, onClose, remisiones, products, cl
     );
 }
 
+// ─── Modal: Verificación de Despacho ─────────────────────────────────────────
+function VerifyDispatchModal({ rem, onClose, onConfirm, clients, products }) {
+    if (!rem) return null;
+    const client = clients.find(c => c.id === rem.clientId);
+    const obra = client?.obras?.find(o => o.id === rem.obraId);
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300, padding: '1rem' }}>
+            <div className="page-animate" style={{ background: '#ffffff', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', width: '100%', maxWidth: 550, overflow: 'hidden' }}>
+                <div style={{ padding: '1.5rem 2rem', background: 'linear-gradient(135deg, #2365AB, #153e69)', color: 'white' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Verificación de Despacho</h3>
+                        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
+                    </div>
+                </div>
+
+                <div style={{ padding: '2rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem', padding: '1rem', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                        <div>
+                            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#64748b', fontWeight: 700 }}>Cliente</div>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>{client?.name || 'N/A'}</div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: '#64748b', fontWeight: 700 }}>Obra</div>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>{obra?.nombre || 'N/A'}</div>
+                        </div>
+                    </div>
+
+                    <h4 style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Package size={16} /> Equipos a Despachar
+                    </h4>
+                    
+                    <div style={{ maxHeight: '250px', overflowY: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                            <thead>
+                                <tr style={{ background: '#f1f5f9' }}>
+                                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Descripción</th>
+                                    <th style={{ padding: '0.75rem', textAlign: 'center' }}>Cant.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rem.items.map((item, idx) => {
+                                    // Buscar nombre en la lista global de productos si no está en el item
+                                    const prodInfo = (products || []).find(p => p.id === item.productId);
+                                    const displayName = item.nombre || item.name || prodInfo?.nombre || prodInfo?.name || item.productId || 'Equipo Desconocido';
+                                    
+                                    return (
+                                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                            <td style={{ padding: '0.75rem' }}>{displayName}</td>
+                                            <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 800, color: '#2365AB' }}>{item.cantidad}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
+                        <button onClick={onClose} className="btn btn-secondary" style={{ flex: 1 }}>Cancelar</button>
+                        <button onClick={onConfirm} className="btn btn-primary" style={{ flex: 2, background: '#10b981', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                            <CheckCircle size={18} /> Confirmar Salida y PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Remisiones() {
-    const { clients, products, remisiones, invoices, addRemision, registrarDevolucion, maintenances, marcarRemisionCreada, deleteRemision, cancelRemision, settings } = useAppContext();
+    const { clients, products, remisiones, invoices, addRemision, editRemision, registrarDevolucion, maintenances, marcarRemisionCreada, deleteRemision, cancelRemision, settings } = useAppContext();
 
     const [search, setSearch] = useState('');
     const [filterEstado, setFilterEstado] = useState('Todos');
@@ -650,7 +721,9 @@ export default function Remisiones() {
     const [showNueva, setShowNueva] = useState(false);
     const [facturaPreload, setFacturaPreload] = useState(null);
     const [devolucionTarget, setDevolucionTarget] = useState(null); // { clientId, obraId }
-    const [trazabilidadTarget, setTrazabilidadTarget] = useState(null); // { clientId, obraId }
+    const [trazabilidadTarget, setTrazabilidadTarget] = useState(null); 
+    const [showVerifyModal, setShowVerifyModal] = useState(false);
+    const [verifyTarget, setVerifyTarget] = useState(null);
     const [blockMsg, setBlockMsg] = useState('');
 
     // Facturas pagadas pendientes de remisión
@@ -661,20 +734,63 @@ export default function Remisiones() {
     }, [invoices]);
 
     // KPIs
-    const activas = remisiones.filter(r => r.estado === 'Activa').length;
-    const parciales = remisiones.filter(r => r.estado === 'Parcial').length;
-    const cerradas = remisiones.filter(r => r.estado === 'Cerrada').length;
-    const totalTransporte = remisiones.reduce((s, r) => s + (r.transporte || 0), 0);
+    const activas = (remisiones || []).filter(r => r.estado === 'Activa').length;
+    const parciales = (remisiones || []).filter(r => r.estado === 'Parcial').length;
+    const cerradas = (remisiones || []).filter(r => r.estado === 'Cerrada').length;
+    const totalTransporte = (remisiones || []).reduce((s, r) => s + (Number(r.transporte) || 0), 0);
     const totalEquiposEnCampo = useMemo(() => {
         let total = 0;
-        remisiones.filter(r => r.estado !== 'Cerrada').forEach(r => {
-            r.items.forEach(item => { total += item.cantidad - item.cantidadDevuelta; });
+        (remisiones || []).filter(r => r.estado !== 'Cerrada').forEach(r => {
+            (r.items || []).forEach(item => { 
+                total += (Number(item.cantidad) || 0) - (Number(item.cantidadDevuelta) || 0); 
+            });
         });
         return total;
     }, [remisiones]);
 
     // Filtered
     const [sortConfig, setSortConfig] = useState({ key: 'fecha', direction: 'desc' });
+
+    // Handlers
+    const handleFinalizeDispatch = (rem) => {
+        setVerifyTarget(rem);
+        setShowVerifyModal(true);
+    };
+
+    const handleConfirmFinalDispatch = async () => {
+        if (!verifyTarget) return;
+        const rem = verifyTarget;
+        try {
+            console.log('🚀 Finalizando Despacho Confirmado para:', rem.id);
+            const today = format(new Date(), 'yyyy-MM-dd');
+            const client = clients.find(c => c.id === rem.clientId);
+            const obra = client?.obras?.find(o => o.id === rem.obraId);
+            
+            await editRemision(rem.id, { estado: 'Activa', fecha: today });
+            generateRemisionPDF({ ...rem, estado: 'Activa', fecha: today }, client, obra, settings);
+            
+            setShowVerifyModal(false);
+            setVerifyTarget(null);
+            
+            Swal.fire({
+                title: '¡Despacho Exitoso!',
+                text: `La remisión ${rem.id} ha sido activada y el documento PDF se ha generado correctamente.`,
+                icon: 'success',
+                confirmButtonColor: '#2365AB',
+                confirmButtonText: 'Excelente',
+                background: '#ffffff',
+                borderRadius: '16px'
+            });
+        } catch (err) {
+            console.error('❌ ERROR FINALIZANDO DESPACHO:', err);
+            Swal.fire({
+                title: 'Error al Procesar',
+                text: err.message,
+                icon: 'error',
+                confirmButtonColor: '#ef4444'
+            });
+        }
+    };
 
     const handleSort = (key) => {
         let direction = 'asc';
@@ -701,6 +817,9 @@ export default function Remisiones() {
                 if (sortConfig.key === 'clientName') {
                     aVal = (clients.find(x => x.id === a.clientId)?.name || '').toLowerCase();
                     bVal = (clients.find(x => x.id === b.clientId)?.name || '').toLowerCase();
+                } else if (sortConfig.key === 'id') {
+                    aVal = parseInt(a.id.split('-').pop()) || 0;
+                    bVal = parseInt(b.id.split('-').pop()) || 0;
                 } else {
                     aVal = a[sortConfig.key] || '';
                     bVal = b[sortConfig.key] || '';
@@ -751,13 +870,30 @@ export default function Remisiones() {
 
     return (
         <>
-            {/* Page Header */}
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1>Remisiones</h1>
-                    <p className="text-muted">Control de despachos, devoluciones y lógica PEPS</p>
+            {/* Header / Top Bar con KPIs integrados */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flex: 1 }}>
+                    <h1 style={{ margin: 0, whiteSpace: 'nowrap', fontSize: '1.75rem' }}>Remisiones</h1>
+                    
+                    {/* KPIs en el centro */}
+                    <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
+                        {[
+                            { label: 'Activas', value: activas, color: 'blue' },
+                            { label: 'En Campo', value: totalEquiposEnCampo, color: 'blue' },
+                            { label: 'Costo Transp.', value: `$${totalTransporte.toLocaleString()}`, color: 'orange' },
+                            { label: 'Parciales', value: parciales, color: 'orange' }
+                        ].map(({ label, value, color }) => (
+                            <div key={label} className={`stat-card ${color}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0.5rem 0.85rem', textAlign: 'center', minWidth: 0, height: 'auto' }}>
+                                <div>
+                                    <div className="stat-value" style={{ fontSize: '1.1rem', lineHeight: 1.1 }}>{value}</div>
+                                    <div className="stat-label" style={{ fontSize: '0.65rem', marginTop: '0.1rem', fontWeight: 700 }}>{label}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-                <button className="btn btn-primary" onClick={() => { setFacturaPreload(null); setShowNueva(true); }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+
+                <button className="btn btn-primary" onClick={() => { setFacturaPreload(null); setShowNueva(true); }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', height: 'fit-content', padding: '0.7rem 1.25rem' }}>
                     <Plus size={18} /> Nueva Remisión
                 </button>
             </div>
@@ -814,29 +950,7 @@ export default function Remisiones() {
                 </div>
             )}
 
-            {/* KPIs */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-                <div className="stat-card blue">
-                    <div className="icon-wrapper blue"><Truck size={20} /></div>
-                    <div><div className="stat-value">{activas}</div><div className="stat-label">Remisiones Activas</div></div>
-                </div>
-                <div className="stat-card orange">
-                    <div className="icon-wrapper orange"><Clock size={20} /></div>
-                    <div><div className="stat-value">{parciales}</div><div className="stat-label">Devol. Parcial</div></div>
-                </div>
-                <div className="stat-card green">
-                    <div className="icon-wrapper green"><CheckCircle size={20} /></div>
-                    <div><div className="stat-value">{cerradas}</div><div className="stat-label">Cerradas</div></div>
-                </div>
-                <div className="stat-card blue">
-                    <div className="icon-wrapper blue"><Package size={20} /></div>
-                    <div><div className="stat-value">{totalEquiposEnCampo}</div><div className="stat-label">Equipos en Campo</div></div>
-                </div>
-                <div className="stat-card orange">
-                    <div className="icon-wrapper orange"><Truck size={20} /></div>
-                    <div><div className="stat-value">${totalTransporte.toLocaleString()}</div><div className="stat-label">Costo Transporte</div></div>
-                </div>
-            </div>
+
 
             {/* Filters */}
             <div className="glass-panel p-6 mb-6" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -846,13 +960,12 @@ export default function Remisiones() {
                         style={{ ...inputStyle, paddingLeft: '2rem', width: '100%', boxSizing: 'border-box' }} />
                 </div>
                 <select value={filterEstado} onChange={e => setFilterEstado(e.target.value)} style={{ ...inputStyle, minWidth: 140 }}>
-                    <option>Todos</option><option>Activa</option><option>Parcial</option><option>Cerrada</option>
+                    <option>Todos</option><option>Pendiente</option><option>Activa</option><option>Parcial</option><option>Cerrada</option>
                 </select>
                 <select value={filterClient} onChange={e => setFilterClient(e.target.value)} style={{ ...inputStyle, minWidth: 180 }}>
                     <option value="">Todos los clientes</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{sortedRemisiones.length} registro(s)</span>
             </div>
 
             {/* Table */}
@@ -863,10 +976,9 @@ export default function Remisiones() {
                             <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
                                 {[
                                     { label: 'ID', key: 'id' },
-                                    { label: 'Cliente / Obra', key: 'clientName' },
+                                    { label: 'Cliente', key: 'clientName' },
                                     { label: 'Fecha', key: 'fecha' },
                                     { label: 'Equipos', key: null },
-                                    { label: 'Transporte', key: 'transporte' },
                                     { label: 'Estado', key: 'estado' },
                                     { label: 'Días activo', key: null },
                                     { label: 'Acciones', key: null }
@@ -896,30 +1008,32 @@ export default function Remisiones() {
                                 const obra = client?.obras?.find(o => o.id === rem.obraId);
                                 const cfg = ESTADO_CFG[rem.estado] || ESTADO_CFG['Activa'];
                                 const dias = rem.estado !== 'Cerrada' ? differenceInDays(new Date(), new Date(rem.fecha)) : '—';
-                                const totalItems = rem.items.reduce((s, i) => s + i.cantidad, 0);
-                                const totalDev = rem.items.reduce((s, i) => s + i.cantidadDevuelta, 0);
+                                const totalItems = rem.items?.reduce((s, i) => s + (Number(i.cantidad) || 0), 0) || 0;
+                                const totalDev = rem.items?.reduce((s, i) => s + (Number(i.cantidadDevuelta) || 0), 0) || 0;
                                 const canReturn = rem.estado !== 'Cerrada' && rem.estado !== 'Cancelada';
                                 return (
                                     <tr key={rem.id} style={{ borderBottom: '1px solid var(--surface-border)' }}
                                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                     >
-                                        <td style={{ padding: '0.85rem', fontWeight: 700, fontFamily: 'monospace', color: '#2365AB', fontSize: '0.82rem' }}>{rem.id}</td>
                                         <td style={{ padding: '0.85rem' }}>
-                                            <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{client?.name || rem.clientId}</div>
-                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                                                <MapPin size={10} /> {obra?.nombre || rem.obraId}
+                                            <div style={{ fontWeight: 800, fontFamily: 'monospace', color: '#2365AB', fontSize: '0.85rem' }}>{rem.id.split('-').pop()}</div>
+                                            <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                                                {rem.cotizacionId && <span title={`Cotización: ${rem.cotizacionId}`} style={{ fontSize: '0.6rem', padding: '1px 5px', borderRadius: 4, background: 'rgba(99,102,241,0.08)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.2)', fontWeight: 700 }}>📋 {rem.cotizacionId.split('-').pop()}</span>}
+                                                {rem.facturaId && <span title={`Factura: ${rem.facturaId}`} style={{ fontSize: '0.6rem', padding: '1px 5px', borderRadius: 4, background: 'rgba(16,185,129,0.08)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)', fontWeight: 700 }}>📄 {rem.facturaId.split('-').pop()}</span>}
                                             </div>
                                         </td>
-                                        <td style={{ padding: '0.85rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>{rem.fecha}</td>
+                                        <td style={{ padding: '0.85rem' }}>
+                                            <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{client?.name || rem.clientId}</div>
+                                        </td>
+                                        <td style={{ padding: '0.85rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                                            {format(new Date(rem.fecha + 'T12:00:00'), 'dd/MM/yy')}
+                                        </td>
                                         <td style={{ padding: '0.85rem' }}>
                                             <div style={{ fontSize: '0.82rem' }}>{totalItems} unds. / {totalDev} devueltas</div>
                                             <div style={{ height: 4, background: 'var(--surface-border)', borderRadius: 999, width: 80, marginTop: 4, overflow: 'hidden' }}>
                                                 <div style={{ height: '100%', width: `${totalItems > 0 ? Math.round(totalDev / totalItems * 100) : 0}%`, background: '#10b981', borderRadius: 999 }} />
                                             </div>
-                                        </td>
-                                        <td style={{ padding: '0.85rem', fontWeight: 600, color: '#f97316' }}>
-                                            {rem.transporte > 0 ? `$${rem.transporte.toLocaleString()}` : '—'}
                                         </td>
                                         <td style={{ padding: '0.85rem' }}>
                                             <span style={{ padding: '3px 10px', borderRadius: 999, background: cfg.bg, color: cfg.color, fontWeight: 700, fontSize: '0.72rem', border: `1px solid ${cfg.color}30` }}>
@@ -931,6 +1045,18 @@ export default function Remisiones() {
                                         </td>
                                         <td style={{ padding: '0.85rem' }}>
                                             <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                                {rem.estado === 'Pendiente' && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleFinalizeDispatch(rem);
+                                                        }}
+                                                        id={`btn-finalize-${rem.id}`}
+                                                        className="btn btn-primary btn-sm"
+                                                        style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 4, background: '#6366f1', border: 'none', padding: '0.4rem 0.8rem' }}>
+                                                        <CheckCircle size={13} /> Finalizar Despacho
+                                                    </button>
+                                                )}
                                                 {canReturn && (
                                                     <button
                                                         onClick={() => setDevolucionTarget({ clientId: rem.clientId, obraId: rem.obraId })}
@@ -941,9 +1067,20 @@ export default function Remisiones() {
                                                 )}
                                                 {rem.estado !== 'Cancelada' && rem.estado !== 'Cerrada' && (
                                                     <button
-                                                        onClick={() => {
-                                                            if (window.confirm(`¿Está seguro de ANULAR la remisión ${rem.id}? Esto devolverá todo el stock al inventario.`)) {
+                                                        onClick={async () => {
+                                                            const result = await Swal.fire({
+                                                                title: '¿Anular Remisión?',
+                                                                text: `¿Está seguro de ANULAR la remisión ${rem.id}? Esto devolverá todo el stock al inventario.`,
+                                                                icon: 'warning',
+                                                                showCancelButton: true,
+                                                                confirmButtonColor: '#f97316',
+                                                                cancelButtonColor: '#64748b',
+                                                                confirmButtonText: 'Sí, anular',
+                                                                cancelButtonText: 'Cancelar'
+                                                            });
+                                                            if (result.isConfirmed) {
                                                                 cancelRemision(rem.id);
+                                                                Swal.fire('Anulada', 'La remisión ha sido anulada.', 'success');
                                                             }
                                                         }}
                                                         className="btn btn-sm"
@@ -962,9 +1099,20 @@ export default function Remisiones() {
                                                     <Printer size={13} />
                                                 </button>
                                                 <button
-                                                    onClick={() => {
-                                                        if (window.confirm(`¿Está seguro de eliminar la remisión ${rem.id}? Esto devolverá los equipos no devueltos al stock.`)) {
+                                                    onClick={async () => {
+                                                        const result = await Swal.fire({
+                                                            title: '¿Eliminar Permanente?',
+                                                            text: `¿Está seguro de eliminar la remisión ${rem.id}? Esto devolverá los equipos no devueltos al stock.`,
+                                                            icon: 'error',
+                                                            showCancelButton: true,
+                                                            confirmButtonColor: '#ef4444',
+                                                            cancelButtonColor: '#64748b',
+                                                            confirmButtonText: 'Sí, eliminar',
+                                                            cancelButtonText: 'No, conservar'
+                                                        });
+                                                        if (result.isConfirmed) {
                                                             deleteRemision(rem.id);
+                                                            Swal.fire('Eliminada', 'El registro ha sido borrado.', 'success');
                                                         }
                                                     }}
                                                     className="btn btn-sm"
@@ -1106,6 +1254,16 @@ export default function Remisiones() {
                     remisiones={remisiones}
                     products={products}
                     clients={clients}
+                />
+            )}
+
+            {showVerifyModal && (
+                <VerifyDispatchModal
+                    rem={verifyTarget}
+                    onClose={() => setShowVerifyModal(false)}
+                    onConfirm={handleConfirmFinalDispatch}
+                    clients={clients}
+                    products={products}
                 />
             )}
         </>

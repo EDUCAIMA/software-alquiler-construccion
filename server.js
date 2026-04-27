@@ -18,9 +18,10 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // ─── Pool PostgreSQL ─────────────────────────────────────────────────────────
+const isRailway = process.env.DATABASE_URL?.includes('rlwy.net');
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: (process.env.NODE_ENV === 'production' || isRailway) ? { rejectUnauthorized: false } : false
 });
 
 // ─── Inicialización de Tablas ────────────────────────────────────────────────
@@ -102,6 +103,8 @@ async function initDB() {
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cotizacion_id VARCHAR(50)`);
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS remision_enabled BOOLEAN DEFAULT false`);
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS remision_creada BOOLEAN DEFAULT false`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(15, 2) DEFAULT 0`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_type VARCHAR(50)`);
 
         // --- Cotizaciones ---
         await client.query(`
@@ -145,9 +148,13 @@ async function initDB() {
                 transporte NUMERIC(12, 2) DEFAULT 0,
                 estado VARCHAR(50) DEFAULT 'Activa',
                 notas TEXT,
-                items JSONB DEFAULT '[]'
+                items JSONB DEFAULT '[]',
+                cotizacion_id VARCHAR(50),
+                factura_id VARCHAR(50)
             )
             `);
+        await client.query(`ALTER TABLE remisiones ADD COLUMN IF NOT EXISTS cotizacion_id VARCHAR(50)`);
+        await client.query(`ALTER TABLE remisiones ADD COLUMN IF NOT EXISTS factura_id VARCHAR(50)`);
 
         // --- Mantenimientos ---
         await client.query(`
@@ -294,7 +301,9 @@ const mapInvoice = r => ({
     items: r.items || [],
     cotizacionId: r.cotizacion_id || null,
     remisionEnabled: r.remision_enabled || false,
-    remisionCreada: r.remision_creada || false
+    remisionCreada: r.remision_creada || false,
+    paidAmount: Number(r.paid_amount || 0),
+    paymentType: r.payment_type || null
 });
 
 const mapCot = r => ({
@@ -314,7 +323,8 @@ const mapRem = r => ({
     id: r.id, clientId: r.client_id, obraId: r.obra_id,
     fecha: r.fecha ? r.fecha.toISOString().split('T')[0] : '',
     transporte: Number(r.transporte), estado: r.estado,
-    notas: r.notas, items: r.items || []
+    notas: r.notas, items: r.items || [],
+    cotizacionId: r.cotizacion_id, facturaId: r.factura_id
 });
 
 const mapMaint = r => ({
@@ -453,11 +463,11 @@ app.get('/api/invoices', async (req, res) => {
 
 app.post('/api/invoices', async (req, res) => {
     try {
-        const { id, clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada } = req.body;
+        const { id, clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType } = req.body;
         await pool.query(
-            `INSERT INTO invoices(id, client_id, obra_id, amount, status, date, paid_date, items, cotizacion_id, remision_enabled, remision_creada) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            `INSERT INTO invoices(id, client_id, obra_id, amount, status, date, paid_date, items, cotizacion_id, remision_enabled, remision_creada, paid_amount, payment_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
             [id, clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
-                cotizacionId || null, remisionEnabled || false, remisionCreada || false]
+                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -465,11 +475,11 @@ app.post('/api/invoices', async (req, res) => {
 
 app.put('/api/invoices/:id', async (req, res) => {
     try {
-        const { clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada } = req.body;
+        const { clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType } = req.body;
         await pool.query(
-            `UPDATE invoices SET client_id = $1, obra_id = $2, amount = $3, status = $4, date = $5, paid_date = $6, items = $7, cotizacion_id = $8, remision_enabled = $9, remision_creada = $10 WHERE id = $11`,
+            `UPDATE invoices SET client_id = $1, obra_id = $2, amount = $3, status = $4, date = $5, paid_date = $6, items = $7, cotizacion_id = $8, remision_enabled = $9, remision_creada = $10, paid_amount = $11, payment_type = $12 WHERE id = $13`,
             [clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
-                cotizacionId || null, remisionEnabled || false, remisionCreada || false, req.params.id]
+                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -573,10 +583,11 @@ app.get('/api/remisiones', async (req, res) => {
 
 app.post('/api/remisiones', async (req, res) => {
     try {
-        const { id, clientId, obraId, fecha, transporte, estado, notas, items } = req.body;
+        const { id, clientId, obraId, fecha, transporte, estado, notas, items, cotizacionId, facturaId } = req.body;
         await pool.query(
-            `INSERT INTO remisiones(id, client_id, obra_id, fecha, transporte, estado, notas, items) VALUES($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [id, clientId, obraId, fecha || null, transporte, estado, notas, JSON.stringify(items || [])]
+            `INSERT INTO remisiones(id, client_id, obra_id, fecha, transporte, estado, notas, items, cotizacion_id, factura_id) 
+             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [id, clientId, obraId, fecha || null, transporte, estado, notas, JSON.stringify(items || []), cotizacionId || null, facturaId || null]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -584,10 +595,10 @@ app.post('/api/remisiones', async (req, res) => {
 
 app.put('/api/remisiones/:id', async (req, res) => {
     try {
-        const { clientId, obraId, fecha, transporte, estado, notas, items } = req.body;
+        const { clientId, obraId, fecha, transporte, estado, notas, items, cotizacionId, facturaId } = req.body;
         await pool.query(
-            `UPDATE remisiones SET client_id = $1, obra_id = $2, fecha = $3, transporte = $4, estado = $5, notas = $6, items = $7 WHERE id = $8`,
-            [clientId, obraId, fecha || null, transporte, estado, notas, JSON.stringify(items || []), req.params.id]
+            `UPDATE remisiones SET client_id = $1, obra_id = $2, fecha = $3, transporte = $4, estado = $5, notas = $6, items = $7, cotizacion_id = $8, factura_id = $9 WHERE id = $10`,
+            [clientId, obraId, fecha || null, transporte, estado, notas, JSON.stringify(items || []), cotizacionId || null, facturaId || null, req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }

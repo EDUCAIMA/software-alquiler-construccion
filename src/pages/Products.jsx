@@ -1,18 +1,13 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
-    PackagePlus, UploadCloud, QrCode,
+    PackagePlus, UploadCloud,
     AlertTriangle, X, Wrench, Trash2, ArrowDownCircle,
     ShieldCheck, ShieldAlert, Download, Factory, Pencil,
     ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Search, ChevronUp,
     User, MapPin
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import QRCode from 'qrcode';
 
-// ─── QR Util ─────────────────────────────────────────────────────────────────
-async function generateQRDataURL(text) {
-    return await QRCode.toDataURL(text, { width: 256, margin: 2, color: { dark: '#104166', light: '#ffffff' } });
-}
 
 // ─── DropZone – definido FUERA del componente para evitar re-montaje ─────────
 function DropZone({ state, setter, fileInputRef }) {
@@ -40,7 +35,7 @@ function DropZone({ state, setter, fileInputRef }) {
                 <input type="file" accept="image/*" ref={fileInputRef}
                     onChange={e => handleImageUpload(e.target.files[0], setter)}
                     style={{ display: 'none' }} />
-                {state.image && !state.image.startsWith('http') ? (
+                {state.image ? (
                     <div>
                         <img src={state.image} alt="Preview" style={{ maxWidth: '100%', maxHeight: 90, objectFit: 'contain', borderRadius: 8 }} />
                         <div className="mt-2 text-sm text-primary font-medium">Click para cambiar</div>
@@ -52,19 +47,6 @@ function DropZone({ state, setter, fileInputRef }) {
                     </>
                 )}
             </div>
-            <div className="flex items-center gap-4 my-2">
-                <hr style={{ flex: 1, borderColor: 'var(--surface-border)' }} />
-                <span className="text-muted text-sm">O enlace</span>
-                <hr style={{ flex: 1, borderColor: 'var(--surface-border)' }} />
-            </div>
-            <input type="text" className="input-base" value={state.image || ''}
-                onChange={e => setter(prev => ({ ...prev, image: e.target.value }))}
-                placeholder="https://…" />
-            {state.image?.startsWith('http') && (
-                <div className="mt-2 text-center">
-                    <img src={state.image} alt="Preview" style={{ maxWidth: 70, maxHeight: 70, objectFit: 'contain', borderRadius: 8 }} />
-                </div>
-            )}
         </div>
     );
 }
@@ -128,26 +110,8 @@ function handleImageUpload(file, setter) {
 // ─── Hoja de Vida Panel ───────────────────────────────────────────────────────
 function HojaDeVidaPanel({ product, maintenances, onClose }) {
     const { settings } = useAppContext();
-    const [qrUrl, setQrUrl] = useState('');
-    const hasPending = maintenances.some(
-        m => m.productId === product.id && (m.status === 'Pendiente' || m.status === 'En Proceso')
-    );
     const prodMantenimientos = maintenances.filter(m => m.productId === product.id);
 
-    useEffect(() => {
-        generateQRDataURL(`${settings?.shortName || 'CIELO'}|EQUIPO|${product.id}|${product.name}`).then(setQrUrl);
-    }, [product.id, product.name]);
-
-    const handlePrintQR = () => {
-        const win = window.open('', '_blank');
-        win.document.write(`<html><body style="text-align:center;padding:2rem;font-family:monospace">
-      <h2 style="color:#104166">CIELO — Alquiler de Equipos</h2>
-      <img src="${qrUrl}" style="width:200px;height:200px" />
-      <h3>${product.id}</h3><p>${product.name}</p>
-      <p style="font-size:11px;color:#64748b">Escanea para ver hoja de vida</p>
-    </body></html>`);
-        win.document.close(); win.print();
-    };
 
     const statusColor = s => s === 'Completado' ? '#10b981' : s === 'En Proceso' ? '#f97316' : '#ef4444';
 
@@ -174,7 +138,9 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
                         <img src={product.image} alt={product.name} style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8, border: '2px solid rgba(255,255,255,0.25)' }} />
                         <div>
                             <div style={{ fontWeight: 800, color: 'white', fontSize: '1rem' }}>{product.name}</div>
-                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{product.id} · {product.category}</div>
+                            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
+                                {String(product.id || '').includes('-') ? String(product.id || '').split('-')[1]?.slice(-2) : String(product.id || '').slice(-2)} · {product.category}
+                            </div>
                             <div style={{ marginTop: 6, fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)' }}>Stock: {product.totalStock} total · {product.availableStock} disponibles</div>
                             {product.estado === 'Dado de baja' && (
                                 <div style={{ marginTop: 4, fontSize: '0.72rem', fontWeight: 700, color: '#fbbf24' }}>⚠ DADO DE BAJA — {product.fechaBaja}</div>
@@ -248,20 +214,6 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
                         )}
                     </div>
 
-                    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1.25rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                        <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                            <QrCode size={12} /> Código QR del Equipo
-                        </div>
-                        {qrUrl ? (
-                            <>
-                                <img src={qrUrl} alt="QR" style={{ width: 160, height: 160, borderRadius: 8, border: '1px solid #e2e8f0', display: 'block', margin: '0 auto 0.75rem' }} />
-                                <div style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: '#64748b', marginBottom: '0.75rem' }}>{product.id} · {product.name}</div>
-                                <button onClick={handlePrintQR} style={{ padding: '0.5rem 1.25rem', borderRadius: 8, background: '#2365AB', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                    <Download size={14} /> Imprimir QR
-                                </button>
-                            </>
-                        ) : <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Generando QR…</div>}
-                    </div>
                 </div>
             </div>
             <div style={{ position: 'fixed', inset: 0, zIndex: 899 }} onClick={onClose} />
@@ -434,13 +386,13 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
     }, [remisiones, products, clients, q]);
 
     return (
-        <div className="modal-overlay" style={{ zIndex: 1100 }}>
-            <div className="modal-content fadeIn" style={{ maxWidth: 850, padding: 0, overflow: 'hidden', height: '85vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: '95%', width: 1100, padding: 0, overflow: 'hidden', height: '90vh', display: 'flex', flexDirection: 'column', borderRadius: 16 }}>
                 {/* Header */}
                 <div style={{ background: 'linear-gradient(135deg, #2365AB, #154272)', padding: '1.5rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         <h3 style={{ margin: 0, color: 'white', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <ArrowDownCircle size={22} /> Equipos en Campo (Informe de Préstamo)
+                            <ArrowDownCircle size={22} /> Equipos en Campo
                         </h3>
                         <p style={{ margin: '0.25rem 0 0 0', color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
                             Vista detallada de qué equipos tienen los clientes actualmente
@@ -474,7 +426,8 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
                             <thead>
                                 <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
                                     <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Equipo</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Cliente / Obra</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Cliente</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Obra</th>
                                     <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', textAlign: 'center' }}>Cant.</th>
                                     <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>F. Despacho</th>
                                     <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Remisión</th>
@@ -485,18 +438,19 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
                                     <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                         <td style={{ padding: '1rem 0.5rem' }}>
                                             <div style={{ fontWeight: 700, color: '#104166', fontSize: '0.9rem' }}>{row.productName}</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ID: {row.productId}</div>
                                         </td>
                                         <td style={{ padding: '1rem 0.5rem' }}>
                                             <div style={{ fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
                                                 <User size={12} color="#2365AB" /> {row.clientName}
                                             </div>
-                                            <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
-                                                <MapPin size={12} color="#f97316" /> {row.obraName}
+                                        </td>
+                                        <td style={{ padding: '1rem 0.5rem' }}>
+                                            <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                {row.obraName}
                                             </div>
                                         </td>
                                         <td style={{ padding: '1rem 0.5rem', textAlign: 'center' }}>
-                                            <span style={{ background: '#e0e7ff', color: '#4f46e5', padding: '0.25rem 0.6rem', borderRadius: 999, fontWeight: 800, fontSize: '0.85rem' }}>
+                                            <span style={{ color: '#104166', fontWeight: 800, fontSize: '0.9rem' }}>
                                                 {row.cantidad}
                                             </span>
                                         </td>
@@ -516,7 +470,7 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
                 {/* Footer */}
                 <div style={{ padding: '1.25rem 2rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>
-                        Total registros: <span style={{ color: '#104166', fontWeight: 800 }}>{equipmentInField.length}</span>
+
                     </div>
                     <button className="btn btn-primary" onClick={onClose} style={{ minWidth: 100 }}>Cerrar</button>
                 </div>
@@ -539,7 +493,7 @@ export default function Products() {
     const fileInputRef = useRef(null);
 
     const [search, setSearch] = useState('');
-    const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' });
 
     const handleSort = (key) => {
         let direction = 'asc';
@@ -559,8 +513,20 @@ export default function Products() {
 
         if (sortConfig.key) {
             filtered.sort((a, b) => {
-                let aVal = a[sortConfig.key] || '';
-                let bVal = b[sortConfig.key] || '';
+                let aVal, bVal;
+                
+                if (sortConfig.key === 'estado') {
+                    // Calcular estado virtual para ordenamiento
+                    const getStatus = (p) => {
+                        if (p.estado === 'Dado de baja') return 'BAJA';
+                        return p.availableStock > 0 ? 'DISPONIBLE' : 'AGOTADO';
+                    };
+                    aVal = getStatus(a);
+                    bVal = getStatus(b);
+                } else {
+                    aVal = a[sortConfig.key] || '';
+                    bVal = b[sortConfig.key] || '';
+                }
                 
                 if (typeof aVal === 'string') aVal = aVal.toLowerCase();
                 if (typeof bVal === 'string') bVal = bVal.toLowerCase();
@@ -604,7 +570,6 @@ export default function Products() {
             <div className="flex justify-between items-center mb-6 gap-4" style={{ flexWrap: 'wrap' }}>
                 <div>
                     <h1>Inventario &amp; Alquiler</h1>
-                    <p className="text-muted">Gestión de maquinaria y hoja de vida</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                     <button className="btn btn-secondary" onClick={() => setShowFieldModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -615,7 +580,7 @@ export default function Products() {
             </div>
 
             {/* Filters */}
-            <div className="glass-panel p-6 mb-6" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="glass-panel py-4 px-6 mb-6" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                 <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
                     <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     <input 
@@ -625,39 +590,44 @@ export default function Products() {
                         style={{ padding: '0.55rem 0.75rem', paddingLeft: '2rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', width: '100%', boxSizing: 'border-box' }} 
                     />
                 </div>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{sorted.length} equipo(s) encontrado(s)</span>
             </div>
 
             {/* Table */}
-            <div className="glass-panel p-6">
+            <div className="glass-panel p-6 pb-0">
                 <div className="glass-table-container">
                     <table className="glass-table">
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
                                 {[
-                                    { label: 'Cod.', key: 'id' },
-                                    { label: 'Imagen', key: null },
-                                    { label: 'Nombre', key: 'name' },
-                                    { label: 'Categoría', key: 'category' },
-                                    { label: 'Stock', key: 'totalStock' },
-                                    { label: 'Tarifa Alquiler', key: 'value' },
-                                    { label: 'Estado', key: 'estado' },
-                                    { label: 'Acción', key: null }
-                                ].map(({ label, key }) => (
+                                    { label: 'Cod.', key: 'id', w: '60px' },
+                                    { label: 'Imagen', key: null, w: '70px' },
+                                    { label: 'Nombre', key: 'name', w: 'auto' },
+                                    { label: 'Stock', key: 'totalStock', w: '90px' },
+                                    { label: 'Valor', key: 'value', w: '130px' },
+                                    { label: 'Días calendario facturables', key: 'esquemaCobro', w: '200px' },
+                                    { label: 'Estado', key: 'estado', w: '110px' },
+                                    { label: 'Acción', key: null, w: '125px' }
+                                ].map(({ label, key, w }) => (
                                     <th 
                                         key={label} 
                                         onClick={() => key && handleSort(key)}
                                         style={{ 
-                                            padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', 
-                                            color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', 
-                                            letterSpacing: '0.05em', cursor: key ? 'pointer' : 'default', userSelect: 'none'
+                                            width: w,
+                                            padding: '0.4rem 0.75rem', textAlign: 'left', 
+                                            fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, 
+                                            textTransform: 'uppercase', letterSpacing: '0.05em', 
+                                            cursor: key ? 'pointer' : 'default', userSelect: 'none'
                                         }}
                                     >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                            {label}
-                                            {key && sortConfig.key === key && (
-                                                sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
-                                            )}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: '100%' }}>
+                                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                                            <div style={{ width: 14, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                                                {key && sortConfig.key === key ? (
+                                                    sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                                                ) : (
+                                                    key ? <div style={{ width: 12 }} /> : null
+                                                )}
+                                            </div>
                                         </div>
                                     </th>
                                 ))}
@@ -669,16 +639,17 @@ export default function Products() {
                                 const isBaja = p.estado === 'Dado de baja';
                                 return (
                                     <tr key={p.id} style={{ opacity: isBaja ? 0.6 : 1 }}>
-                                        <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{p.id}</td>
-                                        <td><img src={p.image} alt={p.name} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--surface-border)' }} /></td>
+                                        <td style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                                            {String(p.id || '').includes('-') ? String(p.id || '').split('-')[1]?.slice(-2) : String(p.id || '').slice(-2)}
+                                        </td>
+                                        <td><img src={p.image} alt={p.name} style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--surface-border)' }} /></td>
                                         <td 
                                             style={{ fontWeight: 600, cursor: 'pointer' }}
                                             onClick={() => setHojaProduct(p)}
                                             className="hover:text-primary transition-colors"
                                         >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                                 {p.name}
-                                                <QrCode size={12} style={{ opacity: 0.4 }} />
                                             </div>
                                             {blocked && (
                                                 <span style={{ marginTop: 4, padding: '1px 7px', borderRadius: 999, background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: '0.65rem', fontWeight: 700, border: '1px solid rgba(239,68,68,0.25)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -691,53 +662,76 @@ export default function Products() {
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="text-muted">{p.category}</td>
                                         <td>
-                                            <div style={{ fontWeight: 600 }}>Total: {p.totalStock}</div>
-                                            <div className="text-muted" style={{ fontSize: '0.8rem' }}>Disp: {p.availableStock}</div>
+                                            <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                                                {p.availableStock} / {p.totalStock}
+                                            </div>
                                         </td>
                                         <td>
-                                            <div style={{ fontWeight: 600 }}>${p.value.toLocaleString()} / {p.tipoCobro || 'Día'}</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
-                                                {p.esquemaCobro === 'Lunes-Sábado' ? 'Lun-Sáb' : p.esquemaCobro === 'Lunes-Viernes' ? 'Lun-Vie' : 'Calendario'}
+                                            <div style={{ fontWeight: 600, color: '#104166' }}>
+                                                ${p.value.toLocaleString()} / {p.tipoCobro || 'Día'}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div style={{ color: '#475569', fontWeight: 600 }}>
+                                                {p.esquemaCobro || 'Calendario'}
                                             </div>
                                         </td>
                                         <td>
                                             {isBaja ? (
-                                                <div className="badge" style={{ background: 'rgba(249,115,22,0.15)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)', fontSize: '0.72rem' }}>Dado de baja</div>
+                                                <div className="badge" style={{ background: '#f97316', color: 'white', fontSize: '0.72rem', boxShadow: '0 2px 4px rgba(249,115,22,0.3)' }}>BAJA</div>
                                             ) : (
-                                                <div className={`badge ${p.availableStock > 0 ? 'badge-success' : 'badge-danger'}`}
-                                                    style={p.availableStock === 0 ? { background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' } : {}}>
-                                                    {p.availableStock > 0 ? 'Disponible' : 'Agotado'}
+                                                <div className={`badge`}
+                                                    style={{ 
+                                                        background: p.availableStock > 0 ? '#10b981' : '#ef4444', 
+                                                        color: 'white',
+                                                        boxShadow: p.availableStock > 0 ? '0 2px 4px rgba(16,185,129,0.3)' : '0 2px 4px rgba(239,68,68,0.3)'
+                                                    }}>
+                                                    {p.availableStock > 0 ? 'DISPONIBLE' : 'AGOTADO'}
                                                 </div>
                                             )}
                                         </td>
                                         <td>
-                                            <div className="flex gap-2">
+                                            <div style={{ display: 'flex', gap: '8px' }}>
                                                 {!isBaja && (
                                                     <button 
-                                                        className="btn-action-standard btn-edit" 
                                                         onClick={() => { setEditingProduct({ ...p }); setShowEditModal(true); }}
                                                         title="Editar"
+                                                        style={{ 
+                                                            width: 32, height: 32, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                                            background: '#2365AB', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s'
+                                                        }}
+                                                        onMouseOver={e => e.currentTarget.style.background = '#1a4b80'}
+                                                        onMouseOut={e => e.currentTarget.style.background = '#2365AB'}
                                                     >
-                                                        <Pencil size={14} /> <span>Editar</span>
+                                                        <Pencil size={14} />
                                                     </button>
                                                 )}
                                                 {!isBaja && (
                                                     <button
-                                                        className="btn-action-standard btn-baja"
                                                         onClick={() => setBajaProduct(p)}
                                                         title="Dar de Baja"
+                                                        style={{ 
+                                                            width: 32, height: 32, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                                            background: '#f97316', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s'
+                                                        }}
+                                                        onMouseOver={e => e.currentTarget.style.background = '#ea580c'}
+                                                        onMouseOut={e => e.currentTarget.style.background = '#f97316'}
                                                     >
-                                                        <ArrowDownCircle size={14} /> <span>Baja</span>
+                                                        <ArrowDownCircle size={14} />
                                                     </button>
                                                 )}
                                                 <button
-                                                    className="btn-action-standard btn-delete"
                                                     onClick={() => setDeleteProduct(p)}
                                                     title="Eliminar"
+                                                    style={{ 
+                                                        width: 32, height: 32, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                                        background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s'
+                                                    }}
+                                                    onMouseOver={e => e.currentTarget.style.background = '#dc2626'}
+                                                    onMouseOut={e => e.currentTarget.style.background = '#ef4444'}
                                                 >
-                                                    <Trash2 size={14} /> <span>Eliminar</span>
+                                                    <Trash2 size={14} />
                                                 </button>
                                             </div>
                                         </td>
@@ -749,8 +743,13 @@ export default function Products() {
                 </div>
 
                 {/* Pagination Controls */}
-                <div className="flex justify-between items-center mt-6 py-4 px-2" style={{ borderTop: '1px solid var(--surface-border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                <div className="flex justify-between items-center mt-4 pt-5 pb-6 px-6" style={{ 
+                    borderTop: '1px solid var(--surface-border)', 
+                    paddingTop: '1.25rem',
+                    flexWrap: 'wrap', 
+                    gap: '1rem'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <span>Mostrar:</span>
                             <div style={{ position: 'relative' }}>
@@ -758,7 +757,7 @@ export default function Products() {
                                     value={itemsPerPage} 
                                     onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                                     className="input-base"
-                                    style={{ padding: '0.3rem 1.8rem 0.3rem 0.6rem', fontSize: '0.8rem', width: 'auto', minWidth: '70px', height: '32px' }}
+                                    style={{ appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', padding: '0.3rem 1.8rem 0.3rem 0.6rem', fontSize: '0.8rem', width: 'auto', minWidth: '70px', height: '32px' }}
                                 >
                                     {[5, 10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
                                 </select>
@@ -864,10 +863,11 @@ export default function Products() {
 
             {/* Add Modal */}
             {showAddModal && (
-                <div className="modal-overlay" style={{ alignItems: 'flex-start', padding: '2rem 1rem' }}>
-                    <div className="modal-content fadeIn" style={{ maxWidth: 580, maxHeight: '80vh', overflowY: 'auto', marginTop: '2vh' }}>
+                <div className="modal-overlay" onClick={() => setShowAddModal(false)} style={{ alignItems: 'flex-start', padding: '2rem 1rem' }}>
+                    <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 900, width: '100%', maxHeight: '80vh', overflowY: 'auto', marginTop: '2vh' }}>
                         <h3 className="modal-title">Agregar Nuevo Equipo</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.6fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Nombre del Equipo</label>
                                 <input type="text" className="input-base" value={newProduct.name}
@@ -885,6 +885,14 @@ export default function Products() {
                                     <option value="Other">Otro</option>
                                 </select>
                             </div>
+                            <div className="input-group" style={{ margin: 0 }}>
+                                <label className="input-label">Stock Total</label>
+                                <input type="number" min="1" className="input-base" value={newProduct.totalStock}
+                                    onChange={e => setNewProduct(prev => ({ ...prev, totalStock: parseInt(e.target.value) || 1 }))} />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Tarifa Alquiler ($)</label>
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -908,11 +916,6 @@ export default function Products() {
                                     <option value="Lunes-Viernes">Lunes a Viernes</option>
                                 </select>
                             </div>
-                            <div className="input-group" style={{ margin: 0 }}>
-                                <label className="input-label">Stock Total</label>
-                                <input type="number" min="1" className="input-base" value={newProduct.totalStock}
-                                    onChange={e => setNewProduct(prev => ({ ...prev, totalStock: parseInt(e.target.value) || 1 }))} />
-                            </div>
                         </div>
                         <DropZone state={newProduct} setter={setNewProduct} fileInputRef={fileInputRef} />
                         <div style={{ borderTop: '1px solid var(--surface-border)', paddingTop: '0.75rem', marginBottom: '0.5rem', marginTop: '0.75rem', fontSize: '0.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Hoja de Vida del Equipo</div>
@@ -927,10 +930,11 @@ export default function Products() {
 
             {/* Edit Modal */}
             {showEditModal && editingProduct && (
-                <div className="modal-overlay" style={{ alignItems: 'flex-start', padding: '2rem 1rem' }}>
-                    <div className="modal-content fadeIn" style={{ maxWidth: 580, maxHeight: '80vh', overflowY: 'auto', marginTop: '2vh' }}>
+                <div className="modal-overlay" onClick={() => setShowEditModal(false)} style={{ alignItems: 'flex-start', padding: '2rem 1rem' }}>
+                    <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 900, width: '100%', maxHeight: '80vh', overflowY: 'auto', marginTop: '2vh' }}>
                         <h3 className="modal-title">Editar Equipo — {editingProduct.id}</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.6fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Nombre</label>
                                 <input type="text" className="input-base" value={editingProduct.name}
@@ -949,6 +953,14 @@ export default function Products() {
                                     <option value="Other">Otro</option>
                                 </select>
                             </div>
+                            <div className="input-group" style={{ margin: 0 }}>
+                                <label className="input-label">Stock Total</label>
+                                <input type="number" min="1" className="input-base" value={editingProduct.totalStock}
+                                    onChange={e => setEditingProduct(prev => ({ ...prev, totalStock: parseInt(e.target.value) || 1 }))} />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Tarifa Alquiler ($)</label>
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -970,11 +982,6 @@ export default function Products() {
                                     <option value="Lunes-Sábado">Lunes a Sábado</option>
                                     <option value="Lunes-Viernes">Lunes a Viernes</option>
                                 </select>
-                            </div>
-                            <div className="input-group" style={{ margin: 0 }}>
-                                <label className="input-label">Stock Total</label>
-                                <input type="number" min="1" className="input-base" value={editingProduct.totalStock}
-                                    onChange={e => setEditingProduct(prev => ({ ...prev, totalStock: parseInt(e.target.value) || 1 }))} />
                             </div>
                         </div>
                         <DropZone state={editingProduct} setter={setEditingProduct} fileInputRef={fileInputRef} />

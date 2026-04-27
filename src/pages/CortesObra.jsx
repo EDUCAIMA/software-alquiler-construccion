@@ -123,7 +123,7 @@ function generateCortePDF(resultado, client, obra, settings) {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function CortesObra() {
-    const { clients, remisiones, products, createInvoice, settings } = useAppContext();
+    const { clients, remisiones, products, invoices, createInvoice, settings } = useAppContext();
 
     const [clientId, setClientId] = useState('');
     const [obraId, setObraId] = useState('');
@@ -162,7 +162,6 @@ export default function CortesObra() {
         let totalTransporte = 0;
 
         rems.forEach(rem => {
-            // Solo cobrar transporte si la remisión se CREÓ dentro del periodo actual
             const rDate = parseUTCDate(rem.fecha);
             if (rDate >= fStart && rDate <= fEnd) {
                 totalTransporte += rem.transporte || 0;
@@ -171,20 +170,16 @@ export default function CortesObra() {
             rem.items.forEach(item => {
                 const prod = products.find(p => p.id === item.productId);
                 if (item.cantidad > 0) {
-                    const equipStart = rDate; // Fecha de entrega
+                    const equipStart = rDate; 
                     const scheme = prod?.esquemaCobro || 'Calendario';
                     const tarifa = prod?.value || 0;
 
                     let totalUnitsDaysInPeriod = 0;
                     let accountedQty = 0;
 
-                    // 1. Procesar devoluciones registradas con fecha exacta
                     if (item.devoluciones && Array.isArray(item.devoluciones)) {
                         item.devoluciones.forEach(dev => {
                             const dDate = parseUTCDate(dev.fecha);
-                            
-                            // El periodo de vida de esta tajada de equipos es [equipStart, dDate]
-                            // Cruzamos esto con el periodo de cobro [fStart, fEnd]
                             const effectiveStart = equipStart > fStart ? equipStart : fStart;
                             const effectiveEnd = dDate < fEnd ? dDate : fEnd;
 
@@ -196,13 +191,10 @@ export default function CortesObra() {
                         });
                     }
 
-                    // 2. Manejar inconsistencias (devoluciones sin log histórico pero marcadas como devueltas)
                     const orphanReturns = (item.cantidadDevuelta || 0) - accountedQty;
                     if (orphanReturns > 0) {
-                        // Como no sabemos cuándo volvieron, no los cobramos en periodos futuros. 
-                        // Solo se cobrarían si la remisión es de este mismo periodo.
                         const effectiveStart = equipStart > fStart ? equipStart : fStart;
-                        const effectiveEnd = equipStart < fEnd ? equipStart : fEnd; // Asumimos devolución inmediata
+                        const effectiveEnd = equipStart < fEnd ? equipStart : fEnd; 
                         if (effectiveStart <= effectiveEnd) {
                             const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
                             totalUnitsDaysInPeriod += orphanReturns * dDays;
@@ -210,11 +202,10 @@ export default function CortesObra() {
                         accountedQty += orphanReturns;
                     }
 
-                    // 3. Procesar lo que REALMENTE sigue en campo
                     const remainingQty = item.cantidad - accountedQty;
                     if (remainingQty > 0) {
                         const effectiveStart = equipStart > fStart ? equipStart : fStart;
-                        const effectiveEnd = fEnd; // Sigue en campo hasta el final del periodo de corte
+                        const effectiveEnd = fEnd; 
 
                         if (effectiveStart <= effectiveEnd) {
                             const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
@@ -247,18 +238,48 @@ export default function CortesObra() {
         const porcRet = selectedClient?.porcRetencion || 0;
         const iva = Math.round(subtotalTotal * porcIVA / 100);
         const retencion = Math.round(subtotalTotal * porcRet / 100);
-        const totalNeto = subtotalTotal + iva + retencion + totalTransporte;
+        
+        // --- NUEVA LÓGICA: Restar Abonos y Pagos Previos ---
+        const relatedInvoices = invoices.filter(inv => 
+            inv.clientId === clientId && 
+            (!obraId || inv.obraId === obraId) &&
+            inv.status !== 'Cancelada'
+        );
+        const pagosPrevios = relatedInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
+        
+        const totalAntesDePagos = subtotalTotal + iva + retencion + totalTransporte;
+        const totalNeto = totalAntesDePagos - pagosPrevios;
 
-        return { lineas, subtotal: subtotalTotal, iva, retencion, transporte: totalTransporte, totalNeto, porcIVA, porcRet };
-    }, [clientId, obraId, fechaInicio, fechaCorte, remisiones, products, selectedClient]);
+        return { lineas, subtotal: subtotalTotal, iva, retencion, transporte: totalTransporte, totalAntesDePagos, pagosPrevios, totalNeto, porcIVA, porcRet };
+    }, [clientId, obraId, fechaInicio, fechaCorte, remisiones, products, invoices, selectedClient]);
 
     const handleGenerate = () => { if (resultado) setGenerado(true); };
     const handleSaveInvoice = () => {
         if (!resultado || saved) return;
+
+        const itemsToFacturar = resultado.lineas.map(l => ({ 
+            productId: l.equipo, 
+            nombre: l.equipo, 
+            quantity: l.cantidad, 
+            days: l.dias, 
+            price: l.tarifaDia 
+        }));
+
+        // Si hay pagos previos, agregamos una línea negativa para descontar del total de la factura
+        if (resultado.pagosPrevios > 0) {
+            itemsToFacturar.push({
+                productId: 'DESC-PAGO',
+                nombre: 'Deducción por Pagos/Abonos Previos',
+                quantity: 1,
+                days: 1,
+                price: -resultado.pagosPrevios
+            });
+        }
+
         createInvoice({
             clientId,
             obraId,
-            items: resultado.lineas.map(l => ({ productId: l.equipo, name: l.equipo, quantity: l.cantidad, days: l.dias, price: l.tarifaDia })),
+            items: itemsToFacturar,
         });
         setSaved(true);
     };
@@ -439,8 +460,9 @@ export default function CortesObra() {
                                     {[
                                         ['Subtotal Alquiler', fmtCOP(resultado.subtotal), '#104166', null],
                                         [`IVA ${resultado.porcIVA}%`, `+ ${fmtCOP(resultado.iva)}`, '#2365AB', 'rgba(35, 101, 171,0.1)'],
-                                        [`Ret. Fuente ${resultado.porcRet}%`, `+ ${fmtCOP(resultado.retencion)}`, '#ef4444', 'rgba(239,68,68,0.1)'],
+                                        [`Ret. Fuente ${resultado.porcRet}%`, `- ${fmtCOP(resultado.retencion)}`, '#ef4444', 'rgba(239,68,68,0.1)'],
                                         ['Transporte', `+ ${fmtCOP(resultado.transporte)}`, '#f97316', 'rgba(249,115,22,0.1)'],
+                                        ['Pagos / Abonos Previos', `- ${fmtCOP(resultado.pagosPrevios)}`, '#1e293b', '#f1f5f9'],
                                     ].map(([k, v, c, bg]) => (
                                         <div key={k} style={{ background: bg || '#f8fafc', border: '1px solid #e2e8f0', padding: '1rem 1.25rem', borderRadius: '12px' }}>
                                             <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{k}</div>
@@ -449,8 +471,8 @@ export default function CortesObra() {
                                     ))}
                                 </div>
                                 {/* Total neto */}
-                                <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', borderRadius: '16px', padding: '1.5rem 2.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 220, boxShadow: '0 10px 15px -3px rgba(16,185,129,0.3)' }}>
-                                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.9)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Total Neto a Cobrar</div>
+                                <div style={{ background: 'linear-gradient(135deg, #2365AB, #104166)', borderRadius: '16px', padding: '1.5rem 2.5rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 220, boxShadow: '0 10px 15px -3px rgba(35, 101, 171,0.3)' }}>
+                                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.9)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Saldo a Facturar</div>
                                     <div style={{ fontSize: '2rem', fontWeight: 900, color: 'white', letterSpacing: '-0.02em' }}>{fmtCOP(resultado.totalNeto)}</div>
                                 </div>
                             </div>
@@ -458,7 +480,7 @@ export default function CortesObra() {
                             {/* Actions */}
                             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
                                 <button className="btn btn-secondary" onClick={() => generateCortePDF(resultado, selectedClient, selectedObra, settings)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.5rem', background: '#ffffff', color: '#263777', border: '1px solid #cbd5e1' }}>
-                                    <Download size={18} /> Exportar PDF
+                                    <Download size={18} /> Exportar PDF del Corte
                                 </button>
                                 <button className="btn btn-primary" disabled={saved || resultado.lineas.length === 0} onClick={handleSaveInvoice}
                                     style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 2rem', fontSize: '1rem' }}>

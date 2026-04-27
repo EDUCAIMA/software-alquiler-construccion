@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight, ArrowUp, ArrowDown, ChevronDown } from 'lucide-react';
+import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight, ArrowUp, ArrowDown, ChevronDown, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { format, parseISO } from 'date-fns';
@@ -7,8 +7,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
 
-export default function Invoices() {
-    const { invoices, clients, products, settings, createInvoice, payInvoice, deleteInvoice } = useAppContext();
+export default function Invoices({ hideHeader = false } = {}) {
+    const { invoices, clients, products, settings, createInvoice, payInvoice, deleteInvoice, remisiones = [] } = useAppContext();
     const navigate = useNavigate();
 
     // New Invoice Modal
@@ -28,6 +28,8 @@ export default function Invoices() {
     const [showPayModal, setShowPayModal] = useState(false);
     const [payingInvoice, setPayingInvoice] = useState(null);
     const [paymentMethod, setPaymentMethod] = useState('Transferencia');
+    const [paymentOption, setPaymentOption] = useState('Contado'); // Contado, Abono, Fiado
+    const [abonoAmount, setAbonoAmount] = useState(0);
 
     // Filters
     const [filterClient, setFilterClient] = useState('');
@@ -48,7 +50,7 @@ export default function Invoices() {
             const client = clients.find(c => c.id === invoice.clientId);
             if (!client) return false;
             const matchClient = filterClient ? client.id === filterClient : true;
-            const matchObra = filterObra ? client.obra === filterObra : true;
+            const matchObra = filterObra ? invoice.obraId === filterObra : true;
             const matchStatus = filterStatus ? invoice.status === filterStatus : true;
             return matchClient && matchObra && matchStatus;
         });
@@ -63,7 +65,7 @@ export default function Invoices() {
                 const clientB = clients.find(c => c.id === b.clientId);
 
                 switch (sortConfig.key) {
-                    case 'id': vA = a.id; vB = b.id; break;
+                    case 'id': vA = parseInt(a.id.split('-').pop()) || 0; vB = parseInt(b.id.split('-').pop()) || 0; break;
                     case 'origin': vA = a.cotizacionId || 'Manual'; vB = b.cotizacionId || 'Manual'; break;
                     case 'client': vA = clientA?.name || ''; vB = clientB?.name || ''; break;
                     case 'obra': vA = clientA?.obra || ''; vB = clientB?.obra || ''; break;
@@ -97,7 +99,18 @@ export default function Invoices() {
         setCurrentPage(1);
     };
 
-    const uniqueObras = [...new Set(clients.map(c => c.obra).filter(Boolean))];
+    const uniqueObras = useMemo(() => {
+        const all = [];
+        clients.forEach(c => {
+            if (c.obras) c.obras.forEach(o => all.push({ id: o.id, nombre: o.nombre }));
+        });
+        const seen = new Set();
+        return all.filter(o => {
+            const dup = seen.has(o.id);
+            seen.add(o.id);
+            return !dup;
+        });
+    }, [clients]);
 
     const handleAddToCart = () => {
         if (selectedProduct && selectedQuantity > 0 && selectedDays > 0) {
@@ -127,7 +140,7 @@ export default function Invoices() {
         if (clientId && cart.length > 0) {
             createInvoice({
                 clientId,
-                items: cart.map(c => ({ productId: c.productId, quantity: c.quantity, days: c.days, price: c.price }))
+                items: cart.map(c => ({ productId: c.productId, name: c.name, quantity: c.quantity, days: c.days, price: c.price }))
             });
             setShowModal(false);
             setStep(1);
@@ -151,18 +164,23 @@ export default function Invoices() {
     const handleOpenPayModal = (invoice) => {
         setPayingInvoice(invoice);
         setPaymentMethod('Transferencia');
+        setPaymentOption('Contado');
+        setAbonoAmount(invoice.amount);
         setShowPayModal(true);
     };
 
     const handleConfirmPayment = () => {
         if (payingInvoice) {
-            payInvoice(payingInvoice.id);
-            // If we're viewing this invoice in the view modal, update the reference
+            const finalAmount = paymentOption === 'Contado' ? payingInvoice.amount : (paymentOption === 'Fiado' ? 0 : abonoAmount);
+            payInvoice(payingInvoice.id, finalAmount, paymentOption);
+            window.location.hash = "#/remisiones";
+            
             if (viewingInvoice && viewingInvoice.id === payingInvoice.id) {
-                setViewingInvoice({ ...viewingInvoice, status: 'Paid' });
+                setViewingInvoice({ ...viewingInvoice, status: paymentOption === 'Contado' ? 'Paid' : (paymentOption === 'Fiado' ? 'Fiado' : 'Partial') });
             }
             setShowPayModal(false);
             setPayingInvoice(null);
+            navigate('/remisiones');
         }
     };
 
@@ -341,21 +359,34 @@ export default function Invoices() {
 
     return (
         <>
-            {/* Header */}
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1>Facturación</h1>
-                    <p className="text-muted">Gestión de cobros y facturas de alquiler</p>
+            {/* Header – oculto cuando se embebe en Comercial */}
+            {!hideHeader && (
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h1>Facturación</h1>
+                        <p className="text-muted">Gestión de cobros y facturas de alquiler</p>
+                    </div>
+                    <div className="flex gap-4">
+                        <button className="btn btn-secondary" onClick={handleGenerateReport}>
+                            <Download size={20} /> Reporte
+                        </button>
+                        <button className="btn btn-primary" onClick={handleOpenNew}>
+                            <Plus size={20} /> Crear Factura
+                        </button>
+                    </div>
                 </div>
-                <div className="flex gap-4">
+            )}
+            {/* Botón Crear Factura en modo embedded */}
+            {hideHeader && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginBottom: '1.25rem' }}>
                     <button className="btn btn-secondary" onClick={handleGenerateReport}>
-                        <Download size={20} /> Reporte
+                        <Download size={18} /> Reporte PDF
                     </button>
                     <button className="btn btn-primary" onClick={handleOpenNew}>
-                        <Plus size={20} /> Crear Factura
+                        <Plus size={18} /> Crear Factura
                     </button>
                 </div>
-            </div>
+            )}
 
             {/* Filters */}
             <div className="glass-panel p-6 mb-6 flex items-center justify-between">
@@ -375,7 +406,7 @@ export default function Invoices() {
                     </select>
                     <select className="input-base" style={{ width: '190px' }} value={filterObra} onChange={e => setFilterObra(e.target.value)}>
                         <option value="">Todas las Obras</option>
-                        {uniqueObras.map((obra, idx) => <option key={idx} value={obra}>{obra}</option>)}
+                        {uniqueObras.map((obra) => <option key={obra.id} value={obra.id}>{obra.nombre}</option>)}
                     </select>
                 </div>
             </div>
@@ -419,18 +450,31 @@ export default function Invoices() {
                                 const client = clients.find(c => c.id === invoice.clientId);
                                 return (
                                     <tr key={invoice.id}>
-                                        <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{invoice.id}</td>
+                                        <td style={{ padding: '0.85rem' }}>
+                                            <div style={{ fontWeight: 800, fontFamily: 'monospace', color: 'var(--primary)', fontSize: '0.85rem' }}>{invoice.id.split('-').pop()}</div>
+                                            <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                                                {invoice.cotizacionId && <span title={`Cotización: ${invoice.cotizacionId}`} style={{ fontSize: '0.6rem', padding: '1px 5px', borderRadius: 4, background: 'rgba(99,102,241,0.08)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.2)', fontWeight: 700 }}>📋 {invoice.cotizacionId.split('-').pop()}</span>}
+                                                {remisiones.some(r => r.facturaId === invoice.id) && (
+                                                    <span title="Remisión vinculada" style={{ fontSize: '0.6rem', padding: '1px 5px', borderRadius: 4, background: 'rgba(35,101,171,0.08)', color: '#2365AB', border: '1px solid rgba(35,101,171,0.2)', fontWeight: 700 }}>
+                                                        🚚 {remisiones.find(r => r.facturaId === invoice.id)?.id.split('-').pop()}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
                                         <td style={{ fontWeight: 600 }}>{client?.name || 'N/A'}</td>
-                                        <td className="text-muted">{client?.obra || '-'}</td>
+                                        <td className="text-muted">
+                                            {client?.obras?.find(o => o.id === invoice.obraId)?.nombre || client?.obra || '-'}
+                                        </td>
                                         <td style={{ fontWeight: 700 }}>${invoice.amount.toLocaleString()}</td>
                                         <td className="text-muted" style={{ fontSize: '0.85rem' }}>
                                             {invoice.date ? format(parseISO(invoice.date), 'dd/MM/yy') : '—'}
                                         </td>
                                         <td>
-                                            <span className={`badge ${invoice.status === 'Paid' ? 'badge-success' : 'badge-warning'}`}
-                                                style={invoice.status === 'Pending' ? { background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' } : {}}>
-                                                {invoice.status === 'Paid' ? 'Pagada' : 'Pendiente'}
-                                            </span>
+                                                <span className={`badge ${invoice.status === 'Paid' ? 'badge-success' : (invoice.status === 'Partial' ? 'badge-primary' : (invoice.status === 'Fiado' ? 'badge-info' : 'badge-warning'))}`}
+                                                    style={invoice.status === 'Pending' ? { background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' } : 
+                                                           invoice.status === 'Fiado' ? { background: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' } : {}}>
+                                                    {invoice.status === 'Paid' ? 'Pagada' : (invoice.status === 'Partial' ? 'Abonada' : (invoice.status === 'Fiado' ? 'Fiado' : 'Pendiente'))}
+                                                </span>
                                         </td>
                                         <td>
                                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', whiteSpace: 'nowrap' }}>
@@ -440,14 +484,14 @@ export default function Invoices() {
                                                 <button className="btn btn-primary btn-sm" onClick={() => generatePDF(invoice)} title="Descargar PDF">
                                                     <Download size={15} /> PDF
                                                 </button>
-                                                {invoice.status === 'Pending' && (
+                                                {invoice.status !== 'Paid' && (
                                                     <button
                                                         className="btn btn-sm"
                                                         style={{ background: '#10b981', color: 'white', boxShadow: '0 4px 14px rgba(16,185,129,0.3)' }}
                                                         onClick={() => handleOpenPayModal(invoice)}
                                                         title="Registrar Pago"
                                                     >
-                                                        <CreditCard size={15} /> Pagar
+                                                        <CreditCard size={15} /> {invoice.status === 'Partial' ? 'Abonar' : 'Pagar'}
                                                     </button>
                                                 )}
                                                 {invoice.status === 'Paid' && (
@@ -455,13 +499,10 @@ export default function Invoices() {
                                                         <CheckCircle size={14} /> Pagada
                                                     </span>
                                                 )}
-                                                {invoice.status === 'Paid' && invoice.remisionEnabled && !invoice.remisionCreada && (
-                                                    <button
-                                                        onClick={() => navigate('/remisiones')}
-                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.4rem 0.8rem', borderRadius: 8, background: 'linear-gradient(135deg,#10b981,#059669)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', boxShadow: '0 2px 8px rgba(16,185,129,0.35)' }}
-                                                        title="Ir a Remisiones para despachar">
-                                                        <ArrowRight size={14} /> Pasar a Remisión
-                                                    </button>
+                                                {(invoice.status === 'Paid' || invoice.status === 'Partial' || invoice.status === 'Fiado') && (
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', padding: '0.4rem 0.8rem', borderRadius: 8, background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)', fontWeight: 700, fontSize: '0.78rem' }}>
+                                                        <CheckCircle size={14} /> Listo despacho
+                                                    </span>
                                                 )}
                                             </div>
                                         </td>
@@ -915,23 +956,84 @@ export default function Invoices() {
                                     <span style={{ fontSize: '1.8rem', fontWeight: 800, color: '#10b981' }}>${inv.amount.toLocaleString()}</span>
                                 </div>
 
-                                {/* Payment Method */}
-                                <div className="input-group">
-                                    <label className="input-label">Método de Pago</label>
-                                    <select className="input-base" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                                        <option value="Transferencia">Transferencia Bancaria</option>
-                                        <option value="Efectivo">Efectivo</option>
-                                        <option value="Cheque">Cheque</option>
-                                        <option value="Tarjeta">Tarjeta de Crédito/Débito</option>
-                                        <option value="Otro">Otro</option>
-                                    </select>
+                                {/* Payment Options Selector */}
+                                <div className="input-group" style={{ marginBottom: '1.25rem' }}>
+                                    <label className="input-label">Tipo de Pago</label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                                        {[
+                                            { id: 'Contado', label: 'Contado', icon: <CheckCircle size={16} /> },
+                                            { id: 'Abono', label: 'Abono', icon: <DollarSign size={16} /> },
+                                            { id: 'Fiado', label: 'Fiado', icon: <Clock size={16} /> }
+                                        ].map(opt => (
+                                            <button
+                                                key={opt.id}
+                                                onClick={() => {
+                                                    setPaymentOption(opt.id);
+                                                    const pending = inv.amount - (inv.paidAmount || 0);
+                                                    if (opt.id === 'Contado') setAbonoAmount(pending);
+                                                    if (opt.id === 'Abono') setAbonoAmount(pending);
+                                                    if (opt.id === 'Fiado') setAbonoAmount(0);
+                                                }}
+                                                style={{
+                                                    padding: '0.6rem', borderRadius: 10, border: '1px solid',
+                                                    borderColor: paymentOption === opt.id ? 'var(--primary)' : 'var(--surface-border)',
+                                                    background: paymentOption === opt.id ? 'rgba(35, 101, 171, 0.1)' : 'white',
+                                                    color: paymentOption === opt.id ? 'var(--primary)' : 'var(--text-muted)',
+                                                    fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                {opt.icon} {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
+
+                                {paymentOption === 'Abono' && (
+                                    <div className="input-group animate-slide-down">
+                                        <label className="input-label">Monto del Abono</label>
+                                        <div style={{ position: 'relative' }}>
+                                            <DollarSign size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                                            <input 
+                                                type="number" 
+                                                className="input-base" 
+                                                style={{ paddingLeft: '2.5rem' }} 
+                                                value={abonoAmount} 
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    if (val === '') { setAbonoAmount(''); return; }
+                                                    setAbonoAmount(val);
+                                                }} 
+                                                min="0"
+                                                max={inv.amount - (inv.paidAmount || 0)}
+                                            />
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+                                            Saldo pendiente: ${(inv.amount - (inv.paidAmount || 0)).toLocaleString()}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {paymentOption !== 'Fiado' && (
+                                    <div className="input-group">
+                                        <label className="input-label">Método de Pago</label>
+                                        <select className="input-base" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+                                            <option value="Transferencia">Transferencia Bancaria</option>
+                                            <option value="Efectivo">Efectivo</option>
+                                            <option value="Cheque">Cheque</option>
+                                            <option value="Tarjeta">Tarjeta de Crédito/Débito</option>
+                                            <option value="Otro">Otro</option>
+                                        </select>
+                                    </div>
+                                )}
 
                                 {/* Warning note */}
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 10, padding: '0.85rem 1rem', marginBottom: '0.5rem' }}>
                                     <AlertCircle size={16} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 1 }} />
                                     <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                                        Al confirmar, la factura se marcará como <strong>Pagada</strong>, la deuda del cliente se reducirá y los equipos serán liberados del inventario.
+                                        {paymentOption === 'Contado' && `Al confirmar, la factura se marcará como Pagada y la deuda del cliente se reducirá en $${inv.amount.toLocaleString()}.`}
+                                        {paymentOption === 'Abono' && `Al confirmar, se registrará un abono de $${Number(abonoAmount).toLocaleString()} y la factura quedará como Abonada.`}
+                                        {paymentOption === 'Fiado' && `Al confirmar, la factura quedará como Fiada y los equipos serán liberados para despacho.`}
                                     </span>
                                 </div>
                             </div>
@@ -943,7 +1045,7 @@ export default function Invoices() {
                                     style={{ background: '#10b981', color: 'white', boxShadow: '0 4px 14px rgba(16,185,129,0.35)', padding: '0.75rem 1.75rem', fontSize: '1rem' }}
                                     onClick={handleConfirmPayment}
                                 >
-                                    <CheckCircle size={18} /> Confirmar Pago
+                                    <CheckCircle size={18} /> Confirmar {paymentOption}
                                 </button>
                             </div>
                         </div>

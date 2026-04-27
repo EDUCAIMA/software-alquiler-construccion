@@ -3,21 +3,26 @@ import { Activity, Clock, LogOut, LogIn, Mail } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 
 export default function Trazability() {
-    const { logs } = useAppContext();
+    const { logs = [] } = useAppContext();
+
+    const sortedLogs = [...logs].sort((a, b) => {
+        const idA = parseInt(a.id?.toString().split('-').pop()) || 0;
+        const idB = parseInt(b.id?.toString().split('-').pop()) || 0;
+        return idB - idA; // Mostrar los más recientes arriba
+    });
 
     return (
-        <>
+        <div className="page-animate">
             <div className="flex justify-between items-center mb-6">
                 <div>
-                    <h1>Trazabilidad de Actividades</h1>
-                    <p className="text-muted">Registro detallado de todo el movimiento de equipos y facturación</p>
+                    <h1>Trazabilidad Logística</h1>
+                    <p className="text-muted">Registro histórico de todos los movimientos de equipos y estados</p>
                 </div>
-                <button className="btn btn-secondary">Exportar CSV</button>
             </div>
 
-            <div className="glass-panel p-6">
-                <div className="flex-col gap-6">
-                    {logs.map((log, index) => {
+            <div className="glass-panel p-8">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {sortedLogs.map((log, index) => {
                         const isExit = log.type === 'exit';
                         const isEntry = log.type === 'entry';
                         const isSystem = log.type === 'system';
@@ -55,6 +60,6 @@ export default function Trazability() {
                     })}
                 </div>
             </div>
-        </>
+        </div>
     );
 }

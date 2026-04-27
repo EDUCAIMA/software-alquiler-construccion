@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
+import Swal from 'sweetalert2';
 
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
@@ -124,13 +125,15 @@ export const AppProvider = ({ children }) => {
   };
 
   const nextId = (list, prefix, minStart = 1) => {
-    if (!list || list.length === 0) return `${prefix}-${String(minStart).padStart(3, '0')}`;
+    const padSize = prefix === '' ? 2 : 3;
+    const separator = prefix === '' ? '' : '-';
+    if (!list || list.length === 0) return `${prefix}${separator}${String(minStart).padStart(padSize, '0')}`;
     const ids = list.map(item => {
       const match = item.id ? String(item.id).match(/\d+$/) : null;
       return match ? parseInt(match[0], 10) : 0;
     });
     const maxId = Math.max(...ids, minStart - 1);
-    return `${prefix}-${String(maxId + 1).padStart(3, '0')}`;
+    return `${prefix}${separator}${String(maxId + 1).padStart(padSize, '0')}`;
   };
 
   // ─── CLIENTS CRUD ─────────────────────────────────────────────────────────
@@ -182,7 +185,7 @@ export const AppProvider = ({ children }) => {
   const addProduct = async (product) => {
     const newProduct = {
       ...product,
-      id: nextId(products, 'P', 101),
+      id: nextId(products, '', 1),
       totalStock: product.totalStock || 1,
       availableStock: product.totalStock || 1
     };
@@ -235,7 +238,7 @@ export const AppProvider = ({ children }) => {
 
     const newInvoice = {
       ...invoiceDetails,
-      id: nextId(invoices, 'INV'),
+      id: nextId(invoices, 'F-'),
       amount,
       status: 'Pending',
       date: format(new Date(), 'yyyy-MM-dd'),
@@ -255,7 +258,7 @@ export const AppProvider = ({ children }) => {
   };
 
   // ─── Crear factura directamente desde una cotización aprobada ─────────────
-  const createInvoiceFromCotizacion = async (cotizacionId) => {
+  const createInvoiceFromCotizacion = async (cotizacionId, extraCotData = {}) => {
     try {
       console.log('🚀 CREATE INVOICE FROM COTIZACION:', cotizacionId);
       const cot = cotizaciones.find(c => c.id === cotizacionId);
@@ -263,6 +266,7 @@ export const AppProvider = ({ children }) => {
 
       const items = cot.items.map(i => ({
         productId: i.productId,
+        nombre: i.nombre || i.name,
         quantity: i.cantidad,
         days: i.dias,
         price: i.tarifaDia,
@@ -283,7 +287,7 @@ export const AppProvider = ({ children }) => {
         date: format(new Date(), 'yyyy-MM-dd'),
         remisionEnabled: false,
         remisionCreada: false,
-        id: nextId(invoices, 'INV'),
+        id: nextId(invoices, 'F-'),
       };
       await api.post('/api/invoices', newInvoice);
 
@@ -293,30 +297,63 @@ export const AppProvider = ({ children }) => {
       }
 
       // Marcar cotización como Facturada
-      await api.put(`/api/cotizaciones/${cotizacionId}`, { ...cot, estado: 'Facturada', facturaId: newInvoice.id });
+      await api.put(`/api/cotizaciones/${cotizacionId}`, { ...cot, ...extraCotData, estado: 'Facturada', facturaId: newInvoice.id });
 
       await reloadAll();
-      alert('✅ Factura creada con éxito. Puede verla en el módulo de facturación.');
+      Swal.fire({
+        title: '¡Factura Creada!',
+        text: 'La factura ha sido generada con éxito. Puede verla y descargarla en el módulo de Facturación.',
+        icon: 'success',
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Entendido'
+      });
     } catch (e) {
       console.error('ERROR FACTURANDO:', e);
-      alert('❌ Error al facturar: ' + e.message);
+      Swal.fire({
+        title: 'Error al Facturar',
+        text: e.message,
+        icon: 'error',
+        confirmButtonColor: '#ef4444'
+      });
     }
   };
 
-  const payInvoice = async (invoiceId) => {
+  const payInvoice = async (invoiceId, paidAmount, paymentType) => {
     const invoice = invoices.find(inv => inv.id === invoiceId);
-    if (!invoice || invoice.status === 'Paid') return;
-    const updated = { ...invoice, status: 'Paid', paidDate: format(new Date(), 'yyyy-MM-dd'), remisionEnabled: true };
+    if (!invoice) return;
+    
+    let newStatus = 'Paid';
+    if (paymentType === 'Abono' && paidAmount < invoice.amount) {
+      newStatus = 'Partial';
+    } else if (paymentType === 'Fiado') {
+      newStatus = 'Fiado';
+      paidAmount = 0;
+    }
+
+    const updated = { 
+      ...invoice, 
+      status: newStatus, 
+      paidAmount: (invoice.paidAmount || 0) + paidAmount,
+      paymentType: paymentType,
+      paidDate: paidAmount > 0 ? format(new Date(), 'yyyy-MM-dd') : invoice.paidDate, 
+      remisionEnabled: true 
+    };
+    
     await api.put(`/api/invoices/${invoiceId}`, updated);
+
+    // Si no se ha creado remisión aún, crearla automáticamente en estado 'Pendiente'
+    if (!invoice.remisionCreada) {
+      await createPendingRemision(updated);
+    }
 
     // Actualizar deuda del cliente
     const client = clients.find(c => c.id === invoice.clientId);
-    if (client) {
-      await api.put(`/api/clients/${client.id}`, { ...client, debt: Math.max(0, client.debt - invoice.amount) });
+    if (client && paidAmount > 0) {
+      await api.put(`/api/clients/${client.id}`, { ...client, debt: Math.max(0, client.debt - paidAmount) });
     }
 
     await reloadAll();
-    logAction('Payment Received', `Invoice ${invoiceId} - $${invoice.amount.toLocaleString()}`, client?.name || 'Unknown', 'entry');
+    logAction('Pago Registrado', `Factura ${invoiceId} - ${paymentType}: $${paidAmount.toLocaleString()}`, client?.name || 'Unknown', 'entry');
   };
 
   // Marcar factura como remisionCreada (llamado desde Remisiones al crear la remisión desde ella)
@@ -394,13 +431,127 @@ export const AppProvider = ({ children }) => {
     }
 
     await reloadAll();
+    
+    // Generar Factura Automática para Remisiones Manuales
+    if (!data.facturaId && !data.cotizacionId) {
+        try {
+            console.log('📦 INICIANDO FACTURACIÓN AUTOMÁTICA PARA REMISIÓN:', id);
+            
+            const invoiceItems = nueva.items.map(i => {
+                const prod = products.find(p => p.id === i.productId);
+                return {
+                    productId: i.productId,
+                    name: i.nombre || prod?.nombre || prod?.name || 'Equipo',
+                    quantity: Number(i.cantidad),
+                    days: 1, 
+                    price: Number(i.tarifaDia || prod?.value || 0)
+                };
+            });
+
+            const subtotal = invoiceItems.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
+            const client = clients.find(c => c.id === data.clientId);
+            const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
+            const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
+            const totalAmount = subtotal + iva + ret + (Number(nueva.transporte) || 0);
+
+            // Usar formato de ID estándar para evitar problemas de filtro
+            const autoInvoiceId = nextId(invoices, 'F-');
+
+            const autoInvoice = {
+                id: autoInvoiceId,
+                clientId: data.clientId,
+                obraId: data.obraId,
+                items: invoiceItems,
+                amount: totalAmount,
+                status: 'Pending',
+                date: nueva.fecha,
+                remisionEnabled: true,
+                remisionCreada: true,
+                manualRemisionId: id,
+                notas: `Generada desde Remisión Manual ${id}`
+            };
+
+            await api.post('/api/invoices', autoInvoice);
+            
+            if (client) {
+                await api.put(`/api/clients/${client.id}`, { ...client, debt: (client.debt || 0) + totalAmount });
+            }
+            
+            await api.put(`/api/remisiones/${id}`, { ...nueva, facturaId: autoInvoiceId });
+            await reloadAll();
+            
+            console.log('✅ FACTURA AUTOMÁTICA VINCULADA:', autoInvoiceId);
+        } catch (invErr) {
+            console.error('❌ ERROR CRÍTICO EN FACTURACIÓN AUTOMÁTICA:', invErr);
+            Swal.fire({
+                title: 'Error de Sincronización',
+                text: 'La remisión se creó pero no se pudo generar la factura en Comercio automáticamente.',
+                icon: 'warning',
+                confirmButtonColor: '#f59e0b'
+            });
+        }
+    }
+
     const client = clients.find(c => c.id === data.clientId);
     logAction('Remisión Creada', `${id} — ${nueva.items.length} equipo(s)`, client?.name || 'N/A', 'exit');
     return nueva;
   };
 
+  const createPendingRemision = async (invoice) => {
+    // Intentar usar el mismo consecutivo numérico de la cotización/factura
+    let remId = nextId(remisiones, 'REM');
+    const consecutive = invoice.id.split('-').pop();
+    const candidateId = `REM-${consecutive}`;
+    
+    // Si no existe ya una remisión con ese ID, lo usamos para mantener consistencia con Comercio
+    if (!remisiones.some(r => r.id === candidateId)) {
+        remId = candidateId;
+    }
+
+    const newRem = {
+        id: remId,
+        clientId: invoice.clientId,
+        obraId: invoice.obraId,
+        fecha: format(new Date(), 'yyyy-MM-dd'),
+        items: invoice.items.map(i => {
+            const prod = products.find(p => p.id === i.productId);
+            return { 
+                productId: i.productId,
+                nombre: i.nombre || i.name || prod?.nombre || prod?.name || 'Equipo sin nombre',
+                cantidad: i.quantity || i.cantidad || 0,
+                tarifaDia: i.price || i.tarifaDia || 0,
+                cantidadDevuelta: 0 
+            };
+        }),
+        estado: 'Pendiente', // Estado especial para identificar que viene de facturación
+        notas: `Generada automáticamente desde Factura ${invoice.id}`,
+        cotizacionId: invoice.cotizacionId || null,
+        facturaId: invoice.id
+    };
+
+    await api.post('/api/remisiones', newRem);
+    
+    // Reducir stock de productos inmediatamente para reservar los equipos
+    for (const item of newRem.items) {
+      const prod = products.find(p => p.id === item.productId);
+      if (prod) {
+        await api.put(`/api/products/${prod.id}`, { ...prod, availableStock: Math.max(0, prod.availableStock - item.cantidad) });
+      }
+    }
+
+    // Marcar la factura como remisión creada para que no se duplique
+    await api.put(`/api/invoices/${invoice.id}`, { ...invoice, remisionCreada: true });
+  };
+
+  const editRemision = async (remId, data) => {
+    const current = remisiones.find(r => r.id === remId);
+    if (!current) return;
+    await api.put(`/api/remisiones/${remId}`, { ...current, ...data });
+    await reloadAll();
+  };
+
   const registrarDevolucion = async (clientId, obraId, devoluciones, fecha) => {
-    let updatedRems = remisiones.map(r => ({ ...r, items: r.items.map(i => ({ ...i })) }));
+    let updatedRems = (remisiones || []).map(r => ({ ...r, items: (r.items || []).map(i => ({ ...i })) }));
     const stockReintegrar = {};
 
     devoluciones.forEach(({ productId, cantidad }) => {
@@ -501,7 +652,7 @@ export const AppProvider = ({ children }) => {
     }
 
     // 2. Desvincular de la factura (permitir re-remisionar)
-    const potentialInvId = rem.invoiceId || (typeof rem.id === 'string' ? rem.id.replace('REM-', 'INV-') : null);
+    const potentialInvId = rem.invoiceId || (typeof rem.id === 'string' ? rem.id.replace('REM-', 'F-') : null);
     const inv = invoices.find(i => i.id === potentialInvId);
     if (inv) {
       await api.put(`/api/invoices/${inv.id}`, { ...inv, remisionCreada: false });
@@ -515,7 +666,7 @@ export const AppProvider = ({ children }) => {
 
   // ─── COTIZACIONES CRUD ────────────────────────────────────────────────────
   const addCotizacion = async (data) => {
-    const id = nextId(cotizaciones, 'COT');
+    const id = nextId(cotizaciones, 'C-');
     const defaultClausulas = [
         '1. El ARRENDATARIO se compromete a utilizar los equipos únicamente en la obra indicada y a devolverlos en perfectas condiciones de funcionamiento.',
         '2. Cualquier daño, pérdida o robo de los equipos será de responsabilidad exclusiva del ARRENDATARIO.',
@@ -541,10 +692,20 @@ export const AppProvider = ({ children }) => {
       await api.put(`/api/cotizaciones/${cotId}`, { ...current, estado: nuevoEstado, ...extra });
       await reloadAll();
       logAction(`Cotización ${nuevoEstado}`, cotId, '', 'system');
-      alert(`✅ Cotización ${nuevoEstado} con éxito.`);
+      Swal.fire({
+        title: 'Estado Actualizado',
+        text: `La cotización ha sido marcada como ${nuevoEstado} con éxito.`,
+        icon: 'success',
+        confirmButtonColor: '#2365AB'
+      });
     } catch (e) {
       console.error('❌ ERROR ACTUALIZANDO ESTADO:', e);
-      alert('❌ Error al actualizar estado: ' + e.message);
+      Swal.fire({
+        title: 'Error',
+        text: e.message,
+        icon: 'error',
+        confirmButtonColor: '#ef4444'
+      });
     }
   };
 
@@ -638,7 +799,7 @@ export const AppProvider = ({ children }) => {
       // Other
       logs, maintenances, addMaintenance, editMaintenance,
       // Remisiones
-      remisiones, addRemision, registrarDevolucion, deleteRemision, cancelRemision,
+      remisiones, addRemision, editRemision, registrarDevolucion, deleteRemision, cancelRemision,
       // Cotizaciones
       cotizaciones, addCotizacion, actualizarEstadoCotizacion, updateCotizacion, deleteCotizacion,
       // Gastos

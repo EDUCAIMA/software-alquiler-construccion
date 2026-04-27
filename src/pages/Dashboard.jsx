@@ -1,20 +1,16 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   Users, Package, FileText, ArrowUpRight, ArrowDownRight,
-  TrendingUp, Wrench, Download, Printer
+  TrendingUp, Wrench, AlertTriangle, Clock, ShieldAlert, CheckCircle, Bell,
+  Truck, Calculator
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend
 } from 'recharts';
-import { format, parseISO, subDays, eachDayOfInterval } from 'date-fns';
+import { format, subDays, eachDayOfInterval, isAfter, parseISO, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { applyStandardLayout } from './pdfTheme';
-import * as XLSX from 'xlsx';
-import html2canvas from 'html2canvas';
 
 // ─── Color Palette ────────────────────────────────────────────────────────────
 const COLORS = {
@@ -31,17 +27,27 @@ const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
       <div style={{
-        background: '#18181b', border: '1px solid #3f3f46',
-        borderRadius: 8, padding: '10px 14px', fontSize: '0.8rem'
+        background: 'rgba(24, 24, 27, 0.95)', 
+        backdropFilter: 'blur(4px)',
+        border: '1px solid rgba(63, 63, 70, 0.5)',
+        borderRadius: 12, 
+        padding: '12px 16px', 
+        fontSize: '0.825rem',
+        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)'
       }}>
-        <p style={{ color: '#94a3b8', marginBottom: 6 }}>{label}</p>
-        {payload.map((p, i) => (
-          <p key={i} style={{ color: p.color, fontWeight: 600 }}>
-            {p.name}: {typeof p.value === 'number' && p.name.toLowerCase().includes('$')
-              ? `$${p.value.toLocaleString()}`
-              : p.value.toLocaleString()}
-          </p>
-        ))}
+        <p style={{ color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}>{label}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {payload.map((p, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.color }} />
+              <div style={{ color: '#f8fafc', fontWeight: 600 }}>
+                {p.name}: {typeof p.value === 'number' && p.name.toLowerCase().includes('$')
+                  ? `$${p.value.toLocaleString()}`
+                  : p.value.toLocaleString()}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -63,8 +69,35 @@ const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent
 };
 
 export default function Dashboard() {
-  const { clients, products, invoices, settings, maintenances = [] } = useAppContext();
-  const dashboardRef = useRef(null);
+  const { clients, products, invoices, settings, remisiones = [], maintenances = [] } = useAppContext();
+
+  // ── Derived Alerts ──────────────────────────────────────────────────────────
+  const alerts = useMemo(() => {
+    const list = [];
+    const today = new Date();
+
+    const overdue = invoices.filter(inv => inv.status !== 'Paid' && differenceInDays(today, parseISO(inv.date)) > 30);
+    if (overdue.length > 0) {
+      list.push({ id: 'overdue', type: 'error', icon: ShieldAlert, title: `${overdue.length} Facturas Vencidas`, desc: 'Existen cobros con más de 30 días de antigüedad sin liquidar.' });
+    }
+
+    const pendingMaint = maintenances.filter(m => m.status === 'Pendiente' || m.status === 'En Proceso');
+    if (pendingMaint.length > 0) {
+      list.push({ id: 'maint', type: 'warning', icon: Wrench, title: `${pendingMaint.length} Equipos en Mantenimiento`, desc: 'Hay equipos fuera de servicio que requieren atención.' });
+    }
+
+    const pendingRem = remisiones.filter(r => r.estado === 'Pendiente');
+    if (pendingRem.length > 0) {
+      list.push({ id: 'rem', type: 'info', icon: Truck, title: `${pendingRem.length} Remisiones por Despachar`, desc: 'Equipos listos para salida que aún no han sido confirmados.' });
+    }
+
+    const longInObra = remisiones.filter(r => (r.estado === 'Activa' || r.estado === 'Parcial') && differenceInDays(today, parseISO(r.fecha)) > 30);
+    if (longInObra.length > 0) {
+      list.push({ id: 'corte', type: 'success', icon: Calculator, title: `${longInObra.length} Cortes Sugeridos`, desc: 'Equipos con más de 30 días en obra. Se recomienda realizar un corte de cuenta.' });
+    }
+
+    return list;
+  }, [invoices, remisiones, maintenances]);
 
   // ── Derived KPIs ────────────────────────────────────────────────────────────
   const totalDebt = clients.reduce((acc, c) => acc + c.debt, 0);
@@ -136,147 +169,62 @@ export default function Dashboard() {
     { name: 'En Bodega', value: availableUnits, color: COLORS.purple },
   ];
 
-  // ── Chart 4: Inventario detallado por producto ────────────────────────────
-  const inventoryDetail = products.map(p => ({
-    name: p.name.length > 18 ? p.name.slice(0, 18) + '…' : p.name,
-    'En Calle': (p.totalStock || 0) - (p.availableStock || 0),
-    'En Bodega': p.availableStock || 0,
-  }));
-
-  // ── Export to PDF ─────────────────────────────────────────────────────────
-  const exportPDF = async () => {
-    const doc = new jsPDF({ orientation: 'landscape' });
-    const margin = 10;
-    
-    let y = applyStandardLayout(doc, 'Panel de Control - Reporte Ejecutivo', settings);
-
-    // Indicators section
-    doc.setTextColor(30, 41, 59); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('1. Indicadores Clave', margin, y);
-
-    autoTable(doc, {
-      startY: y + 5,
-      head: [['Métrica', 'Valor', 'Métrica', 'Valor']],
-      body: [
-        ['Total Clientes', clients.length.toString(), 'Ingresos Cobrados', `$${totalRevenue.toLocaleString()}`],
-        ['Unidades en Calle', rentedUnits.toString(), 'Cartera Pendiente', `$${pendingRevenue.toLocaleString()}`],
-        ['Unidades en Bodega', availableUnits.toString(), 'Total Facturas', invoices.length.toString()],
-        ['Total Unidades', totalUnits.toString(), 'Facturas Pagadas', invoices.filter(i => i.status === 'Paid').length.toString()],
-      ],
-      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
-      styles: { fontSize: 8, cellPadding: 3 },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { left: margin, right: margin },
+  // ── Chart 4: Top Clientes por Equipos en Obra ─────────────────────────────
+  const topClientsData = useMemo(() => {
+    const clientMap = {};
+    remisiones.forEach(r => {
+      if (r.estado === 'Activa' || r.estado === 'Parcial') {
+        const clientName = clients.find(c => c.id === r.clientId)?.name || r.clientId;
+        const totalItemsInField = r.items.reduce((sum, item) => sum + (item.cantidad - (item.cantidadDevuelta || 0)), 0);
+        if (totalItemsInField > 0) {
+          clientMap[clientName] = (clientMap[clientName] || 0) + totalItemsInField;
+        }
+      }
     });
 
-    // Facturas detail
-    const afterKPIs = doc.lastAutoTable.finalY + 12;
-    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('2. Detalle de Facturación Reciente', margin, afterKPIs);
-
-    const clientMap = Object.fromEntries(clients.map(c => [c.id, c.name]));
-    autoTable(doc, {
-      startY: afterKPIs + 5,
-      head: [['Factura', 'Cliente', 'Monto', 'Estado', 'Fecha']],
-      body: invoices.slice(0, 20).map(inv => [
-        inv.id,
-        clientMap[inv.clientId] || inv.clientId,
-        `$${inv.amount.toLocaleString()}`,
-        inv.status === 'Paid' ? 'PAGADA' : 'PENDIENTE',
-        inv.date,
-      ]),
-      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
-      styles: { fontSize: 8, cellPadding: 3 },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { left: margin, right: margin },
-    });
-
-    // Dashboard view
-    if (dashboardRef.current) {
-      doc.addPage('a4', 'landscape');
-      applyStandardLayout(doc, 'Panel de Control - Captura Visual', settings);
-      
-      const canvas = await html2canvas(dashboardRef.current, { backgroundColor: '#09090b', scale: 1.2 });
-      const imgData = canvas.toDataURL('image/png');
-      const pageW = doc.internal.pageSize.getWidth();
-      const pageH = doc.internal.pageSize.getHeight();
-      
-      doc.addImage(imgData, 'PNG', 10, 45, pageW - 20, pageH - 60);
-    }
-
-    doc.save(`Dashboard_${settings?.companyName || 'CIELO'}_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
-  };
-
-  // ── Export to Excel ───────────────────────────────────────────────────────
-  const exportExcel = () => {
-    const wb = XLSX.utils.book_new();
-    const clientMap = Object.fromEntries(clients.map(c => [c.id, c.name]));
-
-    // Sheet 1: KPIs
-    const kpiData = [
-      ['Métrica', 'Valor'],
-      ['Total Clientes', clients.length],
-      ['Unidades en Calle', rentedUnits],
-      ['Unidades en Bodega', availableUnits],
-      ['Total Unidades', totalUnits],
-      ['Ingresos Cobrados ($)', totalRevenue],
-      ['Cartera Pendiente ($)', pendingRevenue],
-      ['Total Facturas', invoices.length],
-      ['Facturas Pagadas', invoices.filter(i => i.status === 'Paid').length],
-      ['Facturas Pendientes', invoices.filter(i => i.status === 'Pending').length],
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(kpiData), 'KPIs');
-
-    // Sheet 2: Facturas
-    const invData = [['ID', 'Cliente', 'Monto', 'Estado', 'Fecha'],
-    ...invoices.map(inv => [
-      inv.id,
-      clientMap[inv.clientId] || inv.clientId,
-      inv.amount,
-      inv.status === 'Paid' ? 'Pagado' : 'Pendiente',
-      inv.date,
-    ])
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(invData), 'Facturas');
-
-    // Sheet 3: Inventario
-    const prodData = [['ID', 'Nombre', 'Categoría', 'Total', 'En Bodega', 'En Calle', 'Valor Unit.'],
-    ...products.map(p => [
-      p.id, p.name, p.category || '',
-      p.totalStock || 0, p.availableStock || 0,
-      (p.totalStock || 0) - (p.availableStock || 0),
-      p.value || 0,
-    ])
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(prodData), 'Inventario');
-
-    // Sheet 4: Clientes
-    const cliData = [['ID', 'Nombre', 'Obra', 'Email', 'Teléfono', 'Cartera ($)', 'Desde'],
-    ...clients.map(c => [c.id, c.name, c.obra, c.email, c.phone, c.debt, c.joined])
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cliData), 'Clientes');
-
-    XLSX.writeFile(wb, `Reporte_${settings?.shortName || 'CIELO'}_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
-  };
+    return Object.entries(clientMap)
+      .map(([name, value]) => ({ 
+        name: name.length > 20 ? name.slice(0, 20) + '...' : name, 
+        value 
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+  }, [remisiones, clients]);
 
   // ── UI ────────────────────────────────────────────────────────────────────
   return (
-    <div ref={dashboardRef}>
+    <div>
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1>Panel de Control</h1>
           <p className="text-muted">Resumen ejecutivo de alquileres y finanzas</p>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-secondary" onClick={exportExcel} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <Download size={16} /> Excel / CSV
-          </button>
-          <button className="btn btn-secondary" onClick={exportPDF} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <Printer size={16} /> PDF
-          </button>
-        </div>
       </div>
+
+      {/* Alerts & Reminders */}
+      {alerts.length > 0 && (
+        <div style={{ marginBottom: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+          {alerts.map(alert => (
+            <div key={alert.id} className={`alert-card ${alert.type}`} style={{ 
+              background: alert.type === 'error' ? 'rgba(239,68,68,0.08)' : alert.type === 'warning' ? 'rgba(245,158,11,0.08)' : alert.type === 'success' ? 'rgba(35,101,171,0.08)' : 'rgba(99,102,241,0.08)',
+              border: `1px solid ${alert.type === 'error' ? 'rgba(239,68,68,0.2)' : alert.type === 'warning' ? 'rgba(245,158,11,0.2)' : alert.type === 'success' ? 'rgba(35,101,171,0.2)' : 'rgba(99,102,241,0.2)'}`,
+              borderRadius: 12, padding: '1rem', display: 'flex', gap: '0.85rem', alignItems: 'flex-start'
+            }}>
+              <div style={{ 
+                background: alert.type === 'error' ? '#ef4444' : alert.type === 'warning' ? '#f59e0b' : alert.type === 'success' ? '#2365AB' : '#6366f1',
+                padding: '0.5rem', borderRadius: 10, color: 'white', display: 'flex'
+              }}>
+                <alert.icon size={18} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: 2 }}>{alert.title}</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{alert.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Mini KPI Items ─────────────────────────────────────────────────── */}
       <div className="mini-stat-grid">
@@ -355,24 +303,58 @@ export default function Dashboard() {
           </h3>
           <div style={{ height: 280 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueByDay}>
+              <AreaChart data={revenueByDay} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gPagado" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.green} stopOpacity={0.35} />
-                    <stop offset="95%" stopColor={COLORS.green} stopOpacity={0} />
+                    <stop offset="5%" stopColor={COLORS.green} stopOpacity={0.4} />
+                    <stop offset="95%" stopColor={COLORS.green} stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="gPendiente" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={COLORS.orange} stopOpacity={0.35} />
-                    <stop offset="95%" stopColor={COLORS.orange} stopOpacity={0} />
+                    <stop offset="5%" stopColor={COLORS.orange} stopOpacity={0.4} />
+                    <stop offset="95%" stopColor={COLORS.orange} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" vertical={false} />
-                <XAxis dataKey="name" stroke="#94a3b8" tick={{ fontSize: 12 }} />
-                <YAxis stroke="#94a3b8" tick={{ fontSize: 11 }} tickFormatter={v => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ fontSize: '0.8rem', paddingTop: 8 }} />
-                <Area type="monotone" dataKey="Pagado ($)" stroke={COLORS.green} fill="url(#gPagado)" strokeWidth={2} />
-                <Area type="monotone" dataKey="Pendiente ($)" stroke={COLORS.orange} fill="url(#gPendiente)" strokeWidth={2} />
+                <CartesianGrid strokeDasharray="4 4" stroke="rgba(148, 163, 184, 0.1)" vertical={false} />
+                <XAxis 
+                  dataKey="name" 
+                  stroke="#94a3b8" 
+                  tick={{ fontSize: 11, fontWeight: 500 }} 
+                  axisLine={false}
+                  tickLine={false}
+                  dy={10}
+                />
+                <YAxis 
+                  stroke="#94a3b8" 
+                  tick={{ fontSize: 10, fontWeight: 500 }} 
+                  tickFormatter={v => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(148, 163, 184, 0.2)', strokeWidth: 2 }} />
+                <Legend 
+                  verticalAlign="bottom" 
+                  height={36} 
+                  iconType="circle"
+                  wrapperStyle={{ fontSize: '0.75rem', fontWeight: 600, paddingTop: 20 }} 
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="Pagado ($)" 
+                  stroke={COLORS.green} 
+                  fill="url(#gPagado)" 
+                  strokeWidth={3}
+                  activeDot={{ r: 6, strokeWidth: 0 }}
+                  dot={{ r: 3, fill: COLORS.green, strokeWidth: 0, fillOpacity: 0.4 }}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="Pendiente ($)" 
+                  stroke={COLORS.orange} 
+                  fill="url(#gPendiente)" 
+                  strokeWidth={3}
+                  activeDot={{ r: 6, strokeWidth: 0 }}
+                  dot={{ r: 3, fill: COLORS.orange, strokeWidth: 0, fillOpacity: 0.4 }}
+                />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -418,7 +400,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Row 2: Inventario Donut + Detalle por Producto ─────────────────── */}
+      {/* ── Row 2: Inventario Donut + Top Clientes ─────────────────────────── */}
       <div className="grid-2">
         {/* Donut – En Calle vs En Bodega */}
         <div className="glass-panel p-6">
@@ -442,45 +424,78 @@ export default function Dashboard() {
                     <Cell key={i} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} itemStyle={{ color: '#f8fafc' }} />
-                <Legend wrapperStyle={{ fontSize: '0.8rem' }} />
+                <Tooltip 
+                  contentStyle={{ background: 'rgba(24, 24, 27, 0.95)', border: '1px solid rgba(63, 63, 70, 0.5)', borderRadius: 12, boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)' }} 
+                  itemStyle={{ color: '#f8fafc' }} 
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '0.75rem', fontWeight: 600 }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 12 }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ color: COLORS.blue, fontWeight: 700, fontSize: '1rem' }}>{rentedUnits}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>En Calle</div>
+              <div style={{ color: COLORS.blue, fontWeight: 800, fontSize: '1.1rem' }}>{rentedUnits}</div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>En Calle</div>
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ color: COLORS.purple, fontWeight: 700, fontSize: '1rem' }}>{availableUnits}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>En Bodega</div>
+              <div style={{ color: COLORS.purple, fontWeight: 800, fontSize: '1.1rem' }}>{availableUnits}</div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>En Bodega</div>
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '1rem' }}>{totalUnits}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Total</div>
+              <div style={{ color: '#f8fafc', fontWeight: 800, fontSize: '1.1rem' }}>{totalUnits}</div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>Total</div>
             </div>
           </div>
         </div>
 
-        {/* Bar – por producto */}
+        {/* Top Clientes Bar Chart */}
         <div className="glass-panel p-6">
           <h3 className="mb-4" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Wrench size={18} style={{ color: COLORS.purple }} />
-            Distribución por Equipo
+            <Users size={18} style={{ color: COLORS.orange }} />
+            Top 5 Clientes (Equipos en Obra)
           </h3>
           <div style={{ height: 280 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={inventoryDetail} layout="vertical" barCategoryGap="30%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" horizontal={false} />
-                <XAxis type="number" stroke="#94a3b8" tick={{ fontSize: 11 }} allowDecimals={false} />
-                <YAxis type="category" dataKey="name" stroke="#94a3b8" tick={{ fontSize: 11 }} width={100} />
-                <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} itemStyle={{ color: '#f8fafc' }} />
-                <Legend wrapperStyle={{ fontSize: '0.8rem' }} />
-                <Bar dataKey="En Calle" fill={COLORS.blue} radius={[0, 4, 4, 0]} />
-                <Bar dataKey="En Bodega" fill={COLORS.purple} radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {topClientsData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topClientsData} layout="vertical" margin={{ left: 20, right: 30, top: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="rgba(148, 163, 184, 0.1)" horizontal={false} />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    stroke="#94a3b8" 
+                    tick={{ fontSize: 11, fontWeight: 600 }} 
+                    axisLine={false}
+                    tickLine={false}
+                    width={120}
+                  />
+                  <Tooltip 
+                    cursor={{ fill: 'transparent' }}
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div style={{ background: 'rgba(24, 24, 27, 0.95)', border: '1px solid rgba(63, 63, 70, 0.5)', borderRadius: 10, padding: '8px 12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)' }}>
+                            <p style={{ margin: 0, color: '#f8fafc', fontWeight: 700, fontSize: '0.8rem' }}>{payload[0].value} unidades</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    fill={COLORS.orange} 
+                    radius={[0, 6, 6, 0]} 
+                    barSize={24}
+                    label={{ position: 'right', fill: '#94a3b8', fontSize: 11, fontWeight: 700, offset: 10 }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                No hay equipos en calle actualmente
+              </div>
+            )}
           </div>
         </div>
       </div>

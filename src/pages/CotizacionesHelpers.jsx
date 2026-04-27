@@ -610,10 +610,10 @@ function generateRemisionPDF(rem, client, obra, settings) {
             head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANTIDAD', 'DEVUELTA', 'PENDIENTE']],
             body: rem.items.map((i, idx) => [
                 idx + 1,
-                i.nombre.toUpperCase(),
-                i.cantidad,
+                (i.nombre || i.productId || 'EQUIPO').toUpperCase(),
+                i.cantidad || 0,
                 i.cantidadDevuelta || 0,
-                i.cantidad - (i.cantidadDevuelta || 0)
+                (i.cantidad || 0) - (i.cantidadDevuelta || 0)
             ]),
             theme: 'plain',
             headStyles: { 

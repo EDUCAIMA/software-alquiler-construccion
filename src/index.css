@@ -566,10 +566,10 @@ h3 {
 
 .glass-table {
   width: 100%;
-  min-width: 800px; /* Reducimos min-width para que sea un poco más cómodo en pantallas medianas */
+  min-width: 900px;
   border-collapse: collapse;
   text-align: left;
-  table-layout: auto;
+  table-layout: fixed;
 }
 
 @media (max-width: 768px) {
@@ -579,29 +579,35 @@ h3 {
 }
 
 .glass-table th {
-  padding: 1rem;
+  padding: 0.6rem 0.75rem;
   color: var(--text-secondary);
-  font-weight: 600;
-  font-size: 0.875rem;
+  font-weight: 700;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1px solid var(--surface-border);
   background: rgba(0, 0, 0, 0.02);
+  height: 45px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .glass-table td {
-  padding: 1rem;
+  padding: 0.4rem 0.75rem;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   color: var(--text-primary);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  vertical-align: middle;
 }
 
 .glass-table tbody tr {
   transition: background-color 0.2s ease;
 }
 
-.glass-table tbody tr::hover {
-  background-color: var(--surface-hover);
+.glass-table tbody tr:hover {
+  background-color: rgba(35, 101, 171, 0.08);
 }
 
 .glass-table img {
@@ -619,9 +625,9 @@ h3 {
 
 /* Badges */
 .badge {
-  padding: 0.25rem 0.75rem;
+  padding: 0.15rem 0.5rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;

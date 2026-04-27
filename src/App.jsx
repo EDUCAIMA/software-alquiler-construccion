@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Package, FileText, Activity,
-  Wrench, LogOut, ShieldAlert, Truck, Calculator, FileSignature, DollarSign, Settings, Menu, X,
+  Wrench, LogOut, ShieldAlert, Truck, Calculator, Briefcase, DollarSign, Settings, Menu, X,
   ChevronsLeft, ChevronsRight
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -19,6 +19,7 @@ import Remisiones from './pages/Remisiones';
 import CortesObra from './pages/CortesObra';
 import Financiero from './pages/Financiero';
 import Cotizaciones from './pages/Cotizaciones';
+import Comercial from './pages/Comercial';
 import Login from './pages/Login';
 import SettingsPage from './pages/Settings';
 import PublicCotizacionApproval from './pages/PublicCotizacionApproval';
@@ -50,17 +51,15 @@ function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
   console.log('Sidebar render. Settings:', settings);
   
   const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/', restricted: true },
-    { icon: Package, label: 'Inventario & Alquiler', path: '/products', restricted: false },
-    { icon: Users, label: 'Clientes', path: '/clients', restricted: false },
-    { icon: FileSignature, label: 'Cotizaciones', path: '/cotizaciones', restricted: false },
-    { icon: FileText, label: 'Facturación', path: '/invoices', restricted: false },
-    { icon: Truck, label: 'Remisiones', path: '/remisiones', restricted: false },
-    { icon: Calculator, label: 'Cortes de Obra', path: '/cortes', restricted: false },
-    { icon: DollarSign, label: 'Financiero (Próximamente)', path: '/financiero', restricted: false, disabled: true },
-    { icon: Wrench, label: 'Mantenimientos (Próximamente)', path: '/maintenance', restricted: false, disabled: true },
-    { icon: Activity, label: 'Trazabilidad (Próximamente)', path: '/trazability', restricted: false, disabled: true },
-    { icon: Settings, label: 'Ajustes App', path: '/settings', restricted: true },
+    { icon: LayoutDashboard, label: 'Panel de Control',      path: '/',           restricted: true  },
+    { icon: Briefcase,       label: 'Comercial / Cobros',     path: '/comercial',  restricted: false },
+    { icon: Truck,           label: 'Despacho (Remisiones)',  path: '/remisiones', restricted: false },
+    { icon: Calculator,      label: 'Cortes de Obra',         path: '/cortes',     restricted: false },
+    { icon: Package,         label: 'Inventario / Equipos',   path: '/products',   restricted: false },
+    { icon: Users,           label: 'Clientes',               path: '/clients',    restricted: false },
+    { icon: Activity,        label: 'Trazabilidad Logística', path: '/trazability', restricted: false },
+    { icon: Wrench,          label: 'Mantenimientos',         path: '/maintenance', restricted: false },
+    { icon: Settings,        label: 'Configuración',          path: '/settings',   restricted: true  },
   ].filter(item => !item.restricted || canViewDashboard);
 
   const roleColors = { admin: '#2365AB', gerente: '#10b981', operativo: '#f97316' };
@@ -78,29 +77,66 @@ function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
         />
       )}
       <aside className={clsx("sidebar", isOpen && "open", isCollapsed && "collapsed")}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0.4rem', position: 'relative' }}>
-          <button 
-            onClick={onToggleCollapse} 
-            className="collapse-toggle desktop-only"
-            title={isCollapsed ? "Expandir menú" : "Contraer menú"}
-          >
-            {isCollapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
-          </button>
-          <button onClick={onClose} className="mobile-only-btn" style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0.5rem' }}>
-            <X size={24} />
-          </button>
+        {/* Botón de Colapsar - Más visible y mejor ubicado */}
+        <button 
+          onClick={onToggleCollapse} 
+          className="collapse-toggle desktop-only"
+          title={isCollapsed ? "Expandir menú" : "Contraer menú"}
+          style={{
+            position: 'absolute',
+            right: '14px',
+            top: '25px',
+            zIndex: 1000,
+            background: '#ffffff',
+            border: 'none',
+            width: '36px',
+            height: '36px',
+            borderRadius: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--primary)',
+            cursor: 'pointer',
+            boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'scale(1.1)';
+            e.currentTarget.style.background = 'var(--primary)';
+            e.currentTarget.style.color = 'white';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.background = '#ffffff';
+            e.currentTarget.style.color = 'var(--primary)';
+          }}
+        >
+          {isCollapsed ? <ChevronsRight size={20} /> : <ChevronsLeft size={20} />}
+        </button>
+
+        {/* Botón Cerrar (Mobile) */}
+        <button 
+          onClick={onClose} 
+          className="mobile-only-btn" 
+          style={{ 
+            position: 'absolute', right: '10px', top: '10px',
+            background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0.5rem', zIndex: 101 
+          }}
+        >
+          <X size={24} />
+        </button>
+
+        <div className="sidebar-header" style={{ paddingTop: '1.5rem' }}>
+          <div className="logo-icon">
+            {settings?.logoUI ? (
+              <img src={settings.logoUI} alt="Logo" className="sidebar-logo-img" />
+            ) : settings?.logo ? (
+              <img src={settings.logo} alt="Logo" className="sidebar-logo-img" />
+            ) : (
+              <Package size={54} color="#2365AB" />
+            )}
+          </div>
         </div>
-      <div className="sidebar-header">
-        <div className="logo-icon">
-          {settings?.logoUI ? (
-            <img src={settings.logoUI} alt="Logo" className="sidebar-logo-img" />
-          ) : settings?.logo ? (
-            <img src={settings.logo} alt="Logo" className="sidebar-logo-img" />
-          ) : (
-            <Package size={54} color="#2365AB" />
-          )}
-        </div>
-      </div>
 
       <nav className="nav-menu">
         {menuItems.map((item) => {
@@ -224,11 +260,13 @@ function AppShell() {
       <Routes>
         <Route path="/" element={<ProtectedRoute requireDashboard><Dashboard /></ProtectedRoute>} />
         <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
-        <Route path="/cotizaciones" element={<ProtectedRoute><Cotizaciones /></ProtectedRoute>} />
+        <Route path="/comercial" element={<ProtectedRoute><Comercial /></ProtectedRoute>} />
+        {/* Redirects para rutas antiguas */}
+        <Route path="/cotizaciones" element={<Navigate to="/comercial" replace />} />
+        <Route path="/invoices" element={<Navigate to="/comercial" replace />} />
         <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
         <Route path="/remisiones" element={<ProtectedRoute><Remisiones /></ProtectedRoute>} />
         <Route path="/cortes" element={<ProtectedRoute><CortesObra /></ProtectedRoute>} />
-        <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
         <Route path="/financiero" element={<ProtectedRoute><Financiero /></ProtectedRoute>} />
         <Route path="/maintenance" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
         <Route path="/trazability" element={<ProtectedRoute><Trazability /></ProtectedRoute>} />

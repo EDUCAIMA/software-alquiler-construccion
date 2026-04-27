@@ -2,9 +2,10 @@ import { Pool } from 'pg';
 import dotenv from 'dotenv';
 dotenv.config();
 
+const isRailway = process.env.DATABASE_URL?.includes('rlwy.net');
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: isRailway ? { rejectUnauthorized: false } : false
 });
 
 async function run() {
