@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     Plus, Search, Printer, FileText, X, Building2, MapPin,
     Phone, Mail, Edit3, ChevronDown, ChevronRight, CheckCircle,
@@ -476,6 +476,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
                                 </div>
                                 <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'1rem' }}>
                                     {(client.obras || []).map(obra => {
+                                        if (!obra) return null;
                                         const cfg = OBRA_ESTADO[obra.estado] || OBRA_ESTADO['Activa'];
                                         return (
                                             <div key={obra.id} style={{ padding:'1.25rem 1.5rem', border:'1px solid #e2e8f0', borderRadius:'14px', background:'#fafafa', borderLeft:`4px solid ${cfg.color}` }}>
@@ -513,10 +514,10 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {clientInvoices.map((inv, idx) => (
+                                                {(clientInvoices || []).map((inv, idx) => (
                                                     <tr key={inv.id} style={{ borderBottom:'1px solid #f8fafc', background: idx%2===0 ? 'white' : '#fafafa' }}>
                                                         <td style={{ padding:'0.75rem 1rem', fontWeight:700, color:'#2365AB', fontSize:'0.83rem' }}>{inv.id}</td>
-                                                        <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#374151' }}>{client.obras?.find(o => o.id === inv.obraId)?.nombre || '—'}</td>
+                                                        <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#374151' }}>{(client.obras || []).find(o => o.id === inv.obraId)?.nombre || '—'}</td>
                                                         <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#6b7280' }}>{inv.date}</td>
                                                         <td style={{ padding:'0.75rem 1rem', fontWeight:700, fontSize:'0.83rem' }}>${inv.amount.toLocaleString()}</td>
                                                         <td style={{ padding:'0.75rem 1rem' }}>
@@ -618,6 +619,12 @@ export default function Clients() {
     const [editingClient, setEditingClient] = useState(null);
     const [selectedClient, setSelectedClient] = useState(null);
     const [deletingClient, setDeletingClient] = useState(null);
+
+    useEffect(() => {
+        const h1 = () => setShowModal(true);
+        window.addEventListener('trigger-new-client', h1);
+        return () => window.removeEventListener('trigger-new-client', h1);
+    }, []);
     const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
 
     const handleSort = (key) => {
@@ -705,32 +712,7 @@ export default function Clients() {
     return (
         <>
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 120px)' }}>
-                {/* Header / Top Bar con KPIs integrados */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flex: 1 }}>
-                        <h1 style={{ margin: 0, whiteSpace: 'nowrap', fontSize: '1.75rem' }}>Clientes</h1>
-                        
-                        {/* KPIs en el centro */}
-                        <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
-                            {[
-                                { label: 'Clientes', value: clients.length, color: 'blue' },
-                                { label: 'Obras Activas', value: obrasActivas, color: 'green' },
-                                { label: 'Cartera Total', value: `$${totalDeuda.toLocaleString()}`, color: 'red' },
-                            ].map(({ label, value, color }) => (
-                                <div key={label} className={`stat-card ${color}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0.5rem 0.85rem', textAlign: 'center', minWidth: 0, height: 'auto' }}>
-                                    <div>
-                                        <div className="stat-value" style={{ fontSize: '1.1rem', lineHeight: 1.1 }}>{value}</div>
-                                        <div className="stat-label" style={{ fontSize: '0.65rem', marginTop: '0.1rem', fontWeight: 700 }}>{label}</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    <button className="btn btn-primary" onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', height: 'fit-content', padding: '0.7rem 1.25rem' }}>
-                        <Plus size={18} /> Nuevo Cliente
-                    </button>
-                </div>
+                {/* Filters Section */}
                 
                 {/* Filters Section */}
                 <div className="glass-panel p-4 mb-6">

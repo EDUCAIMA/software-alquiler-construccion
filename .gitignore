@@ -35,3 +35,7 @@ web-build/
 # Proyecto específico
 backend/node_modules/
 backend/.env
+scratch/
+test_*.js
+db_*.js
+test_db.js

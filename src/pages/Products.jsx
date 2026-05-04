@@ -492,6 +492,17 @@ export default function Products() {
     const [newProduct, setNewProduct] = useState({ name: '', category: '', value: '', tipoCobro: 'Día', esquemaCobro: 'Calendario', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
     const fileInputRef = useRef(null);
 
+    useEffect(() => {
+        const h1 = () => setShowFieldModal(true);
+        const h2 = () => setShowAddModal(true);
+        window.addEventListener('trigger-field-inv', h1);
+        window.addEventListener('trigger-new-prod', h2);
+        return () => {
+            window.removeEventListener('trigger-field-inv', h1);
+            window.removeEventListener('trigger-new-prod', h2);
+        };
+    }, []);
+
     const [search, setSearch] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' });
 
@@ -566,18 +577,7 @@ export default function Products() {
 
     return (
         <>
-            {/* Header */}
-            <div className="flex justify-between items-center mb-6 gap-4" style={{ flexWrap: 'wrap' }}>
-                <div>
-                    <h1>Inventario &amp; Alquiler</h1>
-                </div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button className="btn btn-secondary" onClick={() => setShowFieldModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <ArrowDownCircle size={20} /> Ver Equipos en Campo
-                    </button>
-                    <button className="btn btn-primary" onClick={() => setShowAddModal(true)}><PackagePlus size={20} /> Nuevo Equipo</button>
-                </div>
-            </div>
+            {/* Filters */}
 
             {/* Filters */}
             <div className="glass-panel py-4 px-6 mb-6" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>

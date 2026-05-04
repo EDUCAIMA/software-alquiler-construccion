@@ -6,7 +6,7 @@ import {
     MapPin, Package, Truck, CreditCard, Calendar
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { format, addDays } from 'date-fns';
+import { format, addDays, differenceInDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
@@ -666,6 +666,137 @@ function generateRemisionPDF(rem, client, obra, settings) {
     }
 }
 
-export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP };
+// ─── PDF Corte de Obra ────────────────────────────────────────────────────────
+function generateCortePDF(invoice, client, obra, settings, allInvoices, allRemisiones, fechaCorte) {
+    try {
+        const doc = new jsPDF();
+        const W = doc.internal.pageSize.getWidth();
+        const margin = 10;
+        
+        let y = applyStandardLayout(doc, 'Corte de Obra', settings, invoice.id);
+        
+        y = drawInfoGrid(doc, y, client, {
+            valTopLeft: invoice.fecha || invoice.date,
+            labelTopLeft: 'Fecha Contrato',
+            valTopRight: fechaCorte,
+            labelTopRight: 'Fecha de Corte',
+            valMidLeft: obra?.nombre?.substring(0, 25) || invoice.obraId || '—',
+            valMidRight: invoice.status?.toUpperCase(),
+            labelMidRight: 'Estado Factura',
+            obraDireccion: obra?.ubicacion || client?.direccion
+        });
+
+        // Calcular valores hasta la fecha de corte
+        const linkedRems = allRemisiones.filter(r => r.cotizacionId === invoice.id || r.facturaId === invoice.id);
+        let extraCost = 0;
+        const targetDate = new Date(fechaCorte);
+        targetDate.setHours(23, 59, 59, 999); // Final del día de corte
+
+        (invoice.items || []).forEach(cotItem => {
+            const tarifaDia = Number(cotItem.tarifaDia) || 0;
+            const diasCotizados = Number(cotItem.dias) || 0;
+            let despachadoTotal = 0;
+            let cantidadDevueltaEnDespacho = 0;
+
+            linkedRems.forEach(rem => {
+                if (rem.estado === 'Pendiente' || rem.estado === 'Cancelada') return;
+                const fechaSalida = new Date(rem.fecha);
+                if (fechaSalida > targetDate) return; // Remisión posterior al corte
+                
+                const remItem = (rem.items || []).find(i => i.productId === cotItem.productId);
+                if (remItem) {
+                    const despachado = Number(remItem.cantidad) || 0;
+                    despachadoTotal += despachado;
+
+                    const devoluciones = remItem.devoluciones || [];
+                    devoluciones.forEach(dev => {
+                        const fechaDev = new Date(dev.fecha);
+                        if (fechaDev <= targetDate) {
+                            const cantDev = Number(dev.cantidad) || 0;
+                            cantidadDevueltaEnDespacho += cantDev;
+                            const diasReales = Math.max(0, differenceInDays(fechaDev, fechaSalida));
+                            const diasExtra = Math.max(0, diasReales - diasCotizados);
+                            if (diasExtra > 0) {
+                                extraCost += (diasExtra * cantDev * tarifaDia);
+                            }
+                        }
+                    });
+
+                    // Equipos en campo al momento del corte
+                    const pendiente = despachado - cantidadDevueltaEnDespacho;
+                    if (pendiente > 0) {
+                        const diasReales = Math.max(0, differenceInDays(targetDate, fechaSalida));
+                        const diasExtra = Math.max(0, diasReales - diasCotizados);
+                        if (diasExtra > 0) {
+                            extraCost += (diasExtra * pendiente * tarifaDia);
+                        }
+                    }
+                }
+            });
+        });
+
+        y += 10;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+        doc.text('ESTADO DE CUENTA A LA FECHA DE CORTE', margin, y);
+        y += 6;
+
+        const tableBody = [];
+        tableBody.push([{ content: invoice.fecha || invoice.date, styles: { textColor: [100,116,139] } }, 'Contrato Inicial', fmtCOP(invoice.amount)]);
+        if (extraCost > 0) {
+            tableBody.push([{ content: 'A corte', styles: { textColor: [100,116,139] } }, 'Extras por Liquidación (Mora)', '+ ' + fmtCOP(extraCost)]);
+        }
+
+        const abList = invoice.abonos || [];
+        // Filtrar abonos anteriores a la fecha de corte
+        const validAbList = abList.filter(ab => new Date(ab.fecha || invoice.paidDate) <= targetDate);
+        const recordedSum = validAbList.reduce((s, ab) => s + (Number(ab.monto) || Number(ab.amount) || 0), 0);
+        
+        // Si hay un paidAmount general sin historial (legacy) que entró antes del corte, lo mostramos
+        const totalPaidAllTime = Number(invoice.paidAmount) || 0;
+        const allTimeRecordedSum = abList.reduce((s, ab) => s + (Number(ab.monto) || Number(ab.amount) || 0), 0);
+        const unrecorded = Math.max(0, totalPaidAllTime - allTimeRecordedSum);
+        
+        // Asumimos que los unrecorded son antiguos y pasaron antes del corte (si el corte no es muy viejo)
+        if (unrecorded > 1) {
+            tableBody.push([{ content: 'Anterior', styles: { textColor: [100,116,139] } }, 'Pagos Anteriores', '- ' + fmtCOP(unrecorded)]);
+        }
+
+        validAbList.forEach(ab => {
+            tableBody.push([{ content: ab.fecha || '—', styles: { textColor: [100,116,139] } }, 'Abono Registrado', '- ' + fmtCOP(ab.monto || ab.amount || 0)]);
+        });
+
+        const saldoCorte = (invoice.amount - unrecorded - recordedSum) + extraCost;
+
+        autoTable(doc, {
+            startY: y,
+            margin: { left: margin, right: margin },
+            head: [['Fecha', 'Concepto', 'Monto']],
+            body: tableBody,
+            theme: 'plain',
+            headStyles: { fillColor: [248, 250, 252], textColor: [71, 85, 105], fontSize: 8, fontStyle: 'bold' },
+            bodyStyles: { fontSize: 8, textColor: [30, 41, 59], cellPadding: 3 },
+            alternateRowStyles: { fillColor: [255, 255, 255] },
+            columnStyles: { 2: { halign: 'right' } }
+        });
+
+        y = doc.lastAutoTable.finalY;
+
+        // Saldo Final
+        doc.setFillColor(240, 249, 255);
+        doc.rect(margin, y, W - margin * 2, 10, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(3, 105, 161);
+        doc.text('SALDO PROYECTADO AL CORTE', margin + 5, y + 6.5);
+        doc.setFontSize(10);
+        doc.text(fmtCOP(saldoCorte), W - margin - 5, y + 6.5, { align: 'right' });
+
+        doc.save(`CorteObra_${invoice.id}_${fechaCorte}.pdf`);
+    } catch (error) {
+        console.error('Error generating Corte PDF:', error);
+        alert('Error al generar el PDF del corte de obra.');
+    }
+}
+
+export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, generateCortePDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP };
 
 

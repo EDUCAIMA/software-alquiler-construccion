@@ -173,14 +173,13 @@ export default function Invoices({ hideHeader = false } = {}) {
         if (payingInvoice) {
             const finalAmount = paymentOption === 'Contado' ? payingInvoice.amount : (paymentOption === 'Fiado' ? 0 : abonoAmount);
             payInvoice(payingInvoice.id, finalAmount, paymentOption);
-            window.location.hash = "#/remisiones";
+            navigate('/comercial?tab=despachos');
             
             if (viewingInvoice && viewingInvoice.id === payingInvoice.id) {
                 setViewingInvoice({ ...viewingInvoice, status: paymentOption === 'Contado' ? 'Paid' : (paymentOption === 'Fiado' ? 'Fiado' : 'Partial') });
             }
             setShowPayModal(false);
             setPayingInvoice(null);
-            navigate('/remisiones');
         }
     };
 

@@ -78,6 +78,7 @@ export const AppProvider = ({ children }) => {
   const [empleados, setEmpleados] = useState([]);
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [globalPreload, setGlobalPreload] = useState(null);
   const [settings, setSettings] = useState({ 
     companyName: '', shortName: '', nameComplement: '', nit: '', phone: '', email: '', logo: '', address: '', headerExtra: '' 
   });
@@ -325,8 +326,8 @@ export const AppProvider = ({ children }) => {
     let newStatus = 'Paid';
     if (paymentType === 'Abono' && paidAmount < invoice.amount) {
       newStatus = 'Partial';
-    } else if (paymentType === 'Fiado') {
-      newStatus = 'Fiado';
+    } else if (paymentType === 'Credito') {
+      newStatus = 'Credito';
       paidAmount = 0;
     }
 
@@ -336,7 +337,10 @@ export const AppProvider = ({ children }) => {
       paidAmount: (invoice.paidAmount || 0) + paidAmount,
       paymentType: paymentType,
       paidDate: paidAmount > 0 ? format(new Date(), 'yyyy-MM-dd') : invoice.paidDate, 
-      remisionEnabled: true 
+      remisionEnabled: true,
+      abonos: paidAmount > 0 
+        ? [...(invoice.abonos || []), { monto: paidAmount, fecha: format(new Date(), 'yyyy-MM-dd'), tipo: paymentType }]
+        : (invoice.abonos || [])
     };
     
     await api.put(`/api/invoices/${invoiceId}`, updated);
@@ -354,6 +358,37 @@ export const AppProvider = ({ children }) => {
 
     await reloadAll();
     logAction('Pago Registrado', `Factura ${invoiceId} - ${paymentType}: $${paidAmount.toLocaleString()}`, client?.name || 'Unknown', 'entry');
+  };
+
+  const addCorteObra = async (invoiceId, corteData) => {
+    const inv = invoices.find(i => i.id === invoiceId);
+    if (!inv) return null;
+    const newCorte = { ...corteData, id: Date.now(), status: 'Pendiente' };
+    const updated = {
+      ...inv,
+      cortes: [...(inv.cortes || []), newCorte]
+    };
+    
+    // Actualizar estado local inmediatamente para reflejo en UI
+    setInvoices(prev => prev.map(i => i.id === invoiceId ? updated : i));
+
+    await api.put(`/api/invoices/${invoiceId}`, updated);
+    await reloadAll();
+    return newCorte.id;
+  };
+
+  const updateCorteStatus = async (invoiceId, corteId, newStatus) => {
+    const inv = invoices.find(i => i.id === invoiceId);
+    if (!inv) return;
+    const updated = {
+      ...inv,
+      cortes: (inv.cortes || []).map(c => c.id === corteId ? { ...c, status: newStatus } : c)
+    };
+    
+    setInvoices(prev => prev.map(i => i.id === invoiceId ? updated : i));
+
+    await api.put(`/api/invoices/${invoiceId}`, updated);
+    await reloadAll();
   };
 
   // Marcar factura como remisionCreada (llamado desde Remisiones al crear la remisión desde ella)
@@ -681,6 +716,7 @@ export const AppProvider = ({ children }) => {
     await reloadAll();
     const client = clients.find(c => c.id === data.clientId);
     logAction('Cotización Creada', id, client?.name || 'N/A', 'system');
+    return nueva;
   };
 
   const actualizarEstadoCotizacion = async (cotId, nuevoEstado, extra = {}) => {
@@ -795,7 +831,7 @@ export const AppProvider = ({ children }) => {
       // Products
       products, setProducts, addProduct, editProduct, returnProduct, deleteProduct, darDeBajaProduct,
       // Invoices
-      invoices, setInvoices, createInvoice, payInvoice, createInvoiceFromCotizacion, marcarRemisionCreada, deleteInvoice,
+      invoices, setInvoices, createInvoice, payInvoice, addCorteObra, updateCorteStatus, createInvoiceFromCotizacion, marcarRemisionCreada, deleteInvoice,
       // Other
       logs, maintenances, addMaintenance, editMaintenance,
       // Remisiones
@@ -810,6 +846,7 @@ export const AppProvider = ({ children }) => {
       settings, updateSettings,
       // Auth Utils
       checkPassword,
+      globalPreload, setGlobalPreload
     }}>
       {children}
     </AppContext.Provider>

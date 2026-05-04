@@ -1,30 +1,25 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, Package, FileText, Activity,
-  Wrench, LogOut, ShieldAlert, Truck, Calculator, Briefcase, DollarSign, Settings, Menu, X,
-  ChevronsLeft, ChevronsRight
+  LayoutDashboard, Users, Package, Activity,
+  Wrench, LogOut, ShieldAlert, Calculator, Briefcase, Settings,
+  Plus, RotateCcw, DollarSign, ArrowDownCircle
 } from 'lucide-react';
-import clsx from 'clsx';
 import { AppProvider, useAppContext } from './context/AppContext';
 
 // Pages
 import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
 import Products from './pages/Products';
-import Invoices from './pages/Invoices';
 import Trazability from './pages/Trazability';
 import Maintenance from './pages/Maintenance';
-import Remisiones from './pages/Remisiones';
-import CortesObra from './pages/CortesObra';
 import Financiero from './pages/Financiero';
-import Cotizaciones from './pages/Cotizaciones';
 import Comercial from './pages/Comercial';
 import Login from './pages/Login';
 import SettingsPage from './pages/Settings';
 import PublicCotizacionApproval from './pages/PublicCotizacionApproval';
 
-// ─── Route Guard – only admin/gerente can see Dashboard ──────────────────────
+// ─── Route Guard ──────────────────────────────────────────────────────────────
 function ProtectedRoute({ children, requireDashboard }) {
   const { currentUser, canViewDashboard } = useAppContext();
   if (!currentUser) return <Navigate to="/login" replace />;
@@ -44,201 +39,263 @@ function AccessDenied() {
   );
 }
 
-// ─── Sidebar ─────────────────────────────────────────────────────────────────
-function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
+// ─── Top Navigation Bar ───────────────────────────────────────────────────────
+function Topbar() {
   const location = useLocation();
   const { currentUser, logout, canViewDashboard, settings } = useAppContext();
-  console.log('Sidebar render. Settings:', settings);
-  
+
   const menuItems = [
-    { icon: LayoutDashboard, label: 'Panel de Control',      path: '/',           restricted: true  },
-    { icon: Briefcase,       label: 'Comercial / Cobros',     path: '/comercial',  restricted: false },
-    { icon: Truck,           label: 'Despacho (Remisiones)',  path: '/remisiones', restricted: false },
-    { icon: Calculator,      label: 'Cortes de Obra',         path: '/cortes',     restricted: false },
-    { icon: Package,         label: 'Inventario / Equipos',   path: '/products',   restricted: false },
-    { icon: Users,           label: 'Clientes',               path: '/clients',    restricted: false },
-    { icon: Activity,        label: 'Trazabilidad Logística', path: '/trazability', restricted: false },
-    { icon: Wrench,          label: 'Mantenimientos',         path: '/maintenance', restricted: false },
-    { icon: Settings,        label: 'Configuración',          path: '/settings',   restricted: true  },
+    { icon: LayoutDashboard, label: 'Panel de Control',      path: '/',            restricted: true  },
+    { icon: Briefcase,       label: 'Comercial / Despachos', path: '/comercial',   restricted: false },
+    { icon: Package,         label: 'Inventario / Equipos',  path: '/products',    restricted: false },
+    { icon: Users,           label: 'Clientes',              path: '/clients',     restricted: false },
+    { icon: Activity,        label: 'Trazabilidad',          path: '/trazability', restricted: false },
+    { icon: Wrench,          label: 'Mantenimientos',        path: '/maintenance', restricted: false },
+    { icon: Settings,        label: 'Configuración',         path: '/settings',    restricted: true  },
   ].filter(item => !item.restricted || canViewDashboard);
 
   const roleColors = { admin: '#2365AB', gerente: '#10b981', operativo: '#f97316' };
-  const roleLabels = { admin: 'Administrador', gerente: 'Gerente', operativo: 'Operativo' };
+
+  const titleStyle = {
+    color: 'white',
+    fontWeight: 800,
+    fontSize: '1.05rem',
+    letterSpacing: '-0.02em',
+    whiteSpace: 'nowrap',
+    marginRight: '1rem',
+    borderLeft: '1px solid rgba(255,255,255,0.15)',
+    paddingLeft: '1rem',
+    display: 'flex',
+    alignItems: 'center',
+    height: '30px'
+  };
+
+  const renderActionBtn = (btn) => (
+    <button
+      key={btn.event}
+      onClick={() => window.dispatchEvent(new CustomEvent(btn.event))}
+      style={{
+        padding: '0.45rem 0.85rem',
+        borderRadius: 8,
+        background: 'rgba(255,255,255,0.08)',
+        border: '1px solid rgba(255,255,255,0.15)',
+        color: 'white',
+        fontSize: '0.72rem',
+        fontWeight: 700,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        transition: 'all 0.15s',
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+      }}
+    >
+      <btn.icon size={14} color={btn.color} />
+      <span className="hide-on-mobile">{btn.label}</span>
+    </button>
+  );
 
   return (
-    <>
-      {isOpen && (
-        <div 
-          onClick={onClose}
-          style={{ 
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 45,
-            backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s'
-          }} 
-        />
-      )}
-      <aside className={clsx("sidebar", isOpen && "open", isCollapsed && "collapsed")}>
-        {/* Botón de Colapsar - Más visible y mejor ubicado */}
-        <button 
-          onClick={onToggleCollapse} 
-          className="collapse-toggle desktop-only"
-          title={isCollapsed ? "Expandir menú" : "Contraer menú"}
-          style={{
-            position: 'absolute',
-            right: '14px',
-            top: '25px',
-            zIndex: 1000,
-            background: '#ffffff',
-            border: 'none',
-            width: '36px',
-            height: '36px',
-            borderRadius: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--primary)',
-            cursor: 'pointer',
-            boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
-            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = 'scale(1.1)';
-            e.currentTarget.style.background = 'var(--primary)';
-            e.currentTarget.style.color = 'white';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.background = '#ffffff';
-            e.currentTarget.style.color = 'var(--primary)';
-          }}
-        >
-          {isCollapsed ? <ChevronsRight size={20} /> : <ChevronsLeft size={20} />}
-        </button>
+    <header style={{
+      position: 'fixed',
+      top: 0, left: 0, right: 0,
+      height: 62,
+      background: 'linear-gradient(90deg, #0d3554 0%, #104166 40%, #104166 60%, #0d3554 100%)',
+      zIndex: 50,
+      display: 'flex',
+      alignItems: 'center',
+      padding: '0 1.25rem',
+      boxShadow: '0 2px 24px rgba(0,0,0,0.35)',
+      borderBottom: '1px solid rgba(255,255,255,0.08)',
+    }}>
 
-        {/* Botón Cerrar (Mobile) */}
-        <button 
-          onClick={onClose} 
-          className="mobile-only-btn" 
-          style={{ 
-            position: 'absolute', right: '10px', top: '10px',
-            background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: '0.5rem', zIndex: 101 
-          }}
-        >
-          <X size={24} />
-        </button>
-
-        <div className="sidebar-header" style={{ paddingTop: '1.5rem' }}>
-          <div className="logo-icon">
-            {settings?.logoUI ? (
-              <img src={settings.logoUI} alt="Logo" className="sidebar-logo-img" />
-            ) : settings?.logo ? (
-              <img src={settings.logo} alt="Logo" className="sidebar-logo-img" />
-            ) : (
-              <Package size={54} color="#2365AB" />
-            )}
-          </div>
+      {/* ── LEFT SECTION: Logo + Title (Flexible) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, marginRight: '1rem' }}>
+          {settings?.logoUI ? (
+            <img src={settings.logoUI} alt="Logo" style={{ height: 38, width: 'auto', objectFit: 'contain' }} />
+          ) : settings?.logo ? (
+            <img src={settings.logo} alt="Logo" style={{ height: 38, width: 'auto', objectFit: 'contain' }} />
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Package size={28} color="#76B1E0" />
+              <span style={{ fontWeight: 900, color: 'white', fontSize: '0.95rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                {settings?.shortName || 'ARQUILER'}
+              </span>
+            </div>
+          )}
         </div>
 
-      <nav className="nav-menu">
+        {/* ── Page Titles ── */}
+        {location.pathname === '/comercial' && <div style={titleStyle}>Gestión comercial</div>}
+        {location.pathname === '/products' && <div style={titleStyle}>Inventario & Alquiler</div>}
+        {location.pathname === '/clients' && <div style={titleStyle}>Gestión de Clientes</div>}
+      </div>
+
+      {/* ── CENTER SECTION: Nav Icons (Stable) ── */}
+      <nav style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: '0.2rem',
+        padding: '0 1rem',
+        flexShrink: 0,
+      }}>
         {menuItems.map((item) => {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
-          if (item.disabled) {
-            return (
-              <div 
-                key={item.path} 
-                className="nav-item disabled" 
-                style={{ opacity: 0.4, cursor: 'not-allowed', filter: 'grayscale(1)' }}
-                title={isCollapsed ? item.label : ''}
-              >
-                <Icon size={20} />
-                {!isCollapsed && <span>{item.label}</span>}
-              </div>
-            );
-          }
           return (
-            <Link key={item.path} to={item.path} className={clsx('nav-item', isActive && 'active')} title={isCollapsed ? item.label : ''}>
-              <Icon size={20} />
-              {!isCollapsed && <span>{item.label}</span>}
+            <Link
+              key={item.path}
+              to={item.path}
+              title={item.label}
+              style={{
+                width: 44,
+                height: 44,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 10,
+                flexShrink: 0,
+                textDecoration: 'none',
+                background: isActive ? 'rgba(255,255,255,0.18)' : 'transparent',
+                border: isActive ? '1px solid rgba(255,255,255,0.25)' : '1px solid transparent',
+                color: isActive ? 'white' : 'rgba(255,255,255,0.55)',
+                transition: 'all 0.15s ease',
+                position: 'relative',
+              }}
+              onMouseEnter={e => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                  e.currentTarget.style.color = 'white';
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                }
+              }}
+              onMouseLeave={e => {
+                if (!isActive) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.55)';
+                  e.currentTarget.style.borderColor = 'transparent';
+                }
+              }}
+            >
+              <Icon size={19} />
+              {isActive && (
+                <span style={{
+                  position: 'absolute',
+                  bottom: 5,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 4,
+                  height: 4,
+                  borderRadius: '50%',
+                  background: '#76B1E0',
+                }} />
+              )}
             </Link>
           );
         })}
       </nav>
 
-      <div className="user-profile" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.75rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%' }}>
-          <div className="avatar" style={{ background: roleColors[currentUser?.role] || '#64748b', flexShrink: 0 }}>
+      {/* ── RIGHT SECTION: Actions + User (Flexible) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flex: 1, minWidth: 0 }}>
+        {/* Quick Actions */}
+        <div style={{ display: 'flex', gap: '0.6rem', marginRight: '1rem' }}>
+          {location.pathname === '/comercial' && [
+            { label: 'Nueva Cotización', icon: Plus, event: 'trigger-nueva-cot', color: '#76B1E0' },
+            { label: 'Devoluciones', icon: RotateCcw, event: 'trigger-devolucion', color: '#10b981' },
+            { label: 'Corte de Obra', icon: DollarSign, event: 'trigger-corte', color: '#f97316' },
+          ].map(renderActionBtn)}
+
+          {location.pathname === '/products' && [
+            { label: 'Ver Equipos en Campo', icon: ArrowDownCircle, event: 'trigger-field-inv', color: '#76B1E0' },
+            { label: 'Nuevo Equipo', icon: Package, event: 'trigger-new-prod', color: '#10b981' },
+          ].map(renderActionBtn)}
+
+          {location.pathname === '/clients' && [
+            { label: 'Nuevo Cliente', icon: Plus, event: 'trigger-new-client', color: '#10b981' },
+          ].map(renderActionBtn)}
+        </div>
+
+        {/* User + Logout */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+          <div style={{
+            width: 34,
+            height: 34,
+            borderRadius: '50%',
+            background: roleColors[currentUser?.role] || '#64748b',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '0.82rem',
+            fontWeight: 700,
+            color: 'white',
+            border: '2px solid rgba(255,255,255,0.2)',
+            flexShrink: 0,
+          }}
+            title={currentUser?.name}
+          >
             {currentUser?.avatar || '?'}
           </div>
-          {!isCollapsed && (
-            <div className="profile-details" style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {currentUser?.name || 'Usuario'}
-              </p>
-              <p style={{ fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.8)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {roleLabels[currentUser?.role] || currentUser?.role}
-              </p>
-            </div>
-          )}
+          <button
+            onClick={logout}
+            title="Cerrar Sesión"
+            style={{
+              width: 34,
+              height: 34,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(239,68,68,0.12)',
+              border: '1px solid rgba(239,68,68,0.25)',
+              borderRadius: 8,
+              color: '#f87171',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(239,68,68,0.28)';
+              e.currentTarget.style.color = '#fca5a5';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(239,68,68,0.12)';
+              e.currentTarget.style.color = '#f87171';
+            }}
+          >
+            <LogOut size={15} />
+          </button>
         </div>
-        <button onClick={logout}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.5rem',
-            width: '100%', padding: '0.45rem',
-            background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-            borderRadius: 8, color: '#ef4444', fontSize: '0.8rem', fontWeight: 600,
-            cursor: 'pointer', transition: 'background 0.2s', justifyContent: isCollapsed ? 'center' : 'flex-start'
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.18)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
-          title={isCollapsed ? 'Cerrar Sesión' : ''}
-        >
-          <LogOut size={14} /> {!isCollapsed && <span>Cerrar Sesión</span>}
-        </button>
-        {!isCollapsed && (
-          <div className="version-text" style={{ marginTop: '0.75rem', textAlign: 'center', width: '100%', fontSize: '0.65rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.1em' }}>
-            VERSIÓN 1.3.2-REFRESH
-          </div>
-        )}
       </div>
-      </aside>
-    </>
+    </header>
   );
 }
 
+// ─── Layout ───────────────────────────────────────────────────────────────────
 function Layout({ children }) {
-  const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
-
   return (
-    <div className="layout-container">
-      <Sidebar 
-        isOpen={isSidebarOpen} 
-        onClose={() => setIsSidebarOpen(false)} 
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-      />
-      <main className={clsx("main-content", isSidebarCollapsed && "collapsed-sidebar")}>
-        <div className="mobile-header" style={{ display: 'none', padding: '1rem', borderBottom: '1px solid var(--surface-border)', background: 'white', marginBottom: '1rem', borderRadius: '12px' }}>
-          <button onClick={() => setIsSidebarOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}>
-            <Menu size={24} />
-          </button>
-          <span style={{ fontWeight: 800, color: 'var(--primary)', marginLeft: '1rem' }}>CIELO ARQUILER</span>
-        </div>
-        <div className="page-container page-animate">
+    <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
+      <Topbar />
+      <main style={{
+        paddingTop: '62px',
+        minHeight: '100vh',
+      }}>
+        <div className="page-container" style={{ margin: '0 auto', padding: '0.75rem 0' }}>
           {children}
         </div>
       </main>
-      <style>{`
-        @media (max-width: 1024px) {
-          .mobile-header { display: flex !important; align-items: center; }
-          .mobile-only { display: block !important; }
-        }
-      `}</style>
     </div>
   );
 }
 
-// ─── App shell – decides whether to show Login or main app ───────────────────
+// ─── App shell ────────────────────────────────────────────────────────────────
 function AppShell() {
   const { currentUser } = useAppContext();
   const location = useLocation();
@@ -264,9 +321,8 @@ function AppShell() {
         {/* Redirects para rutas antiguas */}
         <Route path="/cotizaciones" element={<Navigate to="/comercial" replace />} />
         <Route path="/invoices" element={<Navigate to="/comercial" replace />} />
+        <Route path="/remisiones" element={<Navigate to="/comercial?tab=despachos" replace />} />
         <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
-        <Route path="/remisiones" element={<ProtectedRoute><Remisiones /></ProtectedRoute>} />
-        <Route path="/cortes" element={<ProtectedRoute><CortesObra /></ProtectedRoute>} />
         <Route path="/financiero" element={<ProtectedRoute><Financiero /></ProtectedRoute>} />
         <Route path="/maintenance" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
         <Route path="/trazability" element={<ProtectedRoute><Trazability /></ProtectedRoute>} />
@@ -289,4 +345,3 @@ function App() {
 }
 
 export default App;
-// Force redeploy Mon Apr 27 10:22:26 -05 2026

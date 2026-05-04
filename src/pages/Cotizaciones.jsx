@@ -1,19 +1,29 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import {
     FilePlus, Search, CheckCircle, XCircle, Clock, Send,
-    X, FileText, Shield, Download, Copy, Share2, DollarSign,
+    X, FileText, Shield, ShieldCheck, Download, Copy, Share2, DollarSign, Check,
     PenTool, Fingerprint, MapPin, ChevronRight, Upload, Eye,
     Plus, List, Edit2, User, ArrowRight,
-    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp
+    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp,
+    Truck, RotateCcw, Ban, Printer, Activity, TrendingUp, Info,
+    ArrowDownCircle, Package, CreditCard, AlertTriangle
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { format } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
+import Swal from 'sweetalert2';
 import {
     generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF,
-    SignatureCanvas, WebcamCapture, HabeasDataModal,
-    ESTADO_CFG, fmtCOP
+    generateRemisionPDF, SignatureCanvas, WebcamCapture, HabeasDataModal,
+    generateCortePDF, ESTADO_CFG, fmtCOP
 } from './CotizacionesHelpers';
 import NuevaCotizacionModal from './NuevaCotizacionModal';
+import DevolucionModal from './DevolucionModal';
+import CorteObraModal from './CorteObraModal';
+import { ActionBtn, BADGE, REM_ICON } from './CotComponents';
+import { ApprovalModal, ShareModal, ContratoEditorModal } from './CotModals';
+import CotDetailPanel from './CotDetailPanel';
 
 // ─── Error Boundary para el modal de nueva cotización ────────────────────────
 class ModalErrorBoundary extends React.Component {
@@ -48,582 +58,87 @@ class ModalErrorBoundary extends React.Component {
     }
 }
 
-// ─── Approval Modal ───────────────────────────────────────────────────────────
-function ApprovalModal({ cot, client, obra, onClose, onApprove }) {
-    const [mode, setMode] = useState(null); // 'internal', 'external'
-    const [file, setFile] = useState(null);
-    const [fileName, setFileName] = useState('');
-    const [fileRostro, setFileRostro] = useState(null);
-    const [fileCC, setFileCC] = useState(null);
-    const [nameRostro, setNameRostro] = useState('');
-    const [nameCC, setNameCC] = useState('');
-    const [notes, setNotes] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [copied, setCopied] = useState(false);
-
-    const shareLink = `${window.location.origin}/public/cotizacion/${cot.id}`;
-
-    const handleConfirmInternal = async () => {
-        try {
-            setLoading(true);
-            await onApprove({ firma: file, foto: fileRostro, fotoCC: fileCC, notas: notes || cot.notas });
-            onClose();
-        } catch (e) {
-            console.error('Error en handleConfirmInternal:', e);
-            alert('Error al procesar la aprobación interna: ' + e.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const onFile = (e, setSrc, setName) => {
-        const f = e.target.files[0];
-        if (!f) return;
-        setName(f.name);
-        const reader = new FileReader();
-        reader.onload = (ev) => setSrc(ev.target.result);
-        reader.readAsDataURL(f);
-    };
-
-    const handleCopy = () => {
-        navigator.clipboard.writeText(shareLink);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
-
-    const handleWhatsApp = () => {
-        const text = encodeURIComponent(`Hola, le adjunto el link para revisar y aprobar su cotización #${cot.id}: ${shareLink}`);
-        window.open(`https://wa.me/?text=${text}`, '_blank');
-    };
-
-    return (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
-            <div 
-                className="glass-panel" 
-                onClick={e => e.stopPropagation()}
-                style={{ padding: 0, width: '100%', maxWidth: mode ? 550 : 600, overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', background: 'white', transition: 'all 0.3s ease' }}
-            >
-
-                <div style={{ background: 'linear-gradient(135deg,#104166,#2365AB)', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                        <div style={{ fontWeight: 800, color: 'white', fontSize: '1.2rem', letterSpacing: '-0.02em' }}>
-                            {mode === 'internal' ? 'Aprobación Administrativa' : mode === 'external' ? 'Enviar Link de Aprobación' : 'Seleccionar Método de Aprobación'}
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)', marginTop: 2, fontWeight: 500 }}>Cotización #{cot.id} · {client?.name}</div>
-                    </div>
-                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: 34, height: 34, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
-                </div>
-
-                <div style={{ padding: '2rem', maxHeight: '80vh', overflowY: 'auto' }}>
-                    {!mode && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                            <div className="select-card" onClick={() => setMode('external')} style={{ border: '2px solid #f1f5f9', borderRadius: 16, padding: '1.5rem', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
-                                <div style={{ background: '#e0f2fe', width: 60, height: 60, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-                                    <Send size={28} color="#2365AB" />
-                                </div>
-                                <h4 style={{ margin: '0 0 0.5rem', color: '#1e293b' }}>Por el Cliente</h4>
-                                <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>Envía un link para que el cliente firme desde su celular.</p>
-                            </div>
-                            <div className="select-card" onClick={() => setMode('internal')} style={{ border: '2px solid #f1f5f9', borderRadius: 16, padding: '1.5rem', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
-                                <div style={{ background: '#dcfce7', width: 60, height: 60, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-                                    <Shield size={28} color="#10b981" />
-                                </div>
-                                <h4 style={{ margin: '0 0 0.5rem', color: '#1e293b' }}>Interna / Manual</h4>
-                                <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>Carga soportes, fotos de identidad o notas.</p>
-                            </div>
-                            <style>{`.select-card:hover { border-color: #2365AB !important; background: #f8fafc; transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); }`}</style>
-                        </div>
-                    )}
-
-                    {mode === 'external' && (
-                        <div style={{ textAlign: 'center' }}>
-                            <p style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '1.5rem' }}>Copie el siguiente enlace y envíelo al cliente por WhatsApp o correo para que pueda realizar la aprobación digital.</p>
-                            <div style={{ background: '#f1f5f9', padding: '0.75rem 1rem', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10, border: '1px solid #e2e8f0', marginBottom: '1.5rem' }}>
-                                <div style={{ flex: 1, fontSize: '0.75rem', color: '#475569', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shareLink}</div>
-                                <button onClick={handleCopy} style={{ background: 'white', border: '1px solid #cbd5e1', padding: '0.4rem 0.8rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    {copied ? <><CheckCircle size={14} color="#10b981" /> Copiado</> : <><Copy size={14} /> Copiar</>}
-                                </button>
-                            </div>
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button onClick={() => setMode(null)} className="btn btn-secondary" style={{ flex: 1 }}>Volver</button>
-                                <button onClick={handleWhatsApp} className="btn btn-primary" style={{ flex: 2, background: '#25D366', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'white', fontWeight: 700 }}>
-                                    <Share2 size={18} /> Enviar por WhatsApp
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {mode === 'internal' && (
-                        <>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.4rem', textTransform: 'uppercase' }}>1. Soporte / Documento Firmado</label>
-                                    <div style={{ border: '1px dashed #cbd5e1', borderRadius: 10, padding: '0.8rem', textAlign: 'center', background: '#f8fafc', cursor: 'pointer' }} onClick={() => document.getElementById('f-sop').click()}>
-                                        <input id="f-sop" type="file" hidden accept=".pdf,image/*" onChange={e => onFile(e, setFile, setFileName)} />
-                                        <div style={{ fontSize: '0.8rem', color: fileName ? '#10b981' : '#64748b', fontWeight: 600 }}>{fileName || 'Subir PDF o Imagen'}</div>
-                                    </div>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.4rem', textTransform: 'uppercase' }}>2. Foto Rostro Cliente</label>
-                                        <div style={{ border: '1px dashed #cbd5e1', borderRadius: 10, padding: '0.8rem', textAlign: 'center', background: '#f8fafc', cursor: 'pointer' }} onClick={() => document.getElementById('f-ros').click()}>
-                                            <input id="f-ros" type="file" hidden accept="image/*" onChange={e => onFile(e, setFileRostro, setNameRostro)} />
-                                            <div style={{ fontSize: '0.75rem', color: nameRostro ? '#10b981' : '#64748b', fontWeight: 600 }}>{nameRostro || 'Cargar Foto'}</div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.4rem', textTransform: 'uppercase' }}>3. Foto Cédula CC</label>
-                                        <div style={{ border: '1px dashed #cbd5e1', borderRadius: 10, padding: '0.8rem', textAlign: 'center', background: '#f8fafc', cursor: 'pointer' }} onClick={() => document.getElementById('f-cc').click()}>
-                                            <input id="f-cc" type="file" hidden accept="image/*" onChange={e => onFile(e, setFileCC, setNameCC)} />
-                                            <div style={{ fontSize: '0.75rem', color: nameCC ? '#10b981' : '#64748b', fontWeight: 600 }}>{nameCC || 'Cargar Foto'}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.4rem', textTransform: 'uppercase' }}>Notas Administrativas</label>
-                                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Ej: Recibido por correo, validado por gerencia..." style={{ width: '100%', padding: '0.75rem', borderRadius: 10, border: '1px solid #cbd5e1', fontSize: '0.85rem', minHeight: 70, boxSizing: 'border-box' }} />
-                            </div>
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button type="button" onClick={() => setMode(null)} className="btn btn-secondary" style={{ flex: 1 }}>Volver</button>
-                                <button type="button" onClick={handleConfirmInternal} disabled={loading} className="btn btn-primary" style={{ flex: 2, background: 'linear-gradient(135deg,#2365AB,#104166)', border: 'none', color: 'white', fontWeight: 700 }}>
-                                    {loading ? 'Procesando...' : 'Confirmar Aprobación'}
-                                </button>
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
-function ShareModal({ cotId, onClose }) {
-    const shareLink = `${window.location.origin}/public/cotizacion/${cotId}`;
-    const [copied, setCopied] = useState(false);
-
-    const handleCopy = () => {
-        navigator.clipboard.writeText(shareLink);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
-
-    const handleWhatsApp = () => {
-        const text = encodeURIComponent(`Hola, le adjunto el link para revisar y aprobar su cotización #${cotId}: ${shareLink}`);
-        window.open(`https://wa.me/?text=${text}`, '_blank');
-    };
-
-    return (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '1rem' }}>
-            <div 
-                className="glass-panel" 
-                onClick={e => e.stopPropagation()}
-                style={{ maxWidth: 450, width: '100%', padding: '1.5rem' }}
-            >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Share2 size={20} color="#2365AB" /> Compartir Cotización</h3>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={20} /></button>
-                </div>
-                
-                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Envíe este enlace a su cliente para que pueda revisar, firmar y aprobar la cotización desde su celular o computador.</p>
-                
-                <div style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid var(--surface-border)', borderRadius: 10, padding: '0.75rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <input readOnly value={shareLink} style={{ flex: 1, background: 'none', border: 'none', color: '#2365AB', fontSize: '0.8rem', fontWeight: 600, outline: 'none' }} />
-                    <button onClick={handleCopy} style={{ background: copied ? '#10b981' : '#2365AB', color: 'white', border: 'none', borderRadius: 6, padding: '0.4rem 0.8rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {copied ? <CheckCircle size={14} /> : <Copy size={14} />} {copied ? 'Copiado' : 'Copiar'}
-                    </button>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                    <button onClick={handleWhatsApp} style={{ flex: 1, padding: '0.75rem', borderRadius: 10, background: '#25D366', color: 'white', border: 'none', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                        WhatsApp
-                    </button>
-                    <button onClick={onClose} style={{ flex: 1, padding: '0.75rem', borderRadius: 10, background: 'white', border: '1px solid #cbd5e1', color: '#64748b', fontWeight: 700, cursor: 'pointer' }}>
-                        Cerrar
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function ContratoEditorModal({ cot, onClose, onSave }) {
-    const [clausulas, setClausulas] = useState(cot.clausulas && cot.clausulas.length > 0 ? [...cot.clausulas] : [
-        '1. El ARRENDATARIO se compromete a utilizar los equipos únicamente en la obra indicada y a devolverlos en perfectas condiciones de funcionamiento.',
-        '2. Cualquier daño, pérdida o robo de los equipos será de responsabilidad exclusiva del ARRENDATARIO.',
-        '3. Los días de alquiler se calculan desde la fecha indicada en cada remisión hasta su correspondiente devolución (lógica PEPS).',
-        '4. El incumplimiento en el pago generará intereses de mora del 1.5% mensual sobre el saldo pendiente.',
-        '5. Este contrato se rige por las leyes colombianas. Las partes se someten a los jueces competentes de la ciudad de Bogotá D.C.',
-        '6. Forma de pago: ' + (cot.metodoPago || 'Acordada entre las partes.'),
-        '7. Transporte: ' + (cot.responsableTransporte || 'Acordado entre las partes.'),
-    ]);
-    
-    const handleAdd = () => setClausulas([...clausulas, '']);
-    const handleRemove = (idx) => setClausulas(clausulas.filter((_, i) => i !== idx));
-    const handleChange = (idx, val) => {
-        const next = [...clausulas];
-        next[idx] = val;
-        setClausulas(next);
-    };
-
-    return (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1.5rem' }}>
-            <div 
-                className="glass-panel" 
-                onClick={e => e.stopPropagation()}
-                style={{ maxWidth: 700, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'white', padding: 0, overflow: 'hidden' }}
-            >
-                <div style={{ background: 'linear-gradient(135deg,#104166,#2365AB)', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                        <h3 style={{ color: 'white', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><Edit2 size={20} /> Editar Cláusulas del Contrato</h3>
-                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem', margin: '4px 0 0', fontWeight: 500 }}>Personalice los términos legales para {cot.id}</p>
-                    </div>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><X size={20} /></button>
-                </div>
-                
-                <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
-                    {clausulas.map((c, idx) => (
-                        <div key={idx} style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', alignItems: 'flex-start' }}>
-                            <div style={{ background: '#2365AB', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800, color: 'white', flexShrink: 0, marginTop: 6, boxShadow: '0 2px 5px rgba(35,101,171,0.3)' }}>{idx + 1}</div>
-                            <textarea 
-                                value={c} 
-                                onChange={(e) => handleChange(idx, e.target.value)}
-                                style={{ flex: 1, padding: '0.85rem', borderRadius: 10, border: '1px solid #cbd5e1', fontSize: '0.875rem', minHeight: 80, fontFamily: 'inherit', color: '#334155', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}
-                            />
-                            <button onClick={() => handleRemove(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', marginTop: 10, padding: 4 }}><XCircle size={18} /></button>
-                        </div>
-                    ))}
-                    <button onClick={handleAdd} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem', border: '2px dashed #cbd5e1', borderRadius: 10, background: 'white', color: '#64748b', fontWeight: 700, cursor: 'pointer', width: '100%', justifyContent: 'center', transition: 'all 0.2s' }}>
-                        <Plus size={18} /> Agregar Nueva Cláusula
-                    </button>
-                    <style>{`button:hover { filter: brightness(0.95); }`}</style>
-                </div>
-
-                <div style={{ padding: '1.25rem 1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '1rem', justifyContent: 'flex-end', background: 'white' }}>
-                    <button onClick={onClose} className="btn btn-secondary" style={{ padding: '0.6rem 1.5rem' }}>Cancelar</button>
-                    <button onClick={() => { onSave(clausulas); onClose(); }} className="btn btn-primary" style={{ background: '#10b981', color: 'white', border: 'none', padding: '0.6rem 2rem', boxShadow: '0 4px 12px rgba(16,185,129,0.35)' }}>Guardar Cambios</button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-
-// ─── Detail Panel ─────────────────────────────────────────────────────────────
-function CotDetailPanel({ cot, client, obra, settings, onClose, onUpdateEstado, onOpenApproval, onFacturar, onSendLink, onEditContrato, onEdit, onDelete, invoices = [], remisiones = [] }) {
-    const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
-    const subtotal = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0);
-    const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
-    const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
-    const totalVal = cot.type === 'inv' ? cot.amount : (subtotal + iva + ret + (cot.transporte || 0));
-
-    // Trazabilidad
-    const relatedInvoice = cot.type === 'inv' ? cot : invoices.find(inv => inv.cotizacionId === cot.id || inv.id === cot.facturaId);
-    const relatedRemision = remisiones.find(rem => rem.cotizacionId === cot.id || rem.facturaId === relatedInvoice?.id || rem.id === cot.manualRemisionId);
-
-    return (
-        <>
-            <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: '100%', maxWidth: 520, zIndex: 900, background: 'var(--glass-bg)', backdropFilter: 'blur(20px)', display: 'flex', flexDirection: 'column', boxShadow: '-6px 0 40px rgba(0,0,0,0.4)', overflowY: 'auto', overflowX: 'auto' }}>
-                {/* Header */}
-                <div style={{ background: cot.isDirectInvoice ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'linear-gradient(135deg,#104166,#154272)', padding: '1.5rem', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                            <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.6)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{settings?.shortName || 'CIELO'} — {cot.isDirectInvoice ? 'Factura Directa' : 'Cotización'}</div>
-                            <div style={{ fontSize: '1.3rem', fontWeight: 900, color: 'white', fontFamily: 'monospace', marginTop: 4 }}>{cot.id}</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                                <span style={{ padding: '3px 10px', borderRadius: 999, background: cot.isDirectInvoice ? 'rgba(255,255,255,0.2)' : cfg.bg, color: cot.isDirectInvoice ? 'white' : cfg.color, fontSize: '0.72rem', fontWeight: 700, border: cot.isDirectInvoice ? '1px solid rgba(255,255,255,0.4)' : `1px solid ${cfg.color}30` }}>{cot.estado}</span>
-                                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>{cot.fecha}</span>
-                            </div>
-                        </div>
-                        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, color: 'white', cursor: 'pointer', padding: '0.3rem', display: 'flex' }}><X size={18} /></button>
-                    </div>
-                    <div style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: '0.75rem 1rem' }}>
-                        <div style={{ fontWeight: 700, color: 'white' }}>{client?.name}</div>
-                        <div style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', marginTop: 2, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                            <MapPin size={11} /> {obra?.nombre || cot.obraId}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Body */}
-                <div style={{ flex: 1, padding: '1.25rem', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    
-                    {/* Trazabilidad / Línea de Tiempo */}
-                    {(relatedInvoice || relatedRemision) && (
-                        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '0.85rem 1rem' }}>
-                            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <Clock size={14} /> Trazabilidad de Operación
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                                {relatedInvoice && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', background: '#f8fafc', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid #f1f5f9' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            <div style={{ background: '#10b981', width: 8, height: 8, borderRadius: '50%' }}></div>
-                                            <span style={{ fontWeight: 600, color: '#1e293b' }}>Factura: {relatedInvoice.id}</span>
-                                        </div>
-                                        <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 4, background: relatedInvoice.status === 'Paid' ? '#d1fae5' : '#fee2e2', color: relatedInvoice.status === 'Paid' ? '#065f46' : '#991b1b', fontWeight: 700 }}>
-                                            {relatedInvoice.status.toUpperCase()}
-                                        </span>
-                                    </div>
-                                )}
-                                {relatedRemision && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', background: '#f8fafc', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid #f1f5f9' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            <div style={{ background: relatedRemision.estado === 'Pendiente' ? '#6366f1' : '#10b981', width: 8, height: 8, borderRadius: '50%' }}></div>
-                                            <span style={{ fontWeight: 600, color: '#1e293b' }}>Remisión: {relatedRemision.id}</span>
-                                        </div>
-                                        <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 4, background: relatedRemision.estado === 'Pendiente' ? '#e0e7ff' : '#d1fae5', color: relatedRemision.estado === 'Pendiente' ? '#3730a3' : '#065f46', fontWeight: 700 }}>
-                                            {relatedRemision.estado.toUpperCase()}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                    {/* Items */}
-                    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
-                        <div style={{ background: '#f1f5f9', padding: '0.55rem 0.85rem', fontSize: '0.67rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Equipos</div>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
-                            <tbody>
-                                {cot.items.map((i, idx) => (
-                                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                        <td style={{ padding: '0.6rem 0.85rem', fontWeight: 600, color: '#104166' }}>{i.nombre}</td>
-                                        <td style={{ padding: '0.6rem 0.85rem', color: '#64748b', fontSize: '0.78rem' }}>{i.cantidad} u. × {i.dias}d</td>
-                                        <td style={{ padding: '0.6rem 0.85rem', fontWeight: 700, color: '#10b981', textAlign: 'right' }}>{fmtCOP(i.cantidad * i.dias * i.tarifaDia)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Totals */}
-                    <div style={{ background: '#2365AB', borderRadius: 10, padding: '1rem 1.25rem' }}>
-                        {[['Subtotal', fmtCOP(subtotal)], ['+ IVA', fmtCOP(iva)], ['+ Ret.', fmtCOP(ret)], ['+ Transporte', fmtCOP(cot.transporte || 0)]].map(([k, v]) => (
-                            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'rgba(255,255,255,0.85)', marginBottom: 4 }}>
-                                <span>{k}</span><span style={{ fontWeight: 700, color: 'white' }}>{v}</span>
-                            </div>
-                        ))}
-                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.3)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ fontWeight: 800, color: 'white' }}>TOTAL</span>
-                            <span style={{ fontWeight: 900, color: 'white', fontSize: '1.1rem' }}>{fmtCOP(totalVal)}</span>
-                        </div>
-                    </div>
-
-                    {/* Conditions */}
-                    <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '0.85rem 1rem' }}>
-                        {[['Método Pago', cot.metodoPago], ['Responsable Transporte', cot.responsableTransporte], ['Plazo Entrega', cot.plazoEntrega], ['Validez', `${cot.validezDias} días`]].map(([k, v]) => (
-                            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '0.3rem 0', borderBottom: '1px solid #f1f5f9' }}>
-                                <span style={{ color: '#64748b' }}>{k}</span><span style={{ fontWeight: 600, color: '#104166' }}>{v}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Habeas Data status */}
-
-
-                    {/* notas */}
-                    {cot.notas && <div style={{ fontSize: '0.78rem', color: '#64748b', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.65rem 0.85rem' }}>{cot.notas}</div>}
-
-                    {/* Registro Digital y Biométrico (Si está aprobada) */}
-                    {(cot.firma || cot.foto || cot.fotoCC || cot.fotoCCBack) && (
-                        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <Shield size={16} /> Identidad del Firmante (Audit Log)
-                            </div>
-                            
-                            {/* Fotos Grid */}
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                                {cot.foto && (
-                                    <div className="security-photo-container">
-                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>ROSTRO</div>
-                                        <img src={cot.foto} alt="Rostro" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(cot.foto, '_blank')} />
-                                    </div>
-                                )}
-                                {cot.fotoCC && (
-                                    <div className="security-photo-container">
-                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>CC FRONTAL</div>
-                                        <img src={cot.fotoCC} alt="CC Frontal" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(cot.fotoCC, '_blank')} />
-                                    </div>
-                                )}
-                                {cot.fotoCCBack && (
-                                    <div className="security-photo-container">
-                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>CC REVERSO</div>
-                                        <img src={cot.fotoCCBack} alt="CC Posterior" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(cot.fotoCCBack, '_blank')} />
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Firma */}
-                            {cot.firma && (
-                                <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: '1rem', textAlign: 'center' }}>
-                                    <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: 6, fontWeight: 700 }}>FIRMA DIGITAL REGISTRADA</div>
-                                    <div style={{ background: '#f8fafc', borderRadius: 10, padding: '0.75rem', border: '1px solid #f1f5f9', display: 'inline-block', minWidth: '200px' }}>
-                                        <img src={cot.firma} alt="Firma" style={{ maxHeight: 70, maxWidth: '100%', objectFit: 'contain' }} />
-                                    </div>
-                                    {cot.habeasDataTimestamp && (
-                                        <div style={{ fontSize: '0.6rem', color: '#10b981', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center', fontWeight: 600 }}>
-                                            <CheckCircle size={10} /> Consentimiento Habeas Data Capturado: {format(new Date(cot.habeasDataTimestamp), 'dd/MM/yyyy HH:mm')}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            <style>{`
-                                .security-photo-container img:hover { transform: scale(1.05); transition: transform 0.2s; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 10; position: relative; }
-                            `}</style>
-                        </div>
-                    )}
-
-                    {/* Datos Guardados del Cliente (Fotos Perfil) */}
-                    {(client?.foto || client?.fotoCC) && (
-                        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <User size={16} /> Datos de Perfil del Cliente
-                            </div>
-                            
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
-                                {client.foto && (
-                                    <div className="security-photo-container">
-                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>FOTO PERFIL</div>
-                                        <img src={client.foto} alt="Perfil" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(client.foto, '_blank')} />
-                                    </div>
-                                )}
-                                {client.fotoCC && (
-                                    <div className="security-photo-container">
-                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>CC REGISTRADA (F)</div>
-                                        <img src={client.fotoCC} alt="CC Perfil" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(client.fotoCC, '_blank')} />
-                                    </div>
-                                )}
-                                {client.fotoCCBack && (
-                                    <div className="security-photo-container">
-                                        <div style={{ fontSize: '0.6rem', color: '#64748b', marginBottom: 4, fontWeight: 700, textAlign: 'center' }}>CC REGISTRADA (P)</div>
-                                        <img src={client.fotoCCBack} alt="CC Perfil Post" style={{ width: '100%', borderRadius: 8, border: '1px solid #e2e8f0', aspectRatio: '1/1', objectFit: 'cover', cursor: 'zoom-in' }} onClick={() => window.open(client.fotoCCBack, '_blank')} />
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Actions */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-
-                        {/* Botón Imprimir Cotización — SIEMPRE visible */}
-                        <button
-                            onClick={() => generateCotizacionPDF(cot, client, obra, settings)}
-                            style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: 'linear-gradient(135deg,#2365AB,#2563eb)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: '0 4px 12px rgba(35, 101, 171,0.35)' }}>
-                            <Download size={15} /> Imprimir / PDF Cotización
-                        </button>
-
-                        {(cot.estado === 'Borrador' || cot.estado === 'Enviada') && (
-                            <button onClick={onEdit} style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                                <Edit2 size={15} /> Editar Cotización
-                            </button>
-                        )}
-
-                        {(cot.estado === 'Borrador' || cot.estado === 'Enviada') && (
-                            <button onClick={() => onSendLink(cot.id)} style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: '#f97316', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                                <Send size={15} /> {cot.estado === 'Borrador' ? 'Generar Link y Marcar Enviada' : 'Compartir / Ver Link de Aprobación'}
-                            </button>
-                        )}
-                        {(cot.estado === 'Borrador' || cot.estado === 'Enviada') && (
-                            <button onClick={onOpenApproval} style={{ width: '100%', padding: '0.65rem', borderRadius: 8, background: '#10b981', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                                <CheckCircle size={15} /> Aprobar + Generar Documentos
-                            </button>
-                        )}
-                        {(cot.estado === 'Borrador' || cot.estado === 'Enviada') && (
-                            <button onClick={() => onUpdateEstado(cot.id, 'Rechazada')} style={{ width: '100%', padding: '0.6rem', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                                <XCircle size={15} /> Rechazar
-                            </button>
-                        )}
-
-                        {/* === BOTÓN PRINCIPAL: PASAR A FACTURACIÓN === */}
-                        {cot.estado === 'Aprobada' && !cot.facturaId && (
-                            <button onClick={onFacturar} style={{ width: '100%', padding: '0.8rem', borderRadius: 10, background: 'linear-gradient(135deg,#6366f1,#4f46e5)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 6px 20px rgba(99,102,241,0.45)', letterSpacing: '0.02em' }}>
-                                <FileText size={18} /> ➜ Pasar a Facturación
-                            </button>
-                        )}
-
-                        {(cot.estado === 'Aprobada' || cot.estado === 'Facturada' || cot.estado === 'Enviada') && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981', textAlign: 'center' }}>Documentos Legales:</p>
-                                {[
-                                    ['Contrato de Alquiler', () => generateContratoPDF(cot, client, obra, settings)],
-                                    ['Pagaré', () => generatePagarePDF(cot, client, settings)],
-                                    ['Carta de Instrucciones', () => generateCartaPDF(cot, client, settings)]
-                                ].map(([label, fn]) => (
-                                    <div key={label} style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <button onClick={fn} style={{ flex: 1, padding: '0.6rem', borderRadius: 8, background: 'rgba(35, 101, 171,0.1)', color: '#2365AB', border: '1px solid rgba(35, 101, 171,0.25)', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                                            <Download size={14} /> {label}
-                                        </button>
-                                        {label === 'Contrato de Alquiler' && (
-                                            <button onClick={onEditContrato} title="Editar Cláusulas" style={{ padding: '0.6rem', borderRadius: 8, background: '#f1f5f9', border: '1px solid #cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                                                <Edit2 size={14} color="#64748b" />
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        {cot.estado === 'Facturada' && (
-                            <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 10, padding: '0.85rem', textAlign: 'center' }}>
-                                <div style={{ fontSize: '0.72rem', color: '#6366f1', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Factura Generada</div>
-                                <div style={{ fontWeight: 800, color: '#6366f1', fontFamily: 'monospace', fontSize: '1rem' }}>{cot.facturaId}</div>
-                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>Ver en Facturación para gestionar el pago</div>
-                            </div>
-                        )}
-
-                        {/* Botón Eliminar — Solo si no hay factura y el usuario confirma */}
-                        {!cot.facturaId && (
-                            <button 
-                                onClick={() => {
-                                    if (window.confirm(`¿Está seguro de eliminar la cotización ${cot.id}? Esta acción no se puede deshacer.`)) {
-                                        onDelete(cot.id);
-                                    }
-                                }} 
-                                style={{ width: '100%', padding: '0.6rem', borderRadius: 8, background: 'rgba(239,68,68,0.05)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: '0.5rem' }}
-                            >
-                                <XCircle size={15} /> Eliminar Cotización
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Footer */}
-                    <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '0.75rem', textAlign: 'center', fontSize: '0.7rem', color: '#94a3b8' }}>
-                        {settings?.shortName || 'CIELO'} · {cot.id} · Generado el {format(new Date(), 'dd/MM/yyyy')}
-                    </div>
-                </div>
-            </div>
-            <div style={{ position: 'fixed', inset: 0, zIndex: 899 }} onClick={onClose} />
-        </>
-    );
-}
+// Modals and Detail Panel moved to CotModals.jsx and CotDetailPanel.jsx
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = {}) {
     const { clients, products, cotizaciones, invoices = [], settings, remisiones = [],
         addCotizacion, updateCotizacion, actualizarEstadoCotizacion,
-        createInvoiceFromCotizacion, deleteCotizacion, payInvoice
+        createInvoiceFromCotizacion, deleteCotizacion, payInvoice, addCorteObra, updateCorteStatus,
+        addRemision, editRemision, registrarDevolucion, maintenances = [],
+        marcarRemisionCreada, deleteRemision, cancelRemision, setGlobalPreload
     } = useAppContext();
+    const navigate = useNavigate();
     const [search, setSearch] = useState('');
     const [filterE, setFilterE] = useState('Todos');
     const [showNew, setShowNew] = useState(false);
+    const [showCorteModal, setShowCorteModal] = useState(false);
+    const [corteModalParams, setCorteModalParams] = useState({ clientId: '', obraId: '' });
     const [selected, setSelected] = useState(null);
     const [approving, setApproving] = useState(null);
     const [sharing, setSharing] = useState(null);
     const [editingContrato, setEditingContrato] = useState(null);
     const [editing, setEditing] = useState(null);
-    const [payingInvoice, setPayingInvoice] = useState(null); // { id, cotId }
+    const [payingInvoice, setPayingInvoice] = useState(null);
     const [paymentOption, setPaymentOption] = useState('Contado');
     const [abonoAmount, setAbonoAmount] = useState(0);
     const [paymentMethod, setPaymentMethod] = useState('Transferencia');
+    const [facturaPreload, setFacturaPreload] = useState(null);
+    const [showNueva, setShowNueva] = useState(false);
+    const [showVerifyModal, setShowVerifyModal] = useState(false);
+    const [verifyTarget, setVerifyTarget] = useState(null);
+    const [fechaInicioRemision, setFechaInicioRemision] = useState('');
+    const [devolucionTarget, setDevolucionTarget] = useState(null); // { clientId, obraId }
+    const [blockMsg, setBlockMsg] = useState('');
+    const [corteObraTarget, setCorteObraTarget] = useState(null); // { invoice: object, step: 'date' | 'validation', date: string }
+
+    useEffect(() => {
+        const h1 = () => setShowNew(true);
+        const h2 = () => setDevolucionTarget({ clientId: '', obraId: '' });
+        const h3 = () => setShowCorteModal(true);
+
+        window.addEventListener('trigger-nueva-cot', h1);
+        window.addEventListener('trigger-devolucion', h2);
+        window.addEventListener('trigger-corte', h3);
+
+        return () => {
+            window.removeEventListener('trigger-nueva-cot', h1);
+            window.removeEventListener('trigger-devolucion', h2);
+            window.removeEventListener('trigger-corte', h3);
+        };
+    }, []);
 
     const handleSendQuote = (cotId) => {
         actualizarEstadoCotizacion(cotId, 'Enviada');
         setSharing(cotId);
     };
 
+    const handleFinalizeDispatch = (rem) => { 
+        setVerifyTarget(rem); 
+        setFechaInicioRemision(rem.fecha || format(new Date(), 'yyyy-MM-dd')); 
+        setShowVerifyModal(true); 
+    };
+
+    const handleConfirmFinalDispatch = async () => {
+        if (!verifyTarget) return;
+        const rem = verifyTarget;
+        try {
+            const remClient = clients.find(c => c.id === rem.clientId);
+            const remObra = remClient?.obras?.find(o => o.id === rem.obraId);
+            await editRemision(rem.id, { estado: 'Activa', fecha: fechaInicioRemision });
+            generateRemisionPDF({ ...rem, estado: 'Activa', fecha: fechaInicioRemision }, remClient, remObra, settings);
+            setShowVerifyModal(false);
+            setVerifyTarget(null);
+            Swal.fire({ title: '¡Despacho Exitoso!', text: `Remisión ${rem.id} activada.`, icon: 'success', confirmButtonColor: '#2365AB', confirmButtonText: 'Excelente' });
+        } catch (err) {
+            Swal.fire({ title: 'Error', text: err.message, icon: 'error', confirmButtonColor: '#ef4444' });
+        }
+    };
+
     const total = (c) => (c.items || []).reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (c.transporte || 0);
     const kpi = (est) => cotizaciones.filter(c => c.estado === est).length;
 
-    const [sortConfig, setSortConfig] = useState({ key: 'fecha', direction: 'desc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' });
 
     const handleSort = (key) => {
         let direction = 'asc';
@@ -668,8 +183,8 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     aVal = total(a);
                     bVal = total(b);
                 } else if (sortConfig.key === 'id') {
-                    aVal = parseInt(a.id.split('-').pop()) || 0;
-                    bVal = parseInt(b.id.split('-').pop()) || 0;
+                    aVal = parseInt(a.id.split('-').pop().replace('F', '')) || 0;
+                    bVal = parseInt(b.id.split('-').pop().replace('F', '')) || 0;
                 } else {
                     aVal = a[sortConfig.key] || '';
                     bVal = b[sortConfig.key] || '';
@@ -704,43 +219,26 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
     const getClient = id => clients.find(c => c.id === id);
     const getObra = (cot) => getClient(cot?.clientId)?.obras?.find(o => o.id === cot?.obraId);
 
+    const selectedInv = selectedCot
+        ? (selectedCot.type === 'inv' ? selectedCot : invoices.find(i => i.id === selectedCot.facturaId))
+        : null;
+    const selectedLinkedRems = selectedCot ? remisiones.filter(r =>
+        r.cotizacionId === selectedCot.id ||
+        (selectedInv && r.facturaId === selectedInv.id) ||
+        (selectedCot.type === 'inv' && r.facturaId === selectedCot.id)
+    ) : [];
+    const selectedActiveRems = selectedLinkedRems.filter(r => r.estado !== 'Cerrada' && r.estado !== 'Cancelada');
+    const selectedCanCreateRem = !!(
+        (selectedInv?.remisionEnabled === true) || 
+        (selectedCot?.estado === 'Aprobada' || selectedCot?.estado === 'Facturada' || selectedCot?.type === 'inv' || selectedCot?.facturaId)
+    );
+
     return (
         <>
             {/* Header / Top Bar con KPIs integrados */}
-            {!hideHeader && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '1.5rem' }}>
-                    <div style={{ flex: 1 }}>
-                        <h1 style={{ marginBottom: '0.25rem' }}>Gestión Comercial</h1>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>Administra tus cotizaciones, órdenes y procesos de venta</p>
-                    </div>
-
-                    {/* KPIs en el centro */}
-                    <div style={{ display: 'flex', gap: '0.5rem', flex: 1, maxWidth: '600px' }}>
-                        {[
-                            ['Borradores', kpi('Borrador'), 'blue'],
-                            ['Enviadas', kpi('Enviada'), 'orange'],
-                            ['Aprobadas', kpi('Aprobada'), 'green'],
-                            ['Rechazadas', kpi('Rechazada'), 'red']
-                        ].map(([l, v, c]) => (
-                            <div key={l} className={`mini-kpi-card ${c}`} style={{ cursor: 'pointer', flex: 1, padding: '0.5rem 0.85rem', minWidth: 0 }} onClick={() => setFilterE(l === 'Borradores' ? 'Borrador' : l.slice(0, -1))}>
-                                <div className="mini-kpi-header" style={{ marginBottom: 0 }}>
-                                    <span className="mini-kpi-value" style={{ fontSize: '1.1rem' }}>{v}</span>
-                                </div>
-                                <div className="mini-kpi-label" style={{ fontSize: '0.65rem', marginTop: -2, fontWeight: 700 }}>{l}</div>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                        <button className="btn btn-primary" onClick={() => setShowNew(true)} style={{ padding: '0.6rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                            <Plus size={18} /> Nueva Cotización
-                        </button>
-                    </div>
-                </div>
-            )}
-
+            {/* Search and Filters Bar */}
             {/* Filters */}
-            <div className="glass-panel p-6 mb-6" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="glass-panel" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', borderWidth: '0.7px', padding: '0.5rem 1.5rem', marginBottom: '0.5rem' }}>
                 <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
                     <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por ID o cliente…" style={{ ...IS, paddingLeft: '2rem', width: '100%', boxSizing: 'border-box' }} />
@@ -752,24 +250,25 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
             </div>
 
             {/* Table */}
-            <div className="glass-panel p-6">
+            <div className="glass-panel" style={{ borderWidth: '0.7px', padding: '0.75rem 1.5rem' }}>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
-                            <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                            <tr style={{ background: '#f1f5f9', borderBottom: '1px solid var(--surface-border)' }}>
                                 {[
-                                    { label: 'ID', key: 'id' },
-                                    { label: 'Cliente / Obra', key: 'clientName' },
-                                    { label: 'Total Est.', key: 'total' },
-                                    { label: 'Estado', key: null },
-                                    { label: 'Acción', key: null }
+                                    { label: 'ID',       key: 'id'         },
+                                    { label: 'Fecha',    key: 'fecha'      },
+                                    { label: 'Cliente',  key: 'clientName' },
+                                    { label: 'Obra',     key: null         },
+                                    { label: 'Estado',   key: null         },
+                                    { label: 'Acciones', key: null         },
                                 ].map(({ label, key }) => (
-                                    <th 
-                                        key={label} 
+                                    <th
+                                        key={label}
                                         onClick={() => key && handleSort(key)}
-                                        style={{ 
-                                            padding: '0.75rem 0.8rem', textAlign: 'left', fontSize: '0.68rem', color: 'var(--text-muted)', 
-                                            fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
+                                        style={{
+                                            padding: '0.75rem 0.8rem', textAlign: 'left', fontSize: '0.68rem', color: 'var(--text-primary)',
+                                            fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
                                             cursor: key ? 'pointer' : 'default', userSelect: 'none'
                                         }}
                                     >
@@ -785,181 +284,159 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                         </thead>
                         <tbody>
                             {paginatedCotizaciones.map(cot => {
-                                const client = getClient(cot.clientId);
-                                const obra = getObra(cot);
-                                const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
-                                const Ico = cfg.icon;
-                                const inv = cot.facturaId ? invoices.find(i => i.id === cot.facturaId) : null;
-                                const isPaid = inv?.status === 'Paid';
+                                const client  = getClient(cot.clientId);
+                                const obra    = getObra(cot);
+                                const cfg     = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
+                                const inv     = cot.facturaId ? invoices.find(i => i.id === cot.facturaId)
+                                              : cot.type === 'inv' ? cot : null;
+                                const isPaid  = inv?.status === 'Paid';
+
+                                // Remisiones vinculadas a esta fila
+                                const rowRems = remisiones.filter(r =>
+                                    r.cotizacionId === cot.id ||
+                                    (inv && r.facturaId === inv.id) ||
+                                    (cot.type === 'inv' && r.facturaId === cot.id)
+                                );
+                                const activeRem = rowRems.find(r => r.estado === 'Activa' || r.estado === 'Parcial')
+                                               || rowRems.find(r => r.estado === 'Pendiente')
+                                               || rowRems[0] || null;
+
+                                // ── Estado principal (cotización / factura) ──
+                                let cotLabel = cot.estado;
+                                let cotColor = cfg.color;
+                                let CotIcon  = cfg.icon;
+
+                                if (cot.isDirectInvoice) {
+                                    if (cot.status === 'Paid')    { cotLabel = 'Pagada';         cotColor = '#10b981'; CotIcon = CheckCircle; }
+                                    else                           { cotLabel = 'Pend. Pago';     cotColor = '#f59e0b'; CotIcon = Clock;       }
+                                } else if (cot.estado === 'Facturada') {
+                                    if (inv?.status === 'Paid')    { cotLabel = 'Pagada';         cotColor = '#10b981'; CotIcon = CheckCircle; }
+                                    else if (inv?.status === 'Partial') { cotLabel = 'Abonada';  cotColor = '#3b82f6'; CotIcon = DollarSign;  }
+                                    else if (inv?.status === 'Credito') { cotLabel = 'Credito';   cotColor = '#6366f1'; CotIcon = Clock;       }
+                                    else                           { cotLabel = 'Pend. Pago';     cotColor = '#f59e0b'; CotIcon = Clock;       }
+                                }
+
+                                // ── Estado remisión ──
+                                const REM_COLOR = { Activa: '#2365AB', Parcial: '#f97316', Cerrada: '#10b981', Pendiente: '#6366f1', Cancelada: '#ef4444' };
+                                const REM_ICON  = { Activa: Truck, Parcial: Clock, Cerrada: CheckCircle, Pendiente: AlertTriangle, Cancelada: Ban };
+                                const remColor  = activeRem ? (REM_COLOR[activeRem.estado] || '#94a3b8') : null;
+                                const RemIcon   = activeRem ? (REM_ICON[activeRem.estado]  || Truck)     : null;
+
+                                const BADGE = (label, color, Icon) => (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, background: color, color: 'white', fontWeight: 800, fontSize: '0.62rem', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                                        {Icon && <Icon size={11} />}{label}
+                                    </span>
+                                );
+
+                                const canApprove  = !cot.isDirectInvoice && (cot.estado === 'Borrador' || cot.estado === 'Enviada');
+                                const canPay      = (cot.estado === 'Facturada' && !isPaid) || (cot.isDirectInvoice && cot.status !== 'Paid');
+                                const canContract = !cot.isDirectInvoice && cot.estado === 'Facturada';
+
                                 return (
-                                    <tr key={cot.id} style={{ borderBottom: '1px solid var(--surface-border)' }}
-                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                                    <tr key={cot.id}
+                                        style={{ borderBottom: '1px solid var(--surface-border)', cursor: 'pointer', transition: 'background-color 0.15s ease' }}
+                                        onClick={() => setSelected(cot.id)}
+                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(35, 101, 171, 0.08)'}
                                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                        <td style={{ padding: '0.85rem', fontWeight: 800, fontFamily: 'monospace', color: 'var(--primary)', fontSize: '0.85rem' }}>
-                                            {cot.isDirectInvoice && <span style={{ color: '#f59e0b', marginRight: 4 }}>[F]</span>}
-                                            {cot.id.split('-').pop()}
+
+                                        {/* ID */}
+                                        <td style={{ padding: '0.85rem', fontWeight: 800, fontFamily: 'monospace', color: 'var(--primary)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                                            {cot.id.split('-').pop().replace('F', '').padStart(3, '0')}
                                         </td>
+
+                                        {/* Fecha */}
+                                        <td style={{ padding: '0.85rem', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                            {cot.fecha || '—'}
+                                        </td>
+
+                                        {/* Cliente */}
                                         <td style={{ padding: '0.85rem' }}>
                                             <div style={{ fontWeight: 800, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{client?.name || cot.clientId}</div>
-                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 500 }}><MapPin size={10} />{obra?.nombre || cot.obraId || '—'}</div>
                                         </td>
-                                        <td style={{ padding: '0.85rem', fontWeight: 800, color: '#10b981', fontSize: '0.9rem' }}>{fmtCOP(cot.type === 'inv' ? cot.amount : total(cot))}</td>
 
-
-                                        {/* Columna Estado Unificado */}
+                                        {/* Obra */}
                                         <td style={{ padding: '0.85rem' }}>
-                                            {(() => {
-                                                let label = cot.estado;
-                                                let color = cfg.color;
-                                                let Icon = Ico;
-
-                                                if (cot.isDirectInvoice) {
-                                                    if (cot.status === 'Paid') {
-                                                        label = 'Pagada';
-                                                        color = '#10b981';
-                                                        Icon = CheckCircle;
-                                                    } else {
-                                                        label = 'Pendiente Pago';
-                                                        color = '#f59e0b';
-                                                        Icon = Clock;
-                                                    }
-                                                } else if (cot.estado === 'Facturada') {
-                                                    if (inv?.status === 'Paid') {
-                                                        label = 'Pagada';
-                                                        color = '#10b981';
-                                                        Icon = CheckCircle;
-                                                    } else if (inv?.status === 'Partial') {
-                                                        label = 'Abonada';
-                                                        color = '#3b82f6';
-                                                        Icon = DollarSign;
-                                                    } else if (inv?.status === 'Fiado') {
-                                                        label = 'Fiado';
-                                                        color = '#6366f1';
-                                                        Icon = Clock;
-                                                    } else {
-                                                        label = 'Pendiente Pago';
-                                                        color = '#f59e0b';
-                                                        Icon = Clock;
-                                                    }
-                                                } else if (cot.estado === 'Aprobada') {
-                                                    label = 'Aprobada';
-                                                    color = '#10b981';
-                                                    Icon = CheckCircle;
-                                                }
-
-                                                return (
-                                                    <span style={{ 
-                                                        padding: '4px 12px', 
-                                                        borderRadius: 999, 
-                                                        background: color, 
-                                                        color: 'white', 
-                                                        fontWeight: 800, 
-                                                        fontSize: '0.65rem', 
-                                                        boxShadow: `0 2px 4px ${color}30`, 
-                                                        display: 'flex', 
-                                                        alignItems: 'center', 
-                                                        gap: 6, 
-                                                        width: 'fit-content', 
-                                                        textTransform: 'uppercase' 
-                                                    }}>
-                                                        <Icon size={12} />
-                                                        {label}
-                                                    </span>
-                                                );
-                                            })()}
+                                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
+                                                <MapPin size={12} style={{ color: 'var(--primary)', opacity: 0.8 }} />
+                                                {obra?.nombre || cot.obraId || '—'}
+                                            </div>
                                         </td>
-                                        <td style={{ padding: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }} onClick={e => e.stopPropagation()}>
-                                            {/* 1. Ver detalles */}
-                                            <button 
-                                                onClick={() => setSelected(cot.id)} 
-                                                className="btn-action-standard" 
-                                                title="Ver Detalle" 
-                                                style={{ width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', background: 'rgba(35, 101, 171, 0.1)', color: 'var(--primary)' }}
-                                            >
-                                                <Eye size={13} />
-                                            </button>
-                                            
-                                            {/* 2. Imprimir cotización */}
-                                            <button 
-                                                onClick={() => generateCotizacionPDF(cot, getClient(cot.clientId), getObra(cot), settings)} 
-                                                className="btn-action-standard" 
-                                                title="Imprimir Cotización" 
-                                                style={{ width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', background: 'rgba(35, 101, 171, 0.1)', color: 'var(--primary)', border: '1px solid rgba(35, 101, 171, 0.2)' }}
-                                            >
-                                                <Download size={13} />
-                                            </button>
 
-                                            {/* 3. Aprobar/Facturar (Solo para COT) */}
-                                            {!cot.isDirectInvoice && (
-                                                <button 
-                                                    onClick={() => setApproving(cot.id)} 
-                                                    disabled={!(cot.estado === 'Borrador' || cot.estado === 'Enviada')}
-                                                    className="btn-action-standard" 
-                                                    title="Aprobar y Facturar" 
-                                                    style={{ 
-                                                        width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', 
-                                                        background: (cot.estado === 'Borrador' || cot.estado === 'Enviada') ? '#10b981' : '#f1f5f9', 
-                                                        color: (cot.estado === 'Borrador' || cot.estado === 'Enviada') ? 'white' : '#94a3b8',
-                                                        opacity: (cot.estado === 'Borrador' || cot.estado === 'Enviada') ? 1 : 0.5,
-                                                        cursor: (cot.estado === 'Borrador' || cot.estado === 'Enviada') ? 'pointer' : 'not-allowed'
-                                                    }}
-                                                >
-                                                    <CheckCircle size={13} />
-                                                </button>
-                                            )}
+                                        {/* Estado único */}
+                                        <td style={{ padding: '0.85rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                {activeRem 
+                                                    ? BADGE(activeRem.estado, remColor, RemIcon)
+                                                    : BADGE(cotLabel, cotColor, CotIcon)
+                                                }
+                                            </div>
+                                        </td>
 
-                                            {/* 4. Imprimir contrato */}
-                                            {!cot.isDirectInvoice && (
-                                                <button 
-                                                    onClick={() => generateContratoPDF(cot, getClient(cot.clientId), getObra(cot), settings)} 
-                                                    disabled={!(cot.estado === 'Facturada')}
-                                                    className="btn-action-standard" 
-                                                    title="Imprimir Contrato" 
-                                                    style={{ 
-                                                        width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', 
-                                                        background: (cot.estado === 'Facturada') ? 'rgba(16, 185, 129, 0.1)' : '#f1f5f9', 
-                                                        color: (cot.estado === 'Facturada') ? '#10b981' : '#94a3b8',
-                                                        border: (cot.estado === 'Facturada') ? '1px solid rgba(16, 185, 129, 0.2)' : 'none',
-                                                        opacity: (cot.estado === 'Facturada') ? 1 : 0.5,
-                                                        cursor: (cot.estado === 'Facturada') ? 'pointer' : 'not-allowed'
-                                                    }}
-                                                >
-                                                    <FileText size={13} />
-                                                </button>
-                                            )}
+                                        <td style={{ padding: '0.85rem' }} onClick={e => e.stopPropagation()}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
 
-                                            {/* 5. Registrar Pago (Para facturas pendientes) */}
-                                            {((cot.estado === 'Facturada' && !isPaid) || (cot.isDirectInvoice && cot.status !== 'Paid')) && (
-                                                <button 
-                                                    onClick={() => {
-                                                        const targetInvoice = cot.isDirectInvoice ? cot : inv;
-                                                        if (targetInvoice) {
-                                                            setPayingInvoice(targetInvoice);
-                                                            setPaymentOption('Contado');
-                                                            setAbonoAmount(targetInvoice.amount - (targetInvoice.paidAmount || 0));
-                                                        }
-                                                    }} 
-                                                    className="btn-action-standard" 
-                                                    title="Registrar Pago" 
-                                                    style={{ 
-                                                        width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', 
-                                                        background: '#10b981', color: 'white'
-                                                    }}
-                                                >
-                                                    <DollarSign size={13} />
+                                                {/* Imprimir cotización */}
+                                                <button onClick={() => generateCotizacionPDF(cot, client, obra, settings)} className="btn-action-standard" title="Imprimir Cotización"
+                                                    style={{ width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', background: 'rgba(35,101,171,0.1)', color: 'var(--primary)', border: '1px solid rgba(35,101,171,0.2)' }}>
+                                                    <Download size={13} />
                                                 </button>
-                                            )}
+
+                                                {/* Aprobar */}
+                                                {!cot.isDirectInvoice && (
+                                                    <button onClick={() => setApproving(cot.id)} disabled={!canApprove} className="btn-action-standard" title="Aprobar"
+                                                        style={{ width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', background: canApprove ? '#10b981' : '#f1f5f9', color: canApprove ? 'white' : '#94a3b8', opacity: canApprove ? 1 : 0.45, cursor: canApprove ? 'pointer' : 'not-allowed' }}>
+                                                        <CheckCircle size={13} />
+                                                    </button>
+                                                )}
+
+                                                {/* Registrar pago */}
+                                                {canPay && (
+                                                    <button onClick={() => {
+                                                        const t = cot.isDirectInvoice ? cot : inv;
+                                                        if (t) { setPayingInvoice(t); setPaymentOption('Contado'); setAbonoAmount(t.amount - (t.paidAmount || 0)); }
+                                                    }} className="btn-action-standard" title="Registrar Pago"
+                                                        style={{ width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', background: '#10b981', color: 'white' }}>
+                                                        <DollarSign size={13} />
+                                                    </button>
+                                                )}
+
+                                                {/* Imprimir contrato */}
+                                                {canContract && (
+                                                    <button onClick={() => generateContratoPDF(cot, client, obra, settings)} className="btn-action-standard" title="Imprimir Contrato"
+                                                        style={{ width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)' }}>
+                                                        <FileText size={13} />
+                                                    </button>
+                                                )}
+
+                                                {/* Remisión activa → imprimir remisión */}
+                                                {activeRem && (
+                                                    <button onClick={() => generateRemisionPDF(activeRem, client, obra, settings)} className="btn-action-standard" title={`Imprimir Remisión ${activeRem.id}`}
+                                                        style={{ width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', background: 'rgba(35,101,171,0.12)', color: '#2365AB', border: '1px solid rgba(35,101,171,0.2)' }}>
+                                                        <Truck size={13} />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 );
                             })}
-                            {sortedCotizaciones.length === 0 && <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron cotizaciones</td></tr>}
+                            {sortedCotizaciones.length === 0 && (
+                                <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron registros</td></tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
 
-                {/* Pagination Controls */}
-                <div className="flex justify-between items-center mt-6 py-4 px-2" style={{ borderTop: '1px solid var(--surface-border)' }}>
+                {/* Pagination Controls (Fixed at card bottom) */}
+                <div className="flex justify-between items-center mt-6" 
+                    style={{ 
+                        borderTop: '1px solid var(--surface-border)', 
+                        position: 'sticky', 
+                        bottom: 0, 
+                        background: 'white', 
+                        zIndex: 20, 
+                        padding: '1rem 0',
+                    }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <span>Mostrar:</span>
@@ -1041,8 +518,8 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                 </div>
             </div>
 
-            {/* Detail Panel */}
-            {selected && selectedCot && (
+            {/* Detail Panel — rendered in portal so it overlays everything */}
+            {selected && selectedCot && createPortal(
                 <CotDetailPanel
                     cot={selectedCot}
                     client={getClient(selectedCot.clientId)}
@@ -1051,22 +528,42 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     onClose={() => setSelected(null)}
                     onUpdateEstado={actualizarEstadoCotizacion}
                     onOpenApproval={() => { setApproving(selectedCot.id); setSelected(null); }}
-                    onFacturar={() => { createInvoiceFromCotizacion(selectedCot.id); onInvoiceCreated?.(); setSelected(null); }}
+                    onFacturar={() => { createInvoiceFromCotizacion(selectedCot.id); onInvoiceCreated?.(); }}
                     onSendLink={handleSendQuote}
                     onEditContrato={() => setEditingContrato(selectedCot.id)}
                     onEdit={() => { setEditing(selectedCot); setSelected(null); }}
                     onDelete={async (id) => {
-                        try {
-                            await deleteCotizacion(id);
-                            setSelected(null);
-                        } catch (e) {
-                            alert(e.message);
-                        }
+                        try { await deleteCotizacion(id); setSelected(null); }
+                        catch (e) { alert(e.message); }
                     }}
                     invoices={invoices}
                     remisiones={remisiones}
+                    linkedRems={selectedLinkedRems}
+                    activeRems={selectedActiveRems}
+                    canCreateRem={selectedCanCreateRem}
+                    onCreateRemision={() => {
+                        // Si hay factura vinculada se usa, de lo contrario se usa la cotización aprobada directamente
+                        const preloadData = selectedInv || selectedCot;
+                        setGlobalPreload(preloadData);
+                        navigate('/comercial?tab=despachos');
+                    }}
+                    onFinalizeDispatch={(rem) => { handleFinalizeDispatch(rem); }}
+                    onDevolucion={(cot) => setDevolucionTarget({ clientId: cot.clientId, obraId: cot.obraId })}
+                    onTrazabilidad={() => { navigate('/comercial?tab=despachos'); setSelected(null); }}
+                    onPrintRemision={(rem) => generateRemisionPDF(rem, getClient(selectedCot.clientId), getObra(selectedCot), settings)}
+                    onCorteObra={() => {
+                        setCorteModalParams({ clientId: selectedCot.clientId, obraId: selectedCot.obraId });
+                        setShowCorteModal(true);
+                        setSelected(null);
+                    }}
+                    onCorteAction={(invId, corteId, status) => updateCorteStatus(invId, corteId, status)}
+                    onTriggerPay={(inv) => {
+                        setPayingInvoice(inv);
+                        setPaymentOption('Contado');
+                        setAbonoAmount(inv.amount - (inv.paidAmount || 0));
+                    }}
                 />
-            )}
+            , document.body)}
 
             {/* Contrato Editor Modal */}
             {editingContrato && (
@@ -1091,10 +588,20 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
             {/* Share Modal */}
             {sharing && <ShareModal cotId={sharing} onClose={() => setSharing(null)} />}
 
-            {/* Nueva/Editar Cotización Modal */}
             {showNew && (
                 <ModalErrorBoundary onClose={() => setShowNew(false)}>
-                    <NuevaCotizacionModal onClose={() => setShowNew(false)} onSave={addCotizacion} clients={clients} products={products} />
+                    <NuevaCotizacionModal 
+                        onClose={() => setShowNew(false)} 
+                        onSave={async (data) => {
+                            const newCot = await addCotizacion(data);
+                            setShowNew(false);
+                            if (newCot && newCot.id) {
+                                setApproving(newCot.id);
+                            }
+                        }} 
+                        clients={clients} 
+                        products={products} 
+                    />
                 </ModalErrorBoundary>
             )}
             {editing && (
@@ -1102,6 +609,56 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     <NuevaCotizacionModal initialData={editing} onClose={() => setEditing(null)} onSave={(data) => updateCotizacion(editing.id, data)} clients={clients} products={products} />
                 </ModalErrorBoundary>
             )}
+
+            {/* Verify Dispatch Modal */}
+            {showVerifyModal && verifyTarget && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '1rem' }}>
+                    <div style={{ background: 'white', borderRadius: 16, maxWidth: 440, width: '100%', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                        <div style={{ background: 'linear-gradient(135deg,#2365AB,#104166)', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <Truck size={20} color="white" />
+                                <div>
+                                    <div style={{ fontWeight: 800, color: 'white', fontSize: '1rem' }}>Confirmar Despacho</div>
+                                    <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>{verifyTarget.id}</div>
+                                </div>
+                            </div>
+                            <button onClick={() => { setShowVerifyModal(false); setVerifyTarget(null); }} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer', padding: '0.3rem', display: 'flex' }}><X size={18} /></button>
+                        </div>
+                        <div style={{ padding: '1.5rem' }}>
+                            <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '0.85rem', marginBottom: '1.25rem', fontSize: '0.82rem', color: '#0c4a6e', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                                <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                                <span>Al finalizar el despacho, la remisión pasará a estado <strong>Activa</strong> y se generará el PDF para el cliente. Esta acción no se puede deshacer.</span>
+                            </div>
+
+                            <div style={{ marginBottom: '1.25rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Fecha Inicial del Despacho</label>
+                                <input 
+                                    type="date" 
+                                    value={fechaInicioRemision} 
+                                    onChange={(e) => setFechaInicioRemision(e.target.value)}
+                                    style={{ width: '100%', padding: '0.75rem', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: '0.9rem', color: '#1e293b' }}
+                                />
+                                <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 4 }}>Esta fecha se usará para iniciar el cálculo de cobro en facturación.</div>
+                            </div>
+                            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '0.75rem', marginBottom: '1.25rem' }}>
+                                {(verifyTarget.items || []).map((it, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '0.25rem 0', borderBottom: '1px solid #f1f5f9' }}>
+                                        <span style={{ color: '#374151' }}>{it.nombre || it.productoId}</span>
+                                        <span style={{ fontWeight: 700, color: '#2365AB' }}>{it.cantidad} u.</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                <button onClick={() => { setShowVerifyModal(false); setVerifyTarget(null); }} style={{ flex: 1, padding: '0.75rem', borderRadius: 10, background: '#f1f5f9', border: '1px solid #e2e8f0', fontWeight: 700, cursor: 'pointer', color: '#64748b' }}>Cancelar</button>
+                                <button onClick={handleConfirmFinalDispatch} style={{ flex: 2, padding: '0.75rem', borderRadius: 10, background: 'linear-gradient(135deg,#2365AB,#104166)', border: 'none', color: 'white', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                                    <Truck size={16} /> Confirmar y Activar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
 
             {/* Pay Invoice Modal */}
             {payingInvoice && (
@@ -1135,7 +692,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                     {[
                                         { id: 'Contado', label: 'Contado', icon: <CheckCircle size={16} /> },
                                         { id: 'Abono', label: 'Abono', icon: <DollarSign size={16} /> },
-                                        { id: 'Fiado', label: 'Fiado', icon: <Clock size={16} /> }
+                                        { id: 'Credito', label: 'Crédito', icon: <Clock size={16} /> }
                                     ].map(opt => (
                                         <button
                                             key={opt.id}
@@ -1144,7 +701,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                                 const pending = payingInvoice.amount - (payingInvoice.paidAmount || 0);
                                                 if (opt.id === 'Contado') setAbonoAmount(pending);
                                                 if (opt.id === 'Abono') setAbonoAmount(pending);
-                                                if (opt.id === 'Fiado') setAbonoAmount(0);
+                                                if (opt.id === 'Credito') setAbonoAmount(0);
                                             }}
                                             style={{
                                                 padding: '0.6rem', borderRadius: 10, border: '1px solid',
@@ -1167,21 +724,21 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                     <div style={{ position: 'relative' }}>
                                         <DollarSign size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                                         <input 
-                                            type="number" 
-                                            value={abonoAmount} 
+                                            type="text" 
+                                            value={abonoAmount ? Number(abonoAmount).toLocaleString('es-CO') : ''} 
                                             onChange={e => {
-                                                const val = e.target.value;
-                                                if (val === '') { setAbonoAmount(''); return; }
-                                                setAbonoAmount(val);
+                                                // Remove everything that is not a digit
+                                                const rawValue = e.target.value.replace(/\D/g, '');
+                                                setAbonoAmount(rawValue);
                                             }}
-                                            min="0"
+                                            placeholder="0"
                                             style={{ width: '100%', padding: '0.75rem 0.75rem 0.75rem 2.5rem', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: '0.95rem', fontWeight: 700, color: '#1e293b', outline: 'none', boxSizing: 'border-box' }} 
                                         />
                                     </div>
                                 </div>
                             )}
 
-                            {paymentOption !== 'Fiado' && (
+                            {paymentOption !== 'Credito' && (
                                 <div style={{ marginBottom: '1.5rem' }}>
                                     <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.6rem', textTransform: 'uppercase' }}>Método</label>
                                     <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: '0.9rem', fontWeight: 600, color: '#1e293b', background: 'white', outline: 'none' }}>
@@ -1199,7 +756,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                 <span>
                                     {paymentOption === 'Contado' && 'Al confirmar, la factura se marcará como PAGADA totalmente.'}
                                     {paymentOption === 'Abono' && `Se registrará un abono de $${Number(abonoAmount).toLocaleString()} y la factura quedará como ABONADA.`}
-                                    {paymentOption === 'Fiado' && 'La factura quedará pendiente de pago pero habilitada para despacho.'}
+                                    {paymentOption === 'Credito' && 'La factura quedará pendiente de pago pero habilitada para despacho.'}
                                 </span>
                             </div>
 
@@ -1207,11 +764,11 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                 <button onClick={() => setPayingInvoice(null)} className="btn btn-secondary" style={{ flex: 1, padding: '0.8rem', borderRadius: 10, fontWeight: 700 }}>Cancelar</button>
                                 <button
                                     onClick={async () => { 
-                                        const finalAmount = paymentOption === 'Contado' ? payingInvoice.amount : (paymentOption === 'Fiado' ? 0 : abonoAmount);
+                                        const finalAmount = paymentOption === 'Contado' ? payingInvoice.amount : (paymentOption === 'Credito' ? 0 : Number(abonoAmount));
                                         await payInvoice?.(payingInvoice.id, finalAmount, paymentOption); 
                                         setPayingInvoice(null); 
                                         // Redirigir a remisiones para despacho inmediato
-                                        window.location.hash = '#/remisiones';
+                                        navigate('/comercial?tab=despachos');
                                     }}
                                     className="btn btn-primary"
                                     style={{ flex: 2, background: '#10b981', border: 'none', color: 'white', fontWeight: 800, fontSize: '0.95rem', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}
@@ -1223,6 +780,36 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     </div>
                 </div>
             )}
+
+            {/* Modal de Devolución */}
+            {devolucionTarget && (
+                <DevolucionModal 
+                    clientId={devolucionTarget.clientId}
+                    obraId={devolucionTarget.obraId}
+                    onClose={() => setDevolucionTarget(null)}
+                    onSave={(devs, fecha) => {
+                        registrarDevolucion(devolucionTarget.clientId, devolucionTarget.obraId, devs, fecha);
+                        Swal.fire({
+                            title: '¡Devolución Exitosa!',
+                            text: 'Los equipos han reingresado al inventario.',
+                            icon: 'success',
+                            confirmButtonColor: '#2365AB'
+                        });
+                    }}
+                    remisiones={remisiones}
+                    products={products}
+                    clients={clients}
+                />
+            )}
+            {/* Nuevo Modal de Corte de Obra */}
+            {showCorteModal && (
+                <CorteObraModal 
+                    initialClientId={corteModalParams.clientId}
+                    initialObraId={corteModalParams.obraId}
+                    onClose={() => setShowCorteModal(false)}
+                />
+            )}
+
         </>
     );
 }

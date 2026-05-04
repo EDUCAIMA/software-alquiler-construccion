@@ -89,85 +89,6 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
         borderRadius: 8, color: '#1e293b', fontSize: '0.85rem', outline: 'none'
     };
 
-    if (step === 2) {
-        return (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '2rem' }}>
-                <div 
-                onClick={e => e.stopPropagation()}
-                style={{ background: '#ffffff', borderRadius: 20, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', width: '100%', maxWidth: 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
-                        <h3 style={{ margin: 0, color: '#1e293b', fontSize: '1.25rem', fontWeight: 800 }}>Resumen de Cotización</h3>
-                        <button onClick={() => setStep(1)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontWeight: 600 }}>← Volver a editar</button>
-                    </div>
-                    <div style={{ padding: '2rem', overflowY: 'auto' }}>
-                        <div style={{ background: '#f1f5f9', borderRadius: 12, padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                            <div>
-                                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Cliente</div>
-                                <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '1.1rem' }}>{selectedClient?.name}</div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Obra</div>
-                                <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '1.1rem' }}>{obras.find(o => o.id === obraId)?.nombre}</div>
-                            </div>
-                        </div>
-
-                        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '1.5rem' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
-                                    <th style={{ textAlign: 'left', padding: '0.75rem', fontSize: '0.75rem', color: '#64748b' }}>EQUIPO</th>
-                                    <th style={{ textAlign: 'center', padding: '0.75rem', fontSize: '0.75rem', color: '#64748b' }}>CANT.</th>
-                                    <th style={{ textAlign: 'center', padding: '0.75rem', fontSize: '0.75rem', color: '#64748b' }}>DÍAS</th>
-                                    <th style={{ textAlign: 'right', padding: '0.75rem', fontSize: '0.75rem', color: '#64748b' }}>SUBTOTAL</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {items.map((item, i) => (
-                                    <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                        <td style={{ padding: '0.75rem', fontWeight: 600 }}>{item.nombre}</td>
-                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.cantidad}</td>
-                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.dias}</td>
-                                        <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700 }}>{fmtCOP(item.cantidad * item.dias * item.tarifaDia)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-
-                        <div style={{ background: '#1e293b', borderRadius: 16, padding: '1.5rem', color: 'white' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                <span style={{ opacity: 0.7 }}>Subtotal</span>
-                                <span>{fmtCOP(subtotal)}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                <span style={{ opacity: 0.7 }}>IVA ({porcIVA}%)</span>
-                                <span>{fmtCOP(iva)}</span>
-                            </div>
-                            {ret > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                    <span style={{ opacity: 0.7 }}>Retención ({porcRet}%)</span>
-                                    <span>-{fmtCOP(ret)}</span>
-                                </div>
-                            )}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                                <span style={{ opacity: 0.7 }}>Transporte</span>
-                                <span>{fmtCOP(Number(transporte))}</span>
-                            </div>
-                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '1.1rem', fontWeight: 600 }}>Total Estimado</span>
-                                <span style={{ fontSize: '1.8rem', fontWeight: 900, color: '#10b981' }}>{fmtCOP(total)}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div style={{ padding: '1.5rem 2rem', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '1rem' }}>
-                        <button onClick={() => setStep(1)} style={{ flex: 1, padding: '0.75rem', borderRadius: 10, border: '1px solid #e2e8f0', background: 'white', fontWeight: 700, cursor: 'pointer' }}>Editar Detalles</button>
-                        <button onClick={handleSave} style={{ flex: 2, padding: '0.75rem', borderRadius: 10, border: 'none', background: '#2365AB', color: 'white', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                            <CheckCircle size={20} /> Confirmar y Generar
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1.5rem' }}>
             <div 
@@ -249,7 +170,6 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                                 e.currentTarget.style.boxShadow = inList ? '0 4px 10px rgba(35, 101, 171, 0.08)' : '0 1px 3px rgba(0,0,0,0.02)';
                                             }}
                                         >
-                                            {/* Imagen del Producto - Más compacta */}
                                             <div style={{ 
                                                 width: '100%', height: '85px', background: '#f8fafc', borderRadius: 8, 
                                                 overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -261,7 +181,6 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                                     <Package size={28} color="#cbd5e1" strokeWidth={1.5} />
                                                 )}
                                             </div>
-
                                             <div>
                                                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', lineHeight: 1.1, marginBottom: '0.2rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -334,26 +253,43 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
 
                         {/* Totals Section */}
                         <div style={{ padding: '1.5rem', background: 'white', borderTop: '1px solid #e2e8f0' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem', color: '#64748b' }}>
-                                <span>Subtotal</span>
-                                <span style={{ fontWeight: 600, color: '#1e293b' }}>{fmtCOP(subtotal)}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', fontSize: '1.2rem', fontWeight: 900, color: '#1e293b' }}>
-                                <span>Total Estimado</span>
-                                <span style={{ color: '#10b981' }}>{fmtCOP(total)}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
+                                    <span>Subtotal</span>
+                                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{fmtCOP(subtotal)}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
+                                    <span>IVA ({porcIVA}%)</span>
+                                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{fmtCOP(iva)}</span>
+                                </div>
+                                {ret > 0 && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
+                                        <span>Retención ({porcRet}%)</span>
+                                        <span style={{ fontWeight: 600, color: '#991b1b' }}>-{fmtCOP(ret)}</span>
+                                    </div>
+                                )}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
+                                    <span>Transporte</span>
+                                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{fmtCOP(Number(transporte))}</span>
+                                </div>
+                                <div style={{ height: '1px', background: '#e2e8f0', margin: '0.4rem 0' }}></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', fontWeight: 900, color: '#1e293b' }}>
+                                    <span>Total</span>
+                                    <span style={{ color: '#10b981' }}>{fmtCOP(total)}</span>
+                                </div>
                             </div>
                             <button 
                                 disabled={!clientId || !obraId || items.length === 0}
-                                onClick={() => setStep(2)}
+                                onClick={handleSave}
                                 style={{ 
                                     width: '100%', padding: '1rem', borderRadius: 16, border: 'none', 
                                     background: (!clientId || !obraId || items.length === 0) ? '#cbd5e1' : '#2365AB', 
-                                    color: 'white', fontWeight: 800, fontSize: '1rem', cursor: 'pointer',
+                                    color: 'white', fontWeight: 800, fontSize: '1.1rem', cursor: 'pointer',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-                                    transition: 'all 0.2s'
+                                    transition: 'all 0.2s', boxShadow: (!clientId || !obraId || items.length === 0) ? 'none' : '0 10px 15px -3px rgba(35, 101, 171, 0.3)'
                                 }}
                             >
-                                Siguiente Paso <ChevronRight size={20} />
+                                <CheckCircle size={22} /> Confirmar y Generar
                             </button>
                         </div>
                     </div>

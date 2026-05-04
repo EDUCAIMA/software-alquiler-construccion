@@ -105,6 +105,8 @@ async function initDB() {
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS remision_creada BOOLEAN DEFAULT false`);
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(15, 2) DEFAULT 0`);
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_type VARCHAR(50)`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cortes JSONB DEFAULT '[]'`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS abonos JSONB DEFAULT '[]'`);
 
         // --- Cotizaciones ---
         await client.query(`
@@ -303,7 +305,9 @@ const mapInvoice = r => ({
     remisionEnabled: r.remision_enabled || false,
     remisionCreada: r.remision_creada || false,
     paidAmount: Number(r.paid_amount || 0),
-    paymentType: r.payment_type || null
+    paymentType: r.payment_type || null,
+    cortes: r.cortes || [],
+    abonos: r.abonos || []
 });
 
 const mapCot = r => ({
@@ -463,11 +467,11 @@ app.get('/api/invoices', async (req, res) => {
 
 app.post('/api/invoices', async (req, res) => {
     try {
-        const { id, clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType } = req.body;
+        const { id, clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType, cortes, abonos } = req.body;
         await pool.query(
-            `INSERT INTO invoices(id, client_id, obra_id, amount, status, date, paid_date, items, cotizacion_id, remision_enabled, remision_creada, paid_amount, payment_type) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            `INSERT INTO invoices(id, client_id, obra_id, amount, status, date, paid_date, items, cotizacion_id, remision_enabled, remision_creada, paid_amount, payment_type, cortes, abonos) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
             [id, clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
-                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null]
+                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, JSON.stringify(cortes || []), JSON.stringify(abonos || [])]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -475,11 +479,11 @@ app.post('/api/invoices', async (req, res) => {
 
 app.put('/api/invoices/:id', async (req, res) => {
     try {
-        const { clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType } = req.body;
+        const { clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType, cortes, abonos } = req.body;
         await pool.query(
-            `UPDATE invoices SET client_id = $1, obra_id = $2, amount = $3, status = $4, date = $5, paid_date = $6, items = $7, cotizacion_id = $8, remision_enabled = $9, remision_creada = $10, paid_amount = $11, payment_type = $12 WHERE id = $13`,
+            `UPDATE invoices SET client_id = $1, obra_id = $2, amount = $3, status = $4, date = $5, paid_date = $6, items = $7, cotizacion_id = $8, remision_enabled = $9, remision_creada = $10, paid_amount = $11, payment_type = $12, cortes = $13, abonos = $14 WHERE id = $15`,
             [clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
-                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, req.params.id]
+                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, JSON.stringify(cortes || []), JSON.stringify(abonos || []), req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }

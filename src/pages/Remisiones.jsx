@@ -10,6 +10,7 @@ import { generateRemisionPDF } from './CotizacionesHelpers';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
 import Swal from 'sweetalert2';
+import DevolucionModal from './DevolucionModal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ESTADO_CFG = {
@@ -41,9 +42,9 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
         if (facturaPreload?.items) {
             return facturaPreload.items.map(i => ({
                 productId: i.productId,
-                nombre: products.find(p => p.id === i.productId)?.name || i.productId,
-                cantidad: i.quantity,
-                tarifaDia: i.price,
+                nombre: products.find(p => p.id === i.productId)?.name || i.nombre || i.name || i.productId,
+                cantidad: i.quantity || i.cantidad || 0,
+                tarifaDia: i.price || i.tarifaDia || 0,
             }));
         }
         return [];
@@ -339,186 +340,6 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
     );
 }
 
-// ─── Modal: Devolución PEPS ───────────────────────────────────────────────────
-function DevolucionModal({ clientId, obraId, onClose, onSave, remisiones, products, clients }) {
-    const client = clients.find(c => c.id === clientId);
-    const obra = client?.obras?.find(o => o.id === obraId);
-
-    // Construir totales en campo por producto (de remisiones activas/parciales)
-    const enCampo = useMemo(() => {
-        const map = {};
-        remisiones
-            .filter(r => r.clientId === clientId && r.obraId === obraId && (r.estado === 'Activa' || r.estado === 'Parcial'))
-            .forEach(r => {
-                r.items.forEach(item => {
-                    const pend = item.cantidad - item.cantidadDevuelta;
-                    if (pend > 0) map[item.productId] = (map[item.productId] || 0) + pend;
-                });
-            });
-        return Object.entries(map).map(([productId, cantidad]) => {
-            const prod = products.find(p => p.id === productId);
-            return { productId, nombre: prod?.name || productId, enCampo: cantidad, aDevolver: 0 };
-        });
-    }, [remisiones, clientId, obraId, products]);
-
-    const [quantities, setQuantities] = useState(() => Object.fromEntries(enCampo.map(i => [i.productId, 0])));
-    const [fechaDevolucion, setFechaDevolucion] = useState(format(new Date(), 'yyyy-MM-dd'));
-
-    const setQ = (productId, val) => {
-        const item = enCampo.find(i => i.productId === productId);
-        setQuantities(prev => ({ ...prev, [productId]: Math.min(Number(val) || 0, item?.enCampo || 0) }));
-    };
-
-    const totalADevolver = Object.values(quantities).reduce((s, v) => s + v, 0);
-
-    // PEPS simulation for display
-    const pepsPreview = useMemo(() => {
-        const preview = [];
-        const rems = remisiones
-            .filter(r => r.clientId === clientId && r.obraId === obraId && (r.estado === 'Activa' || r.estado === 'Parcial'))
-            .sort((a, b) => a.fecha.localeCompare(b.fecha));
-
-        const workQuantities = { ...quantities };
-
-        for (const rem of rems) {
-            const remItems = [];
-            for (const item of rem.items) {
-                if (!workQuantities[item.productId]) continue;
-                const pendiente = item.cantidad - item.cantidadDevuelta;
-                if (pendiente <= 0) continue;
-                const descuento = Math.min(workQuantities[item.productId], pendiente);
-                if (descuento > 0) {
-                    remItems.push({ nombre: products.find(p => p.id === item.productId)?.name || item.productId, descuento, pendiente });
-                    workQuantities[item.productId] -= descuento;
-                }
-            }
-            if (remItems.length > 0) {
-                const totalRem = rem.items.reduce((s, i) => s + i.cantidad, 0);
-                const totalDev = rem.items.reduce((s, i) => s + i.cantidadDevuelta, 0) + remItems.reduce((s, i) => s + i.descuento, 0);
-                preview.push({ id: rem.id, fecha: rem.fecha, items: remItems, seCierra: totalDev >= totalRem });
-            }
-        }
-        return preview;
-    }, [quantities, remisiones, clientId, obraId, products]);
-
-    const handleSave = () => {
-        const devoluciones = Object.entries(quantities)
-            .filter(([, v]) => v > 0)
-            .map(([productId, cantidad]) => ({ productId, cantidad }));
-        if (devoluciones.length === 0) return;
-        onSave(devoluciones, fechaDevolucion);
-        onClose();
-    };
-
-    const inputStyle = { width: '100%', padding: '0.55rem 0.75rem', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#104166', fontSize: '0.875rem', textAlign: 'center', boxSizing: 'border-box', outline: 'none' };
-
-    return (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
-            <div style={{ background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', width: '100%', maxWidth: 650, maxHeight: '85vh', display: 'flex', flexDirection: 'column', marginTop: '6vh', transition: 'height 0.2s ease-out' }}>
-                {/* Header */}
-                <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div style={{ background: 'rgba(249,115,22,0.1)', padding: '0.6rem', borderRadius: '12px', display: 'flex' }}>
-                            <RotateCcw size={22} style={{ color: '#f97316' }} />
-                        </div>
-                        <div>
-                            <h3 style={{ margin: 0, color: '#104166', fontSize: '1.15rem' }}>Registrar Devolución — Lógica PEPS</h3>
-                            <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.2rem', fontWeight: 500 }}>
-                                Cliente: <span style={{ color: '#104166', fontWeight: 600 }}>{client?.name}</span> &nbsp;→&nbsp; Obra: <span style={{ color: '#104166', fontWeight: 600 }}>{obra?.nombre}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.2s', alignSelf: 'flex-start' }} onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}><X size={18} /></button>
-                </div>
-
-                <div style={{ padding: '1.5rem 2rem', overflowY: 'auto', flex: 1 }}>
-                    {enCampo.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '3rem 2rem', color: '#94a3b8', border: '2px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc' }}>
-                            <Package size={32} style={{ opacity: 0.4, margin: '0 auto 0.75rem auto', display: 'block' }} />
-                            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#64748b' }}>No hay equipos activos en esta obra.</div>
-                            <div style={{ fontSize: '0.8rem', marginTop: '0.3rem' }}>Todos los equipos despachados ya han sido devueltos.</div>
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                            {/* Fecha de Devolución */}
-                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1rem' }}>
-                                <label style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Fecha de Devolución</label>
-                                <input 
-                                    type="date" 
-                                    value={fechaDevolucion} 
-                                    onChange={e => setFechaDevolucion(e.target.value)} 
-                                    style={{ ...inputStyle, textAlign: 'left', maxWidth: '200px' }} 
-                                />
-                                <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.4rem' }}>Esta fecha se usará para el registro de la devolución.</p>
-                            </div>
-
-                            {/* Quantities to return */}
-                            <div>
-                                <h4 style={{ margin: 0, fontSize: '0.85rem', color: '#f97316', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <ArrowDownCircle size={16} /> Ingresa cantidad a devolver por equipo
-                                </h4>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    {enCampo.map(item => (
-                                        <div key={item.productId} style={{ display: 'grid', gridTemplateColumns: '1fr auto 90px', gap: '1rem', alignItems: 'center', background: '#f8fafc', borderRadius: '10px', padding: '0.75rem 1.25rem', border: '1px solid #e2e8f0', transition: 'all 0.2s', ...(quantities[item.productId] > 0 ? { borderColor: '#f97316', background: 'rgba(249,115,22,0.03)' } : {}) }}>
-                                            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#104166' }}>{item.nombre}</div>
-                                            <div style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', borderRadius: '6px', background: '#e0e7ff', color: '#4f46e5', fontWeight: 700 }}>{item.enCampo} en campo</div>
-                                            <input type="number" min="0" max={item.enCampo} value={quantities[item.productId] || ''} onChange={e => setQ(item.productId, e.target.value)} style={{ ...inputStyle, borderColor: quantities[item.productId] > 0 ? '#f97316' : '#cbd5e1' }} placeholder="0" />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* PEPS Preview */}
-                            {pepsPreview.length > 0 && (
-                                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '12px', padding: '1.25rem', marginTop: '0.5rem' }}>
-                                    <h4 style={{ margin: 0, fontSize: '0.75rem', color: '#9a3412', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                        <FileText size={15} /> Resultado PEPS — Remisiones afectadas
-                                    </h4>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                                        {pepsPreview.map(p => (
-                                            <div key={p.id} style={{ background: '#ffffff', borderRadius: '8px', padding: '0.75rem 1rem', border: '1px solid #fdba74', borderLeft: `4px solid ${p.seCierra ? '#10b981' : '#f97316'}`, boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                                    <span style={{ fontWeight: 800, fontSize: '0.85rem', fontFamily: 'monospace', color: '#ea580c' }}>{p.id}</span>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{p.fecha}</span>
-                                                        {p.seCierra && <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem', borderRadius: '4px', background: '#dcfce7', color: '#166534', fontWeight: 800 }}>✓ SE CIERRA</span>}
-                                                    </div>
-                                                </div>
-                                                {p.items.map((it, i) => (
-                                                    <div key={i} style={{ fontSize: '0.8rem', color: '#263777', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.2rem' }}>
-                                                        <span style={{ color: '#cbd5e1' }}>└</span>
-                                                        <span style={{ fontWeight: 600, color: '#104166' }}>{it.nombre}:</span>
-                                                        devuelve <strong style={{ color: '#ea580c' }}>{it.descuento}</strong> de {it.pendiente}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <p style={{ fontSize: '0.7rem', color: '#9a3412', marginTop: '1rem', textAlign: 'center', fontStyle: 'italic' }}>
-                                        La Lógica PEPS asegura que los equipos devueltos se descuenten primero de las remisiones más antiguas.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                <div style={{ padding: '1.25rem 2rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '1rem', justifyContent: 'space-between', alignItems: 'center', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
-                    <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
-                        Total a devolver: <span style={{ color: '#104166', fontWeight: 800, fontSize: '1rem' }}>{totalADevolver}</span> ud(s)
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.75rem' }}>
-                        <button className="btn btn-secondary" onClick={onClose} style={{ minWidth: 100 }}>Cancelar</button>
-                        <button className="btn btn-primary" disabled={totalADevolver === 0} onClick={handleSave}
-                            style={{ background: totalADevolver === 0 ? '#cbd5e1' : '#f97316', border: 'none', display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: totalADevolver === 0 ? 'none' : '0 4px 14px rgba(249,115,22,0.3)', color: 'white', fontWeight: 600, padding: '0.6rem 1.25rem', borderRadius: '8px', cursor: totalADevolver === 0 ? 'not-allowed' : 'pointer', transition: 'all 0.2s' }}>
-                            <RotateCcw size={16} /> Procesar Devolución
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
 
 // ─── Modal: Trazabilidad por Cliente/Obra ───────────────────────────────────
 function TrazabilidadModal({ clientId, obraId, onClose, remisiones, products, clients }) {
@@ -713,7 +534,7 @@ function VerifyDispatchModal({ rem, onClose, onConfirm, clients, products }) {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Remisiones() {
-    const { clients, products, remisiones, invoices, addRemision, editRemision, registrarDevolucion, maintenances, marcarRemisionCreada, deleteRemision, cancelRemision, settings } = useAppContext();
+    const { clients, products, remisiones, invoices, addRemision, editRemision, registrarDevolucion, maintenances, marcarRemisionCreada, deleteRemision, cancelRemision, settings, globalPreload, setGlobalPreload } = useAppContext();
 
     const [search, setSearch] = useState('');
     const [filterEstado, setFilterEstado] = useState('Todos');
@@ -725,6 +546,14 @@ export default function Remisiones() {
     const [showVerifyModal, setShowVerifyModal] = useState(false);
     const [verifyTarget, setVerifyTarget] = useState(null);
     const [blockMsg, setBlockMsg] = useState('');
+
+    React.useEffect(() => {
+        if (globalPreload) {
+            setFacturaPreload(globalPreload);
+            setShowNueva(true);
+            setGlobalPreload(null);
+        }
+    }, [globalPreload, setGlobalPreload]);
 
     // Facturas pagadas pendientes de remisión
     const pendingInvoices = useMemo(() => {
