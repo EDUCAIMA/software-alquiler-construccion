@@ -535,8 +535,17 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     onEditContrato={() => setEditingContrato(selectedCot.id)}
                     onEdit={() => { setEditing(selectedCot); setSelected(null); }}
                     onDelete={async (id) => {
-                        try { await deleteCotizacion(id); setSelected(null); }
-                        catch (e) { alert(e.message); }
+                        try { 
+                            if (id.startsWith('F-')) {
+                                await deleteInvoice(id); 
+                            } else {
+                                await deleteCotizacion(id); 
+                            }
+                            setSelected(null); 
+                            Swal.fire('Eliminado', 'El registro ha sido archivado correctamente.', 'success');
+                        } catch (e) { 
+                            Swal.fire('Error', e.message, 'error');
+                        }
                     }}
                     invoices={invoices}
                     remisiones={remisiones}

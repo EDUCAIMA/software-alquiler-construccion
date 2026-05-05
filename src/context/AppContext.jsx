@@ -401,7 +401,7 @@ export const AppProvider = ({ children }) => {
 
   const deleteInvoice = async (invoiceId) => {
     const invoice = invoices.find(inv => inv.id === invoiceId);
-    if (!invoice) return;
+    if (!invoice) throw new Error('No se encontró el registro de facturación para eliminar.');
 
     // Si la factura está pendiente, restamos de la deuda del cliente
     if (invoice.status === 'Pending') {
@@ -755,7 +755,7 @@ export const AppProvider = ({ children }) => {
 
   const deleteCotizacion = async (cotId) => {
     const cot = cotizaciones.find(c => c.id === cotId);
-    if (!cot) return;
+    if (!cot) throw new Error('No se encontró la cotización para eliminar.');
     
     if (cot.facturaId) {
       throw new Error('No se puede eliminar una cotización que ya tiene factura asociada.');
