@@ -797,7 +797,7 @@ function generateCortePDF(invoice, client, obra, settings, allInvoices, allRemis
     }
 }
 
-export function exportClientPDF(client, invoices, products, settings) {
+function exportClientPDF(client, invoices, products, settings) {
     const doc = new jsPDF();
     const margin = 10;
     let y = applyStandardLayout(doc, 'Ficha de Cliente', settings, client.id);
