@@ -200,7 +200,6 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                     const scheme = prod?.esquemaCobro || 'Calendario';
                     const tarifa = prod?.value || 0;
 
-                    let totalUnitsDaysInPeriod = 0;
                     let accountedQty = 0;
 
                     if (item.devoluciones && Array.isArray(item.devoluciones)) {
@@ -211,7 +210,19 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
 
                             if (effectiveStart <= effectiveEnd) {
                                 const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
-                                totalUnitsDaysInPeriod += dev.cantidad * dDays;
+                                const sub = dev.cantidad * dDays * tarifa;
+                                subtotalTotal += sub;
+                                lineas.push({
+                                    remId: rem.id,
+                                    remFecha: rem.fecha,
+                                    equipo: `${prod?.name || item.productId} (Dev: ${dev.fecha})`,
+                                    cantidad: dev.cantidad,
+                                    dias: dDays,
+                                    tarifaDia: tarifa,
+                                    subtotal: sub,
+                                    estado: rem.estado,
+                                    esquema: scheme,
+                                });
                             }
                             accountedQty += dev.cantidad;
                         });
@@ -223,7 +234,19 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         const effectiveEnd = equipStart < fEnd ? equipStart : fEnd; 
                         if (effectiveStart <= effectiveEnd) {
                             const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
-                            totalUnitsDaysInPeriod += orphanReturns * dDays;
+                            const sub = orphanReturns * dDays * tarifa;
+                            subtotalTotal += sub;
+                            lineas.push({
+                                remId: rem.id,
+                                remFecha: rem.fecha,
+                                equipo: `${prod?.name || item.productId} (Dev. previa)`,
+                                cantidad: orphanReturns,
+                                dias: dDays,
+                                tarifaDia: tarifa,
+                                subtotal: sub,
+                                estado: rem.estado,
+                                esquema: scheme,
+                            });
                         }
                         accountedQty += orphanReturns;
                     }
@@ -235,26 +258,20 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
 
                         if (effectiveStart <= effectiveEnd) {
                             const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
-                            totalUnitsDaysInPeriod += remainingQty * dDays;
+                            const sub = remainingQty * dDays * tarifa;
+                            subtotalTotal += sub;
+                            lineas.push({
+                                remId: rem.id,
+                                remFecha: rem.fecha,
+                                equipo: prod?.name || item.productId,
+                                cantidad: remainingQty,
+                                dias: dDays,
+                                tarifaDia: tarifa,
+                                subtotal: sub,
+                                estado: rem.estado,
+                                esquema: scheme,
+                            });
                         }
-                    }
-
-                    if (totalUnitsDaysInPeriod > 0) {
-                        const sub = totalUnitsDaysInPeriod * tarifa;
-                        const weightedDays = (totalUnitsDaysInPeriod / item.cantidad).toFixed(1);
-
-                        subtotalTotal += sub;
-                        lineas.push({
-                            remId: rem.id,
-                            remFecha: rem.fecha,
-                            equipo: prod?.name || item.productId,
-                            cantidad: item.cantidad,
-                            dias: Number(weightedDays),
-                            tarifaDia: tarifa,
-                            subtotal: sub,
-                            estado: rem.estado,
-                            esquema: scheme,
-                        });
                     }
                 }
             });
