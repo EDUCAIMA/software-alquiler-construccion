@@ -18,6 +18,7 @@ import Comercial from './pages/Comercial';
 import Login from './pages/Login';
 import SettingsPage from './pages/Settings';
 import PublicCotizacionApproval from './pages/PublicCotizacionApproval';
+import Invoices from './pages/Invoices';
 
 // ─── Route Guard ──────────────────────────────────────────────────────────────
 function ProtectedRoute({ children, requireDashboard }) {
@@ -49,6 +50,7 @@ function Topbar() {
     { icon: Users,           label: 'Clientes',              path: '/clients',     restricted: false },
     { icon: Package,         label: 'Inventario / Equipos',  path: '/products',    restricted: false },
     { icon: Briefcase,       label: 'Comercial',             path: '/comercial',   restricted: false },
+    { icon: FileText,        label: 'Facturación',           path: '/invoices',    restricted: false },
     { icon: Activity,        label: 'Trazabilidad',          path: '/trazability', restricted: false },
     { icon: Wrench,          label: 'Mantenimientos',        path: '/maintenance', restricted: false },
     { icon: Settings,        label: 'Configuración',         path: '/settings',    restricted: true  },
@@ -318,9 +320,9 @@ function AppShell() {
         <Route path="/" element={<ProtectedRoute requireDashboard><Dashboard /></ProtectedRoute>} />
         <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
         <Route path="/comercial" element={<ProtectedRoute><Comercial /></ProtectedRoute>} />
+        <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
         {/* Redirects para rutas antiguas */}
         <Route path="/cotizaciones" element={<Navigate to="/comercial" replace />} />
-        <Route path="/invoices" element={<Navigate to="/comercial" replace />} />
         <Route path="/remisiones" element={<Navigate to="/comercial" replace />} />
         <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
         <Route path="/financiero" element={<ProtectedRoute><Financiero /></ProtectedRoute>} />
