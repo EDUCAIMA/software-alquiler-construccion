@@ -159,10 +159,28 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     const [fechaCorte, setFechaCorte] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [generado, setGenerado] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [selectedRemIds, setSelectedRemIds] = useState([]);
 
     const selectedClient = clients.find(c => c.id === clientId);
     const obrasDisp = selectedClient?.obras || [];
     const selectedObra = obrasDisp.find(o => o.id === obraId);
+
+    // Filtered remissions list for selection
+    const availableRems = useMemo(() => {
+        if (!clientId) return [];
+        return remisiones.filter(r => 
+            r.clientId === clientId && 
+            (!obraId || r.obraId === obraId) && 
+            r.estado !== 'Cancelada'
+        ).sort((a, b) => b.fecha.localeCompare(a.fecha));
+    }, [clientId, obraId, remisiones]);
+
+    // Update selection when filters change
+    React.useEffect(() => {
+        setSelectedRemIds(availableRems.map(r => r.id));
+        setGenerado(false);
+        setSaved(false);
+    }, [availableRems]);
 
     const resultado = useMemo(() => {
         if (!clientId || !fechaInicio || !fechaCorte) return null;
@@ -176,11 +194,9 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         const fStart = parseUTCDate(fechaInicio);
         const fEnd = parseUTCDate(fechaCorte);
         
-        const rems = remisiones.filter(r =>
-            r.clientId === clientId && 
-            (!obraId || r.obraId === obraId) && 
-            parseUTCDate(r.fecha) <= fEnd &&
-            r.estado !== 'Cancelada'
+        const rems = availableRems.filter(r =>
+            selectedRemIds.includes(r.id) &&
+            parseUTCDate(r.fecha) <= fEnd
         );
 
         const lineas = [];
@@ -299,7 +315,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         const totalNeto = totalAntesDePagos - pagosPrevios;
 
         return { lineas, subtotal: subtotalTotal, iva, retencion, transporte: totalTransporte, totalAntesDePagos, pagosPrevios, totalNeto, porcIVA, porcRet };
-    }, [clientId, obraId, fechaInicio, fechaCorte, remisiones, products, invoices, selectedClient]);
+    }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient]);
 
     const handleGenerate = () => { if (resultado) setGenerado(true); };
     const handleSaveInvoice = () => {
@@ -402,11 +418,46 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                             <input type="date" value={fechaCorte} onChange={e => { setFechaCorte(e.target.value); setGenerado(false); setSaved(false); }} style={inputStyle} />
                                         </div>
                                     </div>
-                                    <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '0.5rem' }} disabled={!clientId} onClick={handleGenerate}>
+                                    <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '0.5rem' }} disabled={!clientId || selectedRemIds.length === 0} onClick={handleGenerate}>
                                         <Calculator size={18} /> Calcular Liquidación
                                     </button>
                                 </div>
                             </div>
+
+                            {clientId && availableRems.length > 0 && (
+                                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                        <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#2365AB', textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <Truck size={16} /> Seleccionar Remisiones
+                                        </p>
+                                        <button 
+                                            onClick={() => setSelectedRemIds(selectedRemIds.length === availableRems.length ? [] : availableRems.map(r => r.id))}
+                                            style={{ background: 'none', border: 'none', color: '#2365AB', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                                        >
+                                            {selectedRemIds.length === availableRems.length ? 'Deseleccionar' : 'Todo'}
+                                        </button>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                                        {availableRems.map(r => (
+                                            <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem', borderRadius: '8px', background: '#f8fafc', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedRemIds.includes(r.id)} 
+                                                    onChange={() => {
+                                                        setSelectedRemIds(prev => prev.includes(r.id) ? prev.filter(id => id !== r.id) : [...prev, r.id]);
+                                                        setGenerado(false);
+                                                    }}
+                                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                                />
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b' }}>#{r.id}</span>
+                                                    <span style={{ fontSize: '0.65rem', color: '#64748b' }}>{r.fecha}</span>
+                                                </div>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {selectedClient && (
                                 <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.75rem 1rem' }}>
