@@ -149,22 +149,8 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
     };
 
     const combinedList = useMemo(() => {
-        const list = cotizaciones.map(c => ({ ...c, type: 'cot' }));
-        invoices.forEach(inv => {
-            // Solo incluimos facturas que NO vienen de una cotización (para no duplicar)
-            if (!inv.cotizacionId) {
-                list.push({
-                    ...inv,
-                    type: 'inv',
-                    fecha: inv.date,
-                    estado: inv.status === 'Paid' ? 'Facturada' : 'Aprobada',
-                    items: (inv.items || []).map(i => ({ ...i, cantidad: i.quantity, dias: i.days, tarifaDia: i.price })),
-                    isDirectInvoice: true
-                });
-            }
-        });
-        return list;
-    }, [cotizaciones, invoices]);
+        return cotizaciones.map(c => ({ ...c, type: 'cot' }));
+    }, [cotizaciones]);
 
     const sortedCotizaciones = useMemo(() => {
         const filtered = combinedList.filter(c => {
