@@ -322,6 +322,8 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             obraId,
             items: itemsToFacturar,
         });
+        
+        generateCortePDF(resultado, selectedClient, selectedObra, settings);
         setSaved(true);
     };
 
@@ -523,11 +525,8 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                             <span style={{ fontSize: '2.2rem', fontWeight: 900, color: '#104166', letterSpacing: '-0.02em' }}>{fmtCOP(resultado.totalNeto)}</span>
                                         </div>
                                         <div style={{ display: 'flex', gap: '1rem' }}>
-                                            <button className="btn" onClick={() => generateCortePDF(resultado, selectedClient, selectedObra, settings)} style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', padding: '0.85rem 1.75rem', borderRadius: 12, fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                                                <Download size={20} /> PDF
-                                            </button>
                                             <button className="btn" disabled={saved || resultado.lineas.length === 0} onClick={handleSaveInvoice} style={{ background: '#10b981', color: 'white', border: 'none', padding: '0.85rem 2.5rem', borderRadius: 12, fontWeight: 900, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)' }}>
-                                                {saved ? <><CheckCircle size={22} /> Guardado</> : <><FileText size={22} /> Generar Factura</>}
+                                                {saved ? <><CheckCircle size={22} /> Guardado</> : <><FileText size={22} /> Facturar</>}
                                             </button>
                                         </div>
                                     </div>
