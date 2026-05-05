@@ -46,7 +46,7 @@ function Topbar() {
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Panel de Control',      path: '/',            restricted: true  },
-    { icon: Briefcase,       label: 'Comercial / Despachos', path: '/comercial',   restricted: false },
+    { icon: Briefcase,       label: 'Comercial',             path: '/comercial',   restricted: false },
     { icon: Package,         label: 'Inventario / Equipos',  path: '/products',    restricted: false },
     { icon: Users,           label: 'Clientes',              path: '/clients',     restricted: false },
     { icon: Activity,        label: 'Trazabilidad',          path: '/trazability', restricted: false },
@@ -134,7 +134,7 @@ function Topbar() {
         </div>
 
         {/* ── Page Titles ── */}
-        {location.pathname === '/comercial' && <div style={titleStyle}>Gestión comercial</div>}
+        {location.pathname === '/comercial' && <div style={titleStyle}>Módulo Comercial</div>}
         {location.pathname === '/products' && <div style={titleStyle}>Inventario & Alquiler</div>}
         {location.pathname === '/clients' && <div style={titleStyle}>Gestión de Clientes</div>}
       </div>
@@ -321,7 +321,7 @@ function AppShell() {
         {/* Redirects para rutas antiguas */}
         <Route path="/cotizaciones" element={<Navigate to="/comercial" replace />} />
         <Route path="/invoices" element={<Navigate to="/comercial" replace />} />
-        <Route path="/remisiones" element={<Navigate to="/comercial?tab=despachos" replace />} />
+        <Route path="/remisiones" element={<Navigate to="/comercial" replace />} />
         <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
         <Route path="/financiero" element={<ProtectedRoute><Financiero /></ProtectedRoute>} />
         <Route path="/maintenance" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
