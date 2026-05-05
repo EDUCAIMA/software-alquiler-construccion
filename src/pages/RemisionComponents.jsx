@@ -20,6 +20,8 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
     const [fecha, setFecha] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [transporte, setTransporte] = useState(0);
     const [notas, setNotas] = useState('');
+    const [facturaId, setFacturaId] = useState(facturaPreload?.type === 'inv' ? facturaPreload.id : (facturaPreload?.facturaId || ''));
+    const [cotizacionId, setCotizacionId] = useState(facturaPreload?.type === 'cot' ? facturaPreload.id : (facturaPreload?.cotizacionId || ''));
     const [items, setItems] = useState(() => {
         if (facturaPreload?.items) {
             return facturaPreload.items.map(i => ({
@@ -72,7 +74,16 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
         if (!clientId || !obraId || items.length === 0) return;
         setLoading(true);
         try {
-            const rem = await onSave({ clientId, obraId, fecha, transporte: Number(transporte), notas, items });
+            const rem = await onSave({ 
+                clientId, 
+                obraId, 
+                fecha, 
+                transporte: Number(transporte), 
+                notas, 
+                items,
+                facturaId,
+                cotizacionId
+            });
             generateRemisionPDF(rem, selectedClient, obrasDisp.find(o => o.id === obraId), settings);
             onClose();
         } catch (e) {
