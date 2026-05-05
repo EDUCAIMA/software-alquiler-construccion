@@ -230,7 +230,8 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
         (selectedCot.type === 'inv' && r.facturaId === selectedCot.id)
     ) : [];
     const selectedActiveRems = selectedLinkedRems.filter(r => r.estado !== 'Cerrada' && r.estado !== 'Cancelada');
-    const selectedCanCreateRem = !!(
+    const validLinkedRems = selectedLinkedRems.filter(r => r.estado !== 'Cancelada');
+    const selectedCanCreateRem = validLinkedRems.length === 0 && !!(
         (selectedInv?.remisionEnabled === true) || 
         (selectedCot?.estado === 'Aprobada' || selectedCot?.estado === 'Facturada' || selectedCot?.type === 'inv' || selectedCot?.facturaId)
     );
