@@ -61,15 +61,15 @@ function Topbar() {
   const titleStyle = {
     color: 'white',
     fontWeight: 800,
-    fontSize: '1.05rem',
+    fontSize: '1.15rem',
     letterSpacing: '-0.02em',
     whiteSpace: 'nowrap',
     marginRight: '1rem',
-    borderLeft: '1px solid rgba(255,255,255,0.15)',
-    paddingLeft: '1rem',
+    borderLeft: '2px solid rgba(255,255,255,0.15)',
+    paddingLeft: '1.25rem',
     display: 'flex',
     alignItems: 'center',
-    height: '30px'
+    height: '36px'
   };
 
   const renderActionBtn = (btn) => (
@@ -77,12 +77,12 @@ function Topbar() {
       key={btn.event}
       onClick={() => window.dispatchEvent(new CustomEvent(btn.event))}
       style={{
-        padding: '0.45rem 0.85rem',
-        borderRadius: 8,
+        padding: '0.6rem 1rem',
+        borderRadius: 10,
         background: 'rgba(255,255,255,0.08)',
         border: '1px solid rgba(255,255,255,0.15)',
         color: 'white',
-        fontSize: '0.72rem',
+        fontSize: '0.85rem',
         fontWeight: 700,
         cursor: 'pointer',
         display: 'flex',
@@ -99,7 +99,7 @@ function Topbar() {
         e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
       }}
     >
-      <btn.icon size={14} color={btn.color} />
+      <btn.icon size={18} color={btn.color} />
       <span className="hide-on-mobile">{btn.label}</span>
     </button>
   );
@@ -108,27 +108,27 @@ function Topbar() {
     <header style={{
       position: 'fixed',
       top: 0, left: 0, right: 0,
-      height: 62,
+      height: 80,
       background: 'linear-gradient(90deg, #0d3554 0%, #104166 40%, #104166 60%, #0d3554 100%)',
       zIndex: 50,
       display: 'flex',
       alignItems: 'center',
-      padding: '0 1.25rem',
-      boxShadow: '0 2px 24px rgba(0,0,0,0.35)',
-      borderBottom: '1px solid rgba(255,255,255,0.08)',
+      padding: '0 1.5rem',
+      boxShadow: '0 4px 30px rgba(0,0,0,0.4)',
+      borderBottom: '1px solid rgba(255,255,255,0.12)',
     }}>
 
       {/* ── LEFT SECTION: Logo + Title (Flexible) ── */}
       <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, marginRight: '1rem' }}>
           {settings?.logoUI ? (
-            <img src={settings.logoUI} alt="Logo" style={{ height: 38, width: 'auto', objectFit: 'contain' }} />
+            <img src={settings.logoUI} alt="Logo" style={{ height: 48, width: 'auto', objectFit: 'contain' }} />
           ) : settings?.logo ? (
-            <img src={settings.logo} alt="Logo" style={{ height: 38, width: 'auto', objectFit: 'contain' }} />
+            <img src={settings.logo} alt="Logo" style={{ height: 48, width: 'auto', objectFit: 'contain' }} />
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Package size={28} color="#76B1E0" />
-              <span style={{ fontWeight: 900, color: 'white', fontSize: '0.95rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Package size={34} color="#76B1E0" />
+              <span style={{ fontWeight: 900, color: 'white', fontSize: '1.1rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
                 {settings?.shortName || 'ARQUILER'}
               </span>
             </div>
@@ -159,16 +159,16 @@ function Topbar() {
               to={item.path}
               title={item.label}
               style={{
-                width: 44,
-                height: 44,
+                width: 52,
+                height: 52,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: 10,
+                borderRadius: 12,
                 flexShrink: 0,
                 textDecoration: 'none',
                 background: isActive ? 'rgba(255,255,255,0.18)' : 'transparent',
-                border: isActive ? '1px solid rgba(255,255,255,0.25)' : '1px solid transparent',
+                border: isActive ? '2px solid rgba(255,255,255,0.25)' : '1px solid transparent',
                 color: isActive ? 'white' : 'rgba(255,255,255,0.55)',
                 transition: 'all 0.15s ease',
                 position: 'relative',
@@ -188,7 +188,7 @@ function Topbar() {
                 }
               }}
             >
-              <Icon size={19} />
+              <Icon size={24} />
               {isActive && (
                 <span style={{
                   position: 'absolute',
@@ -227,19 +227,19 @@ function Topbar() {
         </div>
 
         {/* User + Logout */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexShrink: 0 }}>
           <div style={{
-            width: 34,
-            height: 34,
+            width: 42,
+            height: 42,
             borderRadius: '50%',
             background: roleColors[currentUser?.role] || '#64748b',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '0.82rem',
+            fontSize: '1rem',
             fontWeight: 700,
             color: 'white',
-            border: '2px solid rgba(255,255,255,0.2)',
+            border: '2px solid rgba(255,255,255,0.3)',
             flexShrink: 0,
           }}
             title={currentUser?.name}
