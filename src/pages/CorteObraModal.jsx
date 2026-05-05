@@ -48,8 +48,15 @@ function generateCortePDF(resultado, client, obra, settings) {
 
     // For each remission group, create a table
     Object.entries(grouped).forEach(([remId, lines]) => {
-        const remObj = remisiones.find(r => r.id === remId);
-        const displayId = remObj?.cotizacionId || remId;
+        const remObj = remisiones.find(r => String(r.id) === String(remId));
+        let displayId = remObj?.cotizacionId;
+        
+        if (!displayId && remObj?.facturaId) {
+            const linkedInv = invoices.find(inv => String(inv.id) === String(remObj.facturaId));
+            if (linkedInv?.cotizacionId) displayId = linkedInv.cotizacionId;
+        }
+        
+        if (!displayId) displayId = remId;
 
         // Add a sub-header for the remission
         doc.setFontSize(9);
@@ -519,8 +526,16 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
 
                                             return Object.entries(grouped).map(([remId, lines]) => {
                                                 const isSelected = selectedRemIds.includes(remId);
-                                                const remObj = remisiones.find(r => r.id === remId);
-                                                const displayId = remObj?.cotizacionId || remId;
+                                                const remObj = remisiones.find(r => String(r.id) === String(remId));
+                                                let displayId = remObj?.cotizacionId;
+                                                
+                                                // Fallback: search via linked invoice if cotizacionId is missing
+                                                if (!displayId && remObj?.facturaId) {
+                                                    const linkedInv = invoices.find(inv => String(inv.id) === String(remObj.facturaId));
+                                                    if (linkedInv?.cotizacionId) displayId = linkedInv.cotizacionId;
+                                                }
+                                                
+                                                if (!displayId) displayId = remId;
 
                                                 return (
                                                     <div key={remId} style={{ 
