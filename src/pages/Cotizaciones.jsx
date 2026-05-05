@@ -65,7 +65,7 @@ class ModalErrorBoundary extends React.Component {
 export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = {}) {
     const { clients, products, cotizaciones, invoices = [], settings, remisiones = [],
         addCotizacion, updateCotizacion, actualizarEstadoCotizacion,
-        createInvoiceFromCotizacion, deleteCotizacion, payInvoice, addCorteObra, updateCorteStatus,
+        createInvoiceFromCotizacion, deleteCotizacion, deleteInvoice, payInvoice, addCorteObra, updateCorteStatus,
         addRemision, editRemision, registrarDevolucion, maintenances = [],
         marcarRemisionCreada, deleteRemision, cancelRemision, setGlobalPreload
     } = useAppContext();
