@@ -46,9 +46,9 @@ function Topbar() {
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Panel de Control',      path: '/',            restricted: true  },
-    { icon: Briefcase,       label: 'Comercial',             path: '/comercial',   restricted: false },
-    { icon: Package,         label: 'Inventario / Equipos',  path: '/products',    restricted: false },
     { icon: Users,           label: 'Clientes',              path: '/clients',     restricted: false },
+    { icon: Package,         label: 'Inventario / Equipos',  path: '/products',    restricted: false },
+    { icon: Briefcase,       label: 'Comercial',             path: '/comercial',   restricted: false },
     { icon: Activity,        label: 'Trazabilidad',          path: '/trazability', restricted: false },
     { icon: Wrench,          label: 'Mantenimientos',        path: '/maintenance', restricted: false },
     { icon: Settings,        label: 'Configuración',         path: '/settings',    restricted: true  },
