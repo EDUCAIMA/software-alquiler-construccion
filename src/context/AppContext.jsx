@@ -586,59 +586,78 @@ export const AppProvider = ({ children }) => {
   };
 
   const registrarDevolucion = async (clientId, obraId, devoluciones, fecha) => {
-    let updatedRems = (remisiones || []).map(r => ({ ...r, items: (r.items || []).map(i => ({ ...i })) }));
+    // 1. Identificar remisiones candidatas (Activas o Parciales para el cliente/obra)
+    const targetRems = (remisiones || [])
+      .filter(r => r.clientId === clientId && r.obraId === obraId && (r.estado === 'Activa' || r.estado === 'Parcial'))
+      .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.id.localeCompare(b.id));
+
+    if (targetRems.length === 0) return;
+
+    // Clonamos las remisiones candidatas para trabajar sobre ellas
+    const updatedRemsMap = {};
+    targetRems.forEach(r => {
+        updatedRemsMap[r.id] = JSON.parse(JSON.stringify(r));
+    });
+
     const stockReintegrar = {};
+    const modifiedIds = new Set();
 
-    devoluciones.forEach(({ productId, cantidad }) => {
+    // 2. Procesar cada producto a devolver aplicando PEPS
+    for (const { productId, cantidad } of devoluciones) {
       let restante = cantidad;
-      const activas = updatedRems
-        .map((r, idx) => ({ r, idx }))
-        .filter(({ r }) => r.clientId === clientId && r.obraId === obraId && (r.estado === 'Activa' || r.estado === 'Parcial'))
-        .sort((a, b) => a.r.fecha.localeCompare(b.r.fecha));
-
-        for (const { idx } of activas) {
+      
+      for (const rem of targetRems) {
         if (restante <= 0) break;
-        const itemIdx = updatedRems[idx].items.findIndex(i => i.productId === productId);
+        
+        const remToUpdate = updatedRemsMap[rem.id];
+        const itemIdx = remToUpdate.items.findIndex(i => i.productId === productId);
         if (itemIdx === -1) continue;
-        const item = updatedRems[idx].items[itemIdx];
-        const pendiente = item.cantidad - item.cantidadDevuelta;
+        
+        const item = remToUpdate.items[itemIdx];
+        const pendiente = item.cantidad - (item.cantidadDevuelta || 0);
         if (pendiente <= 0) continue;
+        
         const descuento = Math.min(restante, pendiente);
         
-        // Registrar la devolución con su fecha
-        item.cantidadDevuelta += descuento;
+        // Registrar la devolución
+        item.cantidadDevuelta = (item.cantidadDevuelta || 0) + descuento;
         if (!item.devoluciones) item.devoluciones = [];
-        item.devoluciones.push({ cantidad: descuento, fecha: fecha || format(new Date(), 'yyyy-MM-dd') });
+        item.devoluciones.push({ 
+            cantidad: descuento, 
+            fecha: fecha || format(new Date(), 'yyyy-MM-dd') 
+        });
         
         restante -= descuento;
         stockReintegrar[productId] = (stockReintegrar[productId] || 0) + descuento;
+        modifiedIds.add(rem.id);
       }
+    }
 
-      updatedRems = updatedRems.map(r => {
-        if (r.clientId !== clientId || r.obraId !== obraId) return r;
-        const total = r.items.reduce((s, i) => s + i.cantidad, 0);
-        const devuelto = r.items.reduce((s, i) => s + i.cantidadDevuelta, 0);
-        const estado = devuelto === 0 ? 'Activa' : devuelto >= total ? 'Cerrada' : 'Parcial';
-        return { ...r, estado };
-      });
-    });
-
-    // Persistir remisiones actualizadas
-    for (const rem of updatedRems) {
+    // 3. Actualizar estados y persistir solo las remisiones modificadas
+    for (const id of modifiedIds) {
+      const rem = updatedRemsMap[id];
+      const total = rem.items.reduce((s, i) => s + (Number(i.cantidad) || 0), 0);
+      const devuelto = rem.items.reduce((s, i) => s + (Number(i.cantidadDevuelta) || 0), 0);
+      
+      rem.estado = devuelto === 0 ? 'Activa' : devuelto >= total ? 'Cerrada' : 'Parcial';
+      
       await api.put(`/api/remisiones/${rem.id}`, rem);
     }
 
-    // Reintegrar stock de productos
+    // 4. Reintegrar stock de productos
     for (const [productId, devuelto] of Object.entries(stockReintegrar)) {
       const prod = products.find(p => p.id === productId);
       if (prod && devuelto > 0) {
-        await api.put(`/api/products/${productId}`, { ...prod, availableStock: Math.min(prod.totalStock, prod.availableStock + devuelto) });
+        await api.put(`/api/products/${productId}`, { 
+            ...prod, 
+            availableStock: Math.min(prod.totalStock, prod.availableStock + devuelto) 
+        });
       }
     }
 
     await reloadAll();
     const client = clients.find(c => c.id === clientId);
-    logAction('Devolución PEPS', `Obra ${obraId} - Fecha Devolución: ${fecha || format(new Date(), 'yyyy-MM-dd')}`, client?.name || 'N/A', 'entry');
+    logAction('Devolución PEPS Aplicada', `Obra ${obraId} - ${devoluciones.length} producto(s)`, client?.name || 'N/A', 'entry');
   };
 
   const deleteRemision = async (remId) => {
