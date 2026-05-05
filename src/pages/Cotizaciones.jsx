@@ -24,6 +24,7 @@ import CorteObraModal from './CorteObraModal';
 import { ActionBtn, BADGE, REM_ICON } from './CotComponents';
 import { ApprovalModal, ShareModal, ContratoEditorModal } from './CotModals';
 import CotDetailPanel from './CotDetailPanel';
+import { NuevaRemisionModal } from './RemisionComponents';
 
 // ─── Error Boundary para el modal de nueva cotización ────────────────────────
 class ModalErrorBoundary extends React.Component {
@@ -91,6 +92,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
     const [devolucionTarget, setDevolucionTarget] = useState(null); // { clientId, obraId }
     const [blockMsg, setBlockMsg] = useState('');
     const [corteObraTarget, setCorteObraTarget] = useState(null); // { invoice: object, step: 'date' | 'validation', date: string }
+    const [remPreloadData, setRemPreloadData] = useState(null);
 
     useEffect(() => {
         const h1 = () => setShowNew(true);
@@ -138,7 +140,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
     const total = (c) => (c.items || []).reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (c.transporte || 0);
     const kpi = (est) => cotizaciones.filter(c => c.estado === est).length;
 
-    const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
 
     const handleSort = (key) => {
         let direction = 'asc';
@@ -544,8 +546,8 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     onCreateRemision={() => {
                         // Si hay factura vinculada se usa, de lo contrario se usa la cotización aprobada directamente
                         const preloadData = selectedInv || selectedCot;
-                        setGlobalPreload(preloadData);
-                        navigate('/comercial?tab=despachos');
+                        setRemPreloadData(preloadData);
+                        setSelected(null); // Cerrar el panel para mostrar el modal de remisión
                     }}
                     onFinalizeDispatch={(rem) => { handleFinalizeDispatch(rem); }}
                     onDevolucion={(cot) => setDevolucionTarget({ clientId: cot.clientId, obraId: cot.obraId })}
@@ -807,6 +809,16 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     initialClientId={corteModalParams.clientId}
                     initialObraId={corteModalParams.obraId}
                     onClose={() => setShowCorteModal(false)}
+                />
+            {remPreloadData && (
+                <NuevaRemisionModal 
+                    onClose={() => setRemPreloadData(null)}
+                    onSave={addRemision}
+                    clients={clients}
+                    products={products}
+                    maintenances={maintenances}
+                    facturaPreload={remPreloadData}
+                    settings={settings}
                 />
             )}
 

@@ -797,6 +797,79 @@ function generateCortePDF(invoice, client, obra, settings, allInvoices, allRemis
     }
 }
 
-export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, generateCortePDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP };
+export function exportClientPDF(client, invoices, products, settings) {
+    const doc = new jsPDF();
+    const margin = 10;
+    let y = applyStandardLayout(doc, 'Ficha de Cliente', settings, client.id);
+
+    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('1. Datos del Cliente', margin, y);
+
+    autoTable(doc, {
+        startY: y + 5,
+        body: [
+            ['Razón Social', client.name, 'NIT / CC', client.nit || '—'],
+            ['Tipo Persona', client.tipoPersona || '—', 'Régimen', client.regimen || '—'],
+            ['Responsable IVA', client.responsableIVA ? 'Sí' : 'No', '% IVA', `${client.porcIVA || 0}%`],
+            ['% Retención', `${client.porcRetencion || 0}%`, 'Contacto', client.contactoPrincipal || '—'],
+            ['Correo', client.email || '—', 'Teléfono', client.phone || '—'],
+            ['Dirección', client.direccion || '—', 'Ciudad', `${client.ciudad || ''} – ${client.departamento || ''}`],
+            ['Deuda Actual', `$${(client.debt || 0).toLocaleString()}`, 'Desde', client.joined || '—'],
+        ],
+        styles: { fontSize: 8, cellPadding: 3 },
+        columnStyles: { 
+            0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 35 }, 
+            2: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 35 } 
+        },
+        margin: { left: margin, right: margin },
+    });
+
+    let currentY = doc.lastAutoTable.finalY + 12;
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('2. Obras / Proyectos', margin, currentY);
+
+    autoTable(doc, {
+        startY: currentY + 5,
+        head: [['ID Obra', 'Nombre', 'Ubicación', 'Estado', 'Presupuesto', 'Inicio']],
+        body: (client.obras || []).map(o => [
+            o.id, o.nombre, o.ubicacion || '—', o.estado,
+            `$${(o.presupuesto || 0).toLocaleString()}`,
+            o.fechaInicio || '—',
+        ]),
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
+        styles: { fontSize: 8, cellPadding: 3 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: margin, right: margin },
+    });
+
+    currentY = doc.lastAutoTable.finalY + 12;
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+    doc.text('3. Historial de Facturación', margin, currentY);
+
+    const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
+    autoTable(doc, {
+        startY: currentY + 5,
+        head: [['Factura', 'Obra', 'Fecha', 'Equipos', 'Monto', 'Estado']],
+        body: clientInvoices.length > 0
+            ? clientInvoices.map(inv => {
+                const obraName = (client.obras || []).find(o => o.id === inv.obraId)?.nombre || '—';
+                const itemsStr = inv.items.map(item => {
+                    const prod = products.find(p => p.id === item.productId);
+                    return prod ? `${item.quantity}x ${prod.name}` : item.productId;
+                }).join(', ');
+                return [inv.id, obraName, inv.date, itemsStr, `$${inv.amount.toLocaleString()}`, inv.status === 'Paid' ? 'PAGADA' : 'PENDIENTE'];
+            })
+            : [['—', '—', '—', 'Sin facturas registradas', '—', '—']],
+        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
+        styles: { fontSize: 7.5, cellPadding: 3 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: margin, right: margin },
+    });
+
+    doc.save(`Ficha_${client.name.replace(/\s+/g, '_')}_${client.id}.pdf`);
+}
+
+export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, generateCortePDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP, exportClientPDF };
 
 

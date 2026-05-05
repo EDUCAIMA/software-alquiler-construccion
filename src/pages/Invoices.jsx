@@ -35,7 +35,7 @@ export default function Invoices({ hideHeader = false } = {}) {
     const [filterClient, setFilterClient] = useState('');
     const [filterObra, setFilterObra] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
-    const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
 

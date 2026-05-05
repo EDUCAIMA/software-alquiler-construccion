@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    Plus, Search, Printer, FileText, X, Building2, MapPin,
-    Phone, Mail, Edit3, ChevronDown, ChevronRight, CheckCircle,
-    Clock, AlertTriangle, Receipt, Percent, User, Download, Trash2, ShieldAlert,
-    ChevronLeft, ChevronsLeft, ChevronsRight, ChevronUp, Camera
+    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Search, Plus, 
+    Printer, Trash2, Edit3, X, Mail, Phone, MapPin, Download, User, Building2, Receipt, Percent, FileText, Truck, Eye, CheckCircle, Clock, AlertTriangle, ShieldAlert
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import { exportClientPDF } from './CotizacionesHelpers';
+import { NuevaRemisionModal, ESTADO_CFG } from './RemisionComponents';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
@@ -38,85 +38,6 @@ const SelectField = ({ label, children, ...props }) => (
         </select>
     </div>
 );
-
-// ─── PDF Export ───────────────────────────────────────────────────────────────
-function exportClientPDF(client, invoices, products, settings) {
-    const doc = new jsPDF();
-    const W = doc.internal.pageSize.getWidth();
-    const margin = 10;
-
-    let y = applyStandardLayout(doc, 'Ficha de Cliente', settings, client.id);
-
-    // Datos generales section
-    doc.setTextColor(30, 41, 59);
-    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('1. Datos del Cliente', margin, y);
-
-    autoTable(doc, {
-        startY: y + 5,
-        body: [
-            ['Razón Social', client.name, 'NIT / CC', client.nit || '—'],
-            ['Tipo Persona', client.tipoPersona || '—', 'Régimen', client.regimen || '—'],
-            ['Responsable IVA', client.responsableIVA ? 'Sí' : 'No', '% IVA', `${client.porcIVA || 0}%`],
-            ['% Retención', `${client.porcRetencion || 0}%`, 'Contacto', client.contactoPrincipal || '—'],
-            ['Correo', client.email || '—', 'Teléfono', client.phone || '—'],
-            ['Dirección', client.direccion || '—', 'Ciudad', `${client.ciudad || ''} – ${client.departamento || ''}`],
-            ['Deuda Actual', `$${(client.debt || 0).toLocaleString()}`, 'Desde', client.joined || '—'],
-        ],
-        styles: { fontSize: 8, cellPadding: 3 },
-        columnStyles: { 
-            0: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 35 }, 
-            2: { fontStyle: 'bold', fillColor: [248, 250, 252], cellWidth: 35 } 
-        },
-        margin: { left: margin, right: margin },
-    });
-
-    // Obras section
-    let currentY = doc.lastAutoTable.finalY + 12;
-    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('2. Obras / Proyectos', margin, currentY);
-
-    autoTable(doc, {
-        startY: currentY + 5,
-        head: [['ID Obra', 'Nombre', 'Ubicación', 'Estado', 'Presupuesto', 'Inicio']],
-        body: (client.obras || []).map(o => [
-            o.id, o.nombre, o.ubicacion || '—', o.estado,
-            `$${(o.presupuesto || 0).toLocaleString()}`,
-            o.fechaInicio || '—',
-        ]),
-        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
-        styles: { fontSize: 8, cellPadding: 3 },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        margin: { left: margin, right: margin },
-    });
-
-    // Facturas section
-    currentY = doc.lastAutoTable.finalY + 12;
-    doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('3. Historial de Facturación', margin, currentY);
-
-    const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
-    autoTable(doc, {
-        startY: currentY + 5,
-        head: [['Factura', 'Obra', 'Fecha', 'Equipos', 'Monto', 'Estado']],
-        body: clientInvoices.length > 0
-            ? clientInvoices.map(inv => {
-                const obraName = (client.obras || []).find(o => o.id === inv.obraId)?.nombre || '—';
-                const itemsStr = inv.items.map(item => {
-                    const prod = products.find(p => p.id === item.productId);
-                    return prod ? `${item.quantity}x ${prod.name}` : item.productId;
-                }).join(', ');
-                return [inv.id, obraName, inv.date, itemsStr, `$${inv.amount.toLocaleString()}`, inv.status === 'Paid' ? 'PAGADA' : 'PENDIENTE'];
-            })
-            : [['—', '—', '—', 'Sin facturas registradas', '—', '—']],
-        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
-        styles: { fontSize: 7.5, cellPadding: 3 },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        margin: { left: margin, right: margin },
-    });
-
-    doc.save(`Ficha_${client.name.replace(/\s+/g, '_')}_${client.id}.pdf`);
-}
 
 // ─── MODAL: Nuevo / Editar Cliente ────────────────────────────────────────────
 const EMPTY_CLIENT = {
@@ -152,7 +73,6 @@ function ClientModal({ initial, onSave, onClose, isEdit }) {
 
                 <div style={{ padding: '1.25rem 2rem', overflowY: 'auto' }}>
                     <form onSubmit={e => { e.preventDefault(); onSave(form); }} id="client-form" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        {/* Sección: Datos Generales */}
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                                 <User size={16} color="#2365AB" />
@@ -178,7 +98,6 @@ function ClientModal({ initial, onSave, onClose, isEdit }) {
 
                         <div style={{ borderTop: '1px solid #e2e8f0' }} />
 
-                        {/* Sección: Configuración Tributaria */}
                         <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
                                 <Percent size={16} color="#10b981" />
@@ -205,7 +124,6 @@ function ClientModal({ initial, onSave, onClose, isEdit }) {
                                 <InputField label="% Ret. Fuente" type="number" min="0" max="100" step="0.1" value={form.porcRetencion} onChange={e => set('porcRetencion', Number(e.target.value))} />
                             </div>
                         </div>
-                        {/* Sección: Obra Inicial (Solo para nuevos registros) */}
                         {!isEdit && (
                             <>
                                 <div style={{ borderTop: '1px solid #e2e8f0' }} />
@@ -226,8 +144,6 @@ function ClientModal({ initial, onSave, onClose, isEdit }) {
                                 </div>
                             </>
                         )}
-
-
                     </form>
                 </div>
 
@@ -308,247 +224,6 @@ const SectionLabel = ({ icon, color, children }) => (
     </div>
 );
 
-function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, onDelete }) {
-    const { settings } = useAppContext();
-    const [tab, setTab] = useState('datos');
-    const [showObraModal, setShowObraModal] = useState(false);
-
-    const handleDelete = () => {
-        const pass = prompt('POR SEGURIDAD: Ingrese la contraseña de administrador para eliminar este cliente:');
-        if (pass === null) return;
-        if (pass === 'admin123') {
-            if (window.confirm(`¿Está seguro de eliminar permanentemente a ${client.name}?`)) onDelete(client.id);
-        } else {
-            alert('Contraseña incorrecta.');
-        }
-    };
-
-    const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
-    const totalFacturado = clientInvoices.reduce((s, i) => s + i.amount, 0);
-    const totalPagado = clientInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
-    const deuda = client.debt || 0;
-    const obrasActivas = (client.obras || []).filter(o => o.estado === 'Activa').length;
-
-    const TABS = [
-        { k: 'datos',    label: 'Información' },
-        { k: 'obras',    label: `Obras (${client.obras?.length || 0})` },
-        { k: 'historial',label: `Historial (${clientInvoices.length})` },
-    ];
-
-    return (
-        <>
-            {/* Backdrop */}
-            <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', backdropFilter:'blur(6px)', zIndex:1000 }} />
-
-            {/* Dialog */}
-            <div style={{ position:'fixed', inset:0, zIndex:1001, display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
-                <div onClick={e => e.stopPropagation()} style={{
-                    width:'100%', maxWidth:1180, height:'90vh',
-                    display:'flex', overflow:'hidden',
-                    borderRadius:'20px', boxShadow:'0 32px 80px -12px rgba(0,0,0,0.4)',
-                    border:'1px solid #1e3a5f',
-                    animation:'cdFadeIn 0.22s ease'
-                }}>
-
-                    {/* ── LEFT SIDEBAR ── */}
-                    <div style={{
-                        width:270, flexShrink:0,
-                        background:'linear-gradient(160deg,#0c2340 0%,#1a406e 100%)',
-                        display:'flex', flexDirection:'column', padding:'2rem 1.5rem', gap:'1.25rem', overflowY:'auto'
-                    }}>
-                        {/* Avatar */}
-                        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', gap:'0.65rem' }}>
-                            <div style={{ width:72, height:72, borderRadius:'50%', background:'rgba(255,255,255,0.1)', border:'2px solid rgba(255,255,255,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.75rem', fontWeight:800, color:'white' }}>
-                                {client.name?.charAt(0).toUpperCase()}
-                            </div>
-                            <div style={{ color:'white', fontWeight:800, fontSize:'0.95rem', lineHeight:1.3 }}>{client.name}</div>
-                            <div style={{ color:'rgba(255,255,255,0.5)', fontSize:'0.75rem' }}>NIT: {client.nit || 'N/A'}</div>
-                            <span style={{ padding:'3px 12px', borderRadius:'20px', fontSize:'0.68rem', fontWeight:700,
-                                background: deuda > 0 ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)',
-                                color: deuda > 0 ? '#fca5a5' : '#6ee7b7',
-                                border:`1px solid ${deuda > 0 ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`
-                            }}>{deuda > 0 ? '● DEUDA ACTIVA' : '✓ AL DÍA'}</span>
-                        </div>
-
-                        <div style={{ height:'1px', background:'rgba(255,255,255,0.08)' }} />
-
-                        {/* Métricas */}
-                        {[
-                            { label:'Facturado',    value:`$${totalFacturado.toLocaleString()}`, color:'#93c5fd' },
-                            { label:'Pagado',       value:`$${totalPagado.toLocaleString()}`,    color:'#6ee7b7' },
-                            { label:'Deuda',        value:`$${deuda.toLocaleString()}`,           color: deuda > 0 ? '#fca5a5' : '#6ee7b7' },
-                            { label:'Obras Activas',value: obrasActivas,                          color:'#fde68a' },
-                            { label:'Total Obras',  value: client.obras?.length || 0,             color:'rgba(255,255,255,0.6)' },
-                        ].map(({ label, value, color }) => (
-                            <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                                <span style={{ fontSize:'0.75rem', color:'rgba(255,255,255,0.5)' }}>{label}</span>
-                                <span style={{ fontSize:'0.88rem', fontWeight:700, color }}>{value}</span>
-                            </div>
-                        ))}
-
-                        <div style={{ height:'1px', background:'rgba(255,255,255,0.08)' }} />
-
-                        {/* Contacto rápido */}
-                        {client.phone && <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', color:'rgba(255,255,255,0.6)', fontSize:'0.78rem' }}><Phone size={13}/>{client.phone}</div>}
-                        {client.email && <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', color:'rgba(255,255,255,0.6)', fontSize:'0.78rem' }}><Mail size={13}/>{client.email}</div>}
-                        {client.ciudad && <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', color:'rgba(255,255,255,0.6)', fontSize:'0.78rem' }}><MapPin size={13}/>{client.ciudad}, {client.departamento}</div>}
-
-                        <div style={{ flex:1 }} />
-
-                        {/* Acciones */}
-                        {[
-                            { icon:<Download size={14}/>, label:'Exportar PDF', action:() => exportClientPDF(client, invoices, products, settings), danger:false },
-                            { icon:<Edit3 size={14}/>,    label:'Editar',       action:() => onEdit(client), danger:false },
-                            { icon:<Trash2 size={14}/>,  label:'Eliminar',     action:handleDelete, danger:true },
-                        ].map(({ icon, label, action, danger }) => (
-                            <button key={label} onClick={action} style={{
-                                display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem',
-                                padding:'0.6rem', borderRadius:'10px', cursor:'pointer',
-                                fontSize:'0.8rem', fontWeight:600, transition:'all 0.18s',
-                                background: danger ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.08)',
-                                border:`1px solid ${danger ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.12)'}`,
-                                color: danger ? '#fca5a5' : 'rgba(255,255,255,0.85)'
-                            }}
-                                onMouseEnter={e => e.currentTarget.style.background = danger ? 'rgba(239,68,68,0.22)' : 'rgba(255,255,255,0.15)'}
-                                onMouseLeave={e => e.currentTarget.style.background = danger ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.08)'}
-                            >{icon}{label}</button>
-                        ))}
-                    </div>
-
-                    {/* ── RIGHT PANEL ── */}
-                    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', background:'white' }}>
-
-                        {/* Tab bar */}
-                        <div style={{ padding:'1rem 1.75rem', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', background:'white', flexShrink:0 }}>
-                            <div style={{ display:'flex', gap:'0.25rem', background:'#f8fafc', borderRadius:'10px', padding:'0.25rem' }}>
-                                {TABS.map(({ k, label }) => (
-                                    <button key={k} onClick={() => setTab(k)} style={{
-                                        padding:'0.45rem 1.1rem', borderRadius:'8px', fontSize:'0.82rem', fontWeight:700,
-                                        border:'none', cursor:'pointer', transition:'all 0.18s',
-                                        background: tab === k ? 'white' : 'transparent',
-                                        color: tab === k ? '#2365AB' : '#94a3b8',
-                                        boxShadow: tab === k ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'
-                                    }}>{label}</button>
-                                ))}
-                            </div>
-                            <button onClick={onClose} style={{ background:'#f1f5f9', border:'none', borderRadius:'50%', width:34, height:34, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:'#64748b', transition:'all 0.2s' }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                                onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
-                            ><X size={17}/></button>
-                        </div>
-
-                        {/* Content */}
-                        <div style={{ flex:1, overflowY:'auto', padding:'2rem 2.5rem' }}>
-
-                            {/* Tab: Información */}
-                            {tab === 'datos' && (<>
-                                <SectionLabel icon={<User size={13}/>} color="#2365AB">Datos de Contacto</SectionLabel>
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'1.5rem', marginBottom:'2rem' }}>
-                                    <DetailField label="Razón Social">{client.name}</DetailField>
-                                    <DetailField label="NIT / Cédula">{client.nit}</DetailField>
-                                    <DetailField label="Contacto Principal">{client.contactoPrincipal}</DetailField>
-                                    <DetailField label="Correo">{client.email}</DetailField>
-                                    <DetailField label="Teléfono">{client.phone}</DetailField>
-                                    <DetailField label="Dirección" full>{client.direccion ? `${client.direccion}, ${client.ciudad} – ${client.departamento}` : null}</DetailField>
-                                </div>
-                                <div style={{ height:'1px', background:'#f1f5f9', marginBottom:'2rem' }}/>
-                                <SectionLabel icon={<Percent size={13}/>} color="#10b981">Configuración Tributaria</SectionLabel>
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'1.5rem' }}>
-                                    <DetailField label="Tipo de Persona">{client.tipoPersona}</DetailField>
-                                    <DetailField label="Régimen">{client.regimen}</DetailField>
-                                    <DetailField label="Responsable IVA">{client.responsableIVA ? 'Sí' : 'No'}</DetailField>
-                                    <DetailField label="% IVA">{client.porcIVA || 0}%</DetailField>
-                                    <DetailField label="% Retención">{client.porcRetencion || 0}%</DetailField>
-                                </div>
-                                {(client.foto || client.fotoCC) && (
-                                    <div style={{ display:'flex', gap:'1.5rem', marginTop:'2rem' }}>
-                                        {client.foto && <div style={{flex:1}}><div style={{fontSize:'0.68rem',color:'#94a3b8',fontWeight:700,marginBottom:'0.5rem',textTransform:'uppercase'}}>Foto Cliente</div><img src={client.foto} alt="Cliente" style={{width:'100%',borderRadius:'10px',border:'1px solid #e2e8f0',aspectRatio:'4/3',objectFit:'cover'}}/></div>}
-                                        {client.fotoCC && <div style={{flex:1}}><div style={{fontSize:'0.68rem',color:'#94a3b8',fontWeight:700,marginBottom:'0.5rem',textTransform:'uppercase'}}>Documento</div><img src={client.fotoCC} alt="CC" style={{width:'100%',borderRadius:'10px',border:'1px solid #e2e8f0',aspectRatio:'4/3',objectFit:'cover'}}/></div>}
-                                    </div>
-                                )}
-                            </>)}
-
-                            {/* Tab: Obras */}
-                            {tab === 'obras' && (<>
-                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem' }}>
-                                    <SectionLabel icon={<Building2 size={13}/>} color="#f97316">{client.obras?.length || 0} Proyectos</SectionLabel>
-                                    <button onClick={() => setShowObraModal(true)} className="btn btn-primary btn-sm" style={{display:'flex',alignItems:'center',gap:'0.4rem'}}><Plus size={14}/> Nueva Obra</button>
-                                </div>
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'1rem' }}>
-                                    {(client.obras || []).map(obra => {
-                                        if (!obra) return null;
-                                        const cfg = OBRA_ESTADO[obra.estado] || OBRA_ESTADO['Activa'];
-                                        return (
-                                            <div key={obra.id} style={{ padding:'1.25rem 1.5rem', border:'1px solid #e2e8f0', borderRadius:'14px', background:'#fafafa', borderLeft:`4px solid ${cfg.color}` }}>
-                                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.65rem' }}>
-                                                    <div style={{ fontWeight:700, color:'#0f172a', fontSize:'0.92rem' }}>{obra.nombre}</div>
-                                                    <span style={{ padding:'3px 9px', borderRadius:'20px', background:`${cfg.color}18`, color:cfg.color, fontSize:'0.65rem', fontWeight:700, border:`1px solid ${cfg.color}30` }}>{obra.estado.toUpperCase()}</span>
-                                                </div>
-                                                <div style={{ fontSize:'0.78rem', color:'#94a3b8', display:'flex', alignItems:'center', gap:'0.35rem' }}><MapPin size={11}/>{obra.ubicacion || 'Sin ubicación'}</div>
-                                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'0.75rem', paddingTop:'0.75rem', borderTop:'1px solid #f1f5f9' }}>
-                                                    <span style={{ fontSize:'0.72rem', color:'#cbd5e1' }}>Presupuesto</span>
-                                                    <span style={{ fontSize:'0.88rem', fontWeight:800, color:'#0f172a' }}>${(obra.presupuesto||0).toLocaleString()}</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                {(!client.obras || client.obras.length === 0) && (
-                                    <div style={{ textAlign:'center', padding:'4rem', color:'#94a3b8', border:'1px dashed #e2e8f0', borderRadius:'14px' }}>No hay obras registradas.</div>
-                                )}
-                            </>)}
-
-                            {/* Tab: Historial */}
-                            {tab === 'historial' && (<>
-                                <SectionLabel icon={<Receipt size={13}/>} color="#64748b">Historial de Facturación</SectionLabel>
-                                {clientInvoices.length === 0 ? (
-                                    <div style={{ textAlign:'center', padding:'4rem', color:'#94a3b8', border:'1px dashed #e2e8f0', borderRadius:'14px' }}>No hay facturas registradas.</div>
-                                ) : (
-                                    <div style={{ border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden', marginTop:'1rem' }}>
-                                        <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                                            <thead>
-                                                <tr style={{ background:'#f8fafc' }}>
-                                                    {['Factura','Obra','Fecha','Monto','Estado'].map(h => (
-                                                        <th key={h} style={{ padding:'0.75rem 1rem', textAlign:'left', fontSize:'0.68rem', fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {(clientInvoices || []).map((inv, idx) => (
-                                                    <tr key={inv.id} style={{ borderBottom:'1px solid #f8fafc', background: idx%2===0 ? 'white' : '#fafafa' }}>
-                                                        <td style={{ padding:'0.75rem 1rem', fontWeight:700, color:'#2365AB', fontSize:'0.83rem' }}>{inv.id}</td>
-                                                        <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#374151' }}>{(client.obras || []).find(o => o.id === inv.obraId)?.nombre || '—'}</td>
-                                                        <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#6b7280' }}>{inv.date}</td>
-                                                        <td style={{ padding:'0.75rem 1rem', fontWeight:700, fontSize:'0.83rem' }}>${inv.amount.toLocaleString()}</td>
-                                                        <td style={{ padding:'0.75rem 1rem' }}>
-                                                            <span style={{ padding:'3px 10px', borderRadius:'20px', fontSize:'0.65rem', fontWeight:700, background: inv.status==='Paid' ? '#dcfce7' : '#fef9c3', color: inv.status==='Paid' ? '#166534' : '#854d0e' }}>
-                                                                {inv.status === 'Paid' ? 'PAGADA' : 'PENDIENTE'}
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </>)}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {showObraModal && <ObraModal onSave={obra => { onAddObra(client.id, obra); setShowObraModal(false); }} onClose={() => setShowObraModal(false)} />}
-
-            <style>{`
-                @keyframes cdFadeIn {
-                    from { opacity:0; transform:scale(0.97); }
-                    to   { opacity:1; transform:scale(1); }
-                }
-            `}</style>
-        </>
-    );
-}
-
 // ─── MODAL: Confirmar Eliminación con Pasword ─────────────────────────────────
 function DeleteClientModal({ client, onClose, onConfirm }) {
     const [password, setPassword] = useState('');
@@ -608,9 +283,287 @@ function DeleteClientModal({ client, onClose, onConfirm }) {
     );
 }
 
+function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, onDelete, remisiones, addRemision, maintenances, settings }) {
+    const [tab, setTab] = useState('datos');
+    const [showObraModal, setShowObraModal] = useState(false);
+    const [showRemisionModal, setShowRemisionModal] = useState(false);
+
+    const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
+    const totalFacturado = clientInvoices.reduce((s, i) => s + i.amount, 0);
+    const totalPagado = clientInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
+    const deuda = client.debt || 0;
+    const obrasActivas = (client.obras || []).filter(o => o.estado === 'Activa').length;
+
+    const handleDelete = () => {
+        const pass = prompt('POR SEGURIDAD: Ingrese la contraseña de administrador para eliminar este cliente:');
+        if (pass === null) return;
+        if (pass === 'admin123') {
+            if (window.confirm(`¿Está seguro de eliminar permanentemente a ${client.name}?`)) onDelete(client.id);
+        } else {
+            alert('Contraseña incorrecta.');
+        }
+    };
+
+    const clientRemisiones = remisiones.filter(r => r.clientId === client.id);
+
+    const TABS = [
+        { k: 'datos',    label: 'Información' },
+        { k: 'obras',    label: `Obras (${client.obras?.length || 0})` },
+        { k: 'remisiones', label: `Remisiones (${clientRemisiones.length})` },
+        { k: 'historial',label: `Historial (${clientInvoices.length})` },
+    ];
+
+    return (
+        <>
+            <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', backdropFilter:'blur(6px)', zIndex:1000 }} />
+            <div style={{ position:'fixed', inset:0, zIndex:1001, display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
+                <div onClick={e => e.stopPropagation()} style={{
+                    width:'100%', maxWidth:1180, height:'90vh',
+                    display:'flex', overflow:'hidden',
+                    borderRadius:'20px', boxShadow:'0 32px 80px -12px rgba(0,0,0,0.4)',
+                    border:'1px solid #1e3a5f',
+                    animation:'cdFadeIn 0.22s ease'
+                }}>
+
+                    <div style={{
+                        width:270, flexShrink:0,
+                        background:'linear-gradient(160deg,#0c2340 0%,#1a406e 100%)',
+                        display:'flex', flexDirection:'column', padding:'2rem 1.5rem', gap:'1.25rem', overflowY:'auto'
+                    }}>
+                        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', textAlign:'center', gap:'0.65rem' }}>
+                            <div style={{ width:72, height:72, borderRadius:'50%', background:'rgba(255,255,255,0.1)', border:'2px solid rgba(255,255,255,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.75rem', fontWeight:800, color:'white' }}>
+                                {client.name?.charAt(0).toUpperCase()}
+                            </div>
+                            <div style={{ color:'white', fontWeight:800, fontSize:'0.95rem', lineHeight:1.3 }}>{client.name}</div>
+                            <div style={{ color:'rgba(255,255,255,0.5)', fontSize:'0.75rem' }}>NIT: {client.nit || 'N/A'}</div>
+                            <span style={{ padding:'3px 12px', borderRadius:'20px', fontSize:'0.68rem', fontWeight:700,
+                                background: deuda > 0 ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)',
+                                color: deuda > 0 ? '#fca5a5' : '#6ee7b7',
+                                border:`1px solid ${deuda > 0 ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`
+                            }}>{deuda > 0 ? '● DEUDA ACTIVA' : '✓ AL DÍA'}</span>
+                        </div>
+
+                        <div style={{ height:'1px', background:'rgba(255,255,255,0.08)' }} />
+
+                        {[
+                            { label:'Facturado',    value:`$${totalFacturado.toLocaleString()}`, color:'#93c5fd' },
+                            { label:'Pagado',       value:`$${totalPagado.toLocaleString()}`,    color:'#6ee7b7' },
+                            { label:'Deuda',        value:`$${deuda.toLocaleString()}`,           color: deuda > 0 ? '#fca5a5' : '#6ee7b7' },
+                            { label:'Obras Activas',value: obrasActivas,                          color:'#fde68a' },
+                            { label:'Total Obras',  value: client.obras?.length || 0,             color:'rgba(255,255,255,0.6)' },
+                        ].map(({ label, value, color }) => (
+                            <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                                <span style={{ fontSize:'0.75rem', color:'rgba(255,255,255,0.5)' }}>{label}</span>
+                                <span style={{ fontSize:'0.88rem', fontWeight:700, color }}>{value}</span>
+                            </div>
+                        ))}
+
+                        <div style={{ height:'1px', background:'rgba(255,255,255,0.08)' }} />
+
+                        {client.phone && <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', color:'rgba(255,255,255,0.6)', fontSize:'0.78rem' }}><Phone size={13}/>{client.phone}</div>}
+                        {client.email && <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', color:'rgba(255,255,255,0.6)', fontSize:'0.78rem' }}><Mail size={13}/>{client.email}</div>}
+                        {client.ciudad && <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', color:'rgba(255,255,255,0.6)', fontSize:'0.78rem' }}><MapPin size={13}/>{client.ciudad}, {client.departamento}</div>}
+
+                        <div style={{ flex:1 }} />
+
+                        {[
+                            { icon:<Download size={14}/>, label:'Exportar PDF', action:() => exportClientPDF(client, invoices, products, settings), danger:false },
+                            { icon:<Truck size={14}/>,    label:'Nueva Remisión', action:() => setShowRemisionModal(true), danger:false },
+                            { icon:<Edit3 size={14}/>,    label:'Editar',       action:() => onEdit(client), danger:false },
+                            { icon:<Trash2 size={14}/>,  label:'Eliminar',     action:handleDelete, danger:true },
+                        ].map(({ icon, label, action, danger }) => (
+                            <button key={label} onClick={action} style={{
+                                display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem',
+                                padding:'0.6rem', borderRadius:'10px', cursor:'pointer',
+                                fontSize:'0.8rem', fontWeight:600, transition:'all 0.18s',
+                                background: danger ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.08)',
+                                border:`1px solid ${danger ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.12)'}`,
+                                color: danger ? '#fca5a5' : 'rgba(255,255,255,0.85)'
+                            }}
+                                onMouseEnter={e => e.currentTarget.style.background = danger ? 'rgba(239,68,68,0.22)' : 'rgba(255,255,255,0.15)'}
+                                onMouseLeave={e => e.currentTarget.style.background = danger ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.08)'}
+                            >{icon}{label}</button>
+                        ))}
+                    </div>
+
+                    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', background:'white' }}>
+                        <div style={{ padding:'1rem 1.75rem', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', background:'white', flexShrink:0 }}>
+                            <div style={{ display:'flex', gap:'0.25rem', background:'#f8fafc', borderRadius:'10px', padding:'0.25rem' }}>
+                                {TABS.map(({ k, label }) => (
+                                    <button key={k} onClick={() => setTab(k)} style={{
+                                        padding:'0.45rem 1.1rem', borderRadius:'8px', fontSize:'0.82rem', fontWeight:700,
+                                        border:'none', cursor:'pointer', transition:'all 0.18s',
+                                        background: tab === k ? 'white' : 'transparent',
+                                        color: tab === k ? '#2365AB' : '#94a3b8',
+                                        boxShadow: tab === k ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'
+                                    }}>{label}</button>
+                                ))}
+                            </div>
+                            <button onClick={onClose} style={{ background:'#f1f5f9', border:'none', borderRadius:'50%', width:34, height:34, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:'#64748b', transition:'all 0.2s' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                                onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+                            ><X size={17}/></button>
+                        </div>
+
+                        <div style={{ flex:1, overflowY:'auto', padding:'2rem 2.5rem' }}>
+                            {tab === 'datos' && (<>
+                                <SectionLabel icon={<User size={13}/>} color="#2365AB">Datos de Contacto</SectionLabel>
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'1.5rem', marginBottom:'2rem' }}>
+                                    <DetailField label="Razón Social">{client.name}</DetailField>
+                                    <DetailField label="NIT / Cédula">{client.nit}</DetailField>
+                                    <DetailField label="Contacto Principal">{client.contactoPrincipal}</DetailField>
+                                    <DetailField label="Correo">{client.email}</DetailField>
+                                    <DetailField label="Teléfono">{client.phone}</DetailField>
+                                    <DetailField label="Dirección" full>{client.direccion ? `${client.direccion}, ${client.ciudad} – ${client.departamento}` : null}</DetailField>
+                                </div>
+                                <div style={{ height:'1px', background:'#f1f5f9', marginBottom:'2rem' }}/>
+                                <SectionLabel icon={<Percent size={13}/>} color="#10b981">Configuración Tributaria</SectionLabel>
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'1.5rem' }}>
+                                    <DetailField label="Tipo de Persona">{client.tipoPersona}</DetailField>
+                                    <DetailField label="Régimen">{client.regimen}</DetailField>
+                                    <DetailField label="Responsable IVA">{client.responsableIVA ? 'Sí' : 'No'}</DetailField>
+                                    <DetailField label="% IVA">{client.porcIVA || 0}%</DetailField>
+                                    <DetailField label="% Retención">{client.porcRetencion || 0}%</DetailField>
+                                </div>
+                            </>)}
+
+                            {tab === 'obras' && (<>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem' }}>
+                                    <SectionLabel icon={<Building2 size={13}/>} color="#f97316">{client.obras?.length || 0} Proyectos</SectionLabel>
+                                    <button onClick={() => setShowObraModal(true)} className="btn btn-primary btn-sm" style={{display:'flex',alignItems:'center',gap:'0.4rem'}}><Plus size={14}/> Nueva Obra</button>
+                                </div>
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'1rem' }}>
+                                    {(client.obras || []).map(obra => {
+                                        if (!obra) return null;
+                                        const cfg = OBRA_ESTADO[obra.estado] || OBRA_ESTADO['Activa'];
+                                        return (
+                                            <div key={obra.id} style={{ padding:'1.25rem 1.5rem', border:'1px solid #e2e8f0', borderRadius:'14px', background:'#fafafa', borderLeft:`4px solid ${cfg.color}` }}>
+                                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.65rem' }}>
+                                                    <div style={{ fontWeight:700, color:'#0f172a', fontSize:'0.92rem' }}>{obra.nombre}</div>
+                                                    <span style={{ padding:'3px 9px', borderRadius:'20px', background:`${cfg.color}18`, color:cfg.color, fontSize:'0.65rem', fontWeight:700, border:`1px solid ${cfg.color}30` }}>{obra.estado.toUpperCase()}</span>
+                                                </div>
+                                                <div style={{ fontSize:'0.78rem', color:'#94a3b8', display:'flex', alignItems:'center', gap:'0.35rem' }}><MapPin size={11}/>{obra.ubicacion || 'Sin ubicación'}</div>
+                                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'0.75rem', paddingTop:'0.75rem', borderTop:'1px solid #f1f5f9' }}>
+                                                    <span style={{ fontSize:'0.72rem', color:'#cbd5e1' }}>Presupuesto</span>
+                                                    <span style={{ fontSize:'0.88rem', fontWeight:800, color:'#0f172a' }}>${(obra.presupuesto||0).toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </>)}
+
+                            {tab === 'remisiones' && (<>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem' }}>
+                                    <SectionLabel icon={<Truck size={13}/>} color="#2365AB">{clientRemisiones.length} Remisiones</SectionLabel>
+                                    <button onClick={() => setShowRemisionModal(true)} className="btn btn-primary btn-sm" style={{display:'flex',alignItems:'center',gap:'0.4rem'}}><Plus size={14}/> Nueva Remisión</button>
+                                </div>
+                                {clientRemisiones.length === 0 ? (
+                                    <div style={{ textAlign:'center', padding:'4rem', color:'#94a3b8', border:'1px dashed #e2e8f0', borderRadius:'14px' }}>No hay remisiones registradas.</div>
+                                ) : (
+                                    <div style={{ border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
+                                        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                                            <thead>
+                                                <tr style={{ background:'#f8fafc' }}>
+                                                    {['ID','Obra','Fecha','Estado','Equipos'].map(h => (
+                                                        <th key={h} style={{ padding:'0.75rem 1rem', textAlign:'left', fontSize:'0.68rem', fontWeight:700, color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {clientRemisiones.map((rem, idx) => {
+                                                    const cfg = ESTADO_CFG[rem.estado] || ESTADO_CFG['Activa'];
+                                                    const obra = (client.obras || []).find(o => o.id === rem.obraId);
+                                                    return (
+                                                        <tr key={rem.id} style={{ borderBottom:'1px solid #f8fafc', background: idx%2===0 ? 'white' : '#fafafa' }}>
+                                                            <td style={{ padding:'0.75rem 1rem', fontWeight:700, color:'#2365AB', fontSize:'0.83rem' }}>{rem.id}</td>
+                                                            <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#374151' }}>{obra?.nombre || '—'}</td>
+                                                            <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#6b7280' }}>{rem.fecha}</td>
+                                                            <td style={{ padding:'0.75rem 1rem' }}>
+                                                                <span style={{ padding:'3px 10px', borderRadius:'20px', fontSize:'0.65rem', fontWeight:700, background:cfg.bg, color:cfg.color }}>
+                                                                    {rem.estado.toUpperCase()}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#6b7280' }}>
+                                                                {rem.items?.length || 0} items
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </>)}
+
+                            {tab === 'historial' && (<>
+                                <SectionLabel icon={<Receipt size={13}/>} color="#64748b">Historial de Facturación</SectionLabel>
+                                {clientInvoices.length === 0 ? (
+                                    <div style={{ textAlign:'center', padding:'4rem', color:'#94a3b8', border:'1px dashed #e2e8f0', borderRadius:'14px' }}>No hay facturas registradas.</div>
+                                ) : (
+                                    <div style={{ border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden', marginTop:'1rem' }}>
+                                        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                                            <thead>
+                                                <tr style={{ background:'#f8fafc' }}>
+                                                    {['Factura','Obra','Fecha','Monto','Estado'].map(h => (
+                                                        <th key={h} style={{ padding:'0.75rem 1rem', textAlign:'left', fontSize:'0.68rem', fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(clientInvoices || []).map((inv, idx) => (
+                                                    <tr key={inv.id} style={{ borderBottom:'1px solid #f8fafc', background: idx%2===0 ? 'white' : '#fafafa' }}>
+                                                        <td style={{ padding:'0.75rem 1rem', fontWeight:700, color:'#2365AB', fontSize:'0.83rem' }}>{inv.id}</td>
+                                                        <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#374151' }}>{(client.obras || []).find(o => o.id === inv.obraId)?.nombre || '—'}</td>
+                                                        <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#6b7280' }}>{inv.date}</td>
+                                                        <td style={{ padding:'0.75rem 1rem', fontWeight:700, fontSize:'0.83rem' }}>${inv.amount.toLocaleString()}</td>
+                                                        <td style={{ padding:'0.75rem 1rem' }}>
+                                                            <span style={{ padding:'3px 10px', borderRadius:'20px', fontSize:'0.65rem', fontWeight:700, background: inv.status==='Paid' ? '#dcfce7' : '#fef9c3', color: inv.status==='Paid' ? '#166534' : '#854d0e' }}>
+                                                                {inv.status === 'Paid' ? 'PAGADA' : 'PENDIENTE'}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </>)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {showObraModal && <ObraModal onSave={obra => { onAddObra(client.id, obra); setShowObraModal(false); }} onClose={() => setShowObraModal(false)} />}
+            
+            {showRemisionModal && (
+                <NuevaRemisionModal 
+                    initialClientId={client.id}
+                    onClose={() => setShowRemisionModal(false)}
+                    onSave={addRemision}
+                    clients={[client]}
+                    products={products}
+                    maintenances={maintenances}
+                    settings={settings}
+                />
+            )}
+
+            <style>{`
+                @keyframes cdFadeIn {
+                    from { opacity:0; transform:scale(0.97); }
+                    to   { opacity:1; transform:scale(1); }
+                }
+            `}</style>
+        </>
+    );
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Clients() {
-    const { clients, addClient, editClient, deleteClient, addObra, invoices, products, settings, checkPassword } = useAppContext();
+    const { 
+        clients, addClient, editClient, deleteClient, addObra, 
+        invoices, products, remisiones, addRemision, maintenances, settings, checkPassword 
+    } = useAppContext();
 
     const [search, setSearch] = useState('');
     const [filterDeuda, setFilterDeuda] = useState('Todos');
@@ -625,7 +578,7 @@ export default function Clients() {
         window.addEventListener('trigger-new-client', h1);
         return () => window.removeEventListener('trigger-new-client', h1);
     }, []);
-    const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
 
     const handleSort = (key) => {
         let direction = 'asc';
@@ -946,6 +899,10 @@ export default function Clients() {
                     onAddObra={addObra}
                     invoices={invoices}
                     products={products}
+                    remisiones={remisiones}
+                    addRemision={addRemision}
+                    maintenances={maintenances}
+                    settings={settings}
                     onDelete={(id) => {
                         deleteClient(id);
                         setSelectedClient(null);

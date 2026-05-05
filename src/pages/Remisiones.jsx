@@ -578,7 +578,7 @@ export default function Remisiones() {
     }, [remisiones]);
 
     // Filtered
-    const [sortConfig, setSortConfig] = useState({ key: 'fecha', direction: 'desc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
 
     // Handlers
     const handleFinalizeDispatch = (rem) => {

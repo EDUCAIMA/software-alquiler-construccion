@@ -504,7 +504,7 @@ export default function Products() {
     }, []);
 
     const [search, setSearch] = useState('');
-    const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
 
     const handleSort = (key) => {
         let direction = 'asc';

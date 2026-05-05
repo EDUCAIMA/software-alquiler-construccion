@@ -375,7 +375,7 @@ const mapSettings = r => ({
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
 app.get('/api/products', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM products ORDER BY id ASC');
+        const { rows } = await pool.query('SELECT * FROM products ORDER BY id DESC');
         res.json(rows.map(mapProduct));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -417,7 +417,7 @@ app.delete('/api/products/:id', async (req, res) => {
 // ─── CLIENTS ─────────────────────────────────────────────────────────────────
 app.get('/api/clients', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM clients ORDER BY id ASC');
+        const { rows } = await pool.query('SELECT * FROM clients ORDER BY id DESC');
         res.json(rows.map(mapClient));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -460,7 +460,7 @@ app.delete('/api/clients/:id', async (req, res) => {
 // ─── INVOICES ────────────────────────────────────────────────────────────────
 app.get('/api/invoices', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM invoices ORDER BY id ASC');
+        const { rows } = await pool.query('SELECT * FROM invoices ORDER BY id DESC');
         res.json(rows.map(mapInvoice));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -499,7 +499,7 @@ app.delete('/api/invoices/:id', async (req, res) => {
 // ─── COTIZACIONES ────────────────────────────────────────────────────────────
 app.get('/api/cotizaciones', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM cotizaciones ORDER BY id ASC');
+        const { rows } = await pool.query('SELECT * FROM cotizaciones ORDER BY id DESC');
         res.json(rows.map(mapCot));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -580,7 +580,7 @@ app.post('/api/public/cotizaciones/:id/approve', async (req, res) => {
 // ─── REMISIONES ──────────────────────────────────────────────────────────────
 app.get('/api/remisiones', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM remisiones ORDER BY id ASC');
+        const { rows } = await pool.query('SELECT * FROM remisiones ORDER BY id DESC');
         res.json(rows.map(mapRem));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
