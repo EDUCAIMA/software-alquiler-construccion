@@ -194,8 +194,8 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         const fStart = parseUTCDate(fechaInicio);
         const fEnd = parseUTCDate(fechaCorte);
         
+        // We calculate for ALL available remissions within range
         const rems = availableRems.filter(r =>
-            selectedRemIds.includes(r.id) &&
             parseUTCDate(r.fecha) <= fEnd
         );
 
@@ -299,10 +299,18 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             });
         });
 
+        // 4. Calculate filtered totals based on selectedRemIds
+        const selectedLineas = lineas.filter(l => selectedRemIds.includes(l.remId));
+        const subtotalTotalFiltered = selectedLineas.reduce((s, l) => s + l.subtotal, 0);
+        const totalTransporteFiltered = rems.filter(r => selectedRemIds.includes(r.id)).reduce((s, r) => {
+             const rDate = parseUTCDate(r.fecha);
+             return (rDate >= fStart && rDate <= fEnd) ? s + (r.transporte || 0) : s;
+        }, 0);
+
         const porcIVA = selectedClient?.responsableIVA ? (selectedClient?.porcIVA || 0) : 0;
         const porcRet = selectedClient?.porcRetencion || 0;
-        const iva = Math.round(subtotalTotal * porcIVA / 100);
-        const retencion = Math.round(subtotalTotal * porcRet / 100);
+        const iva = Math.round(subtotalTotalFiltered * porcIVA / 100);
+        const retencion = Math.round(subtotalTotalFiltered * porcRet / 100);
         
         const relatedInvoices = invoices.filter(inv => 
             inv.clientId === clientId && 
@@ -311,17 +319,29 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         );
         const pagosPrevios = relatedInvoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
         
-        const totalAntesDePagos = subtotalTotal + iva + retencion + totalTransporte;
+        const totalAntesDePagos = subtotalTotalFiltered + iva + retencion + totalTransporteFiltered;
         const totalNeto = totalAntesDePagos - pagosPrevios;
 
-        return { lineas, subtotal: subtotalTotal, iva, retencion, transporte: totalTransporte, totalAntesDePagos, pagosPrevios, totalNeto, porcIVA, porcRet };
+        return { 
+            lineas, // All lines for UI
+            selectedLineas, // Only selected for PDF/Invoice
+            subtotal: subtotalTotalFiltered, 
+            iva, 
+            retencion, 
+            transporte: totalTransporteFiltered, 
+            totalAntesDePagos, 
+            pagosPrevios, 
+            totalNeto, 
+            porcIVA, 
+            porcRet 
+        };
     }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient]);
 
     const handleGenerate = () => { if (resultado) setGenerado(true); };
     const handleSaveInvoice = () => {
         if (!resultado || saved) return;
 
-        const itemsToFacturar = resultado.lineas.map(l => ({ 
+        const itemsToFacturar = resultado.selectedLineas.map(l => ({ 
             productId: l.equipo, 
             nombre: l.equipo, 
             quantity: l.cantidad, 
@@ -345,7 +365,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             items: itemsToFacturar,
         });
         
-        generateCortePDF(resultado, selectedClient, selectedObra, settings);
+        generateCortePDF({ ...resultado, lineas: resultado.selectedLineas }, selectedClient, selectedObra, settings);
         setSaved(true);
     };
 
@@ -418,46 +438,11 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                             <input type="date" value={fechaCorte} onChange={e => { setFechaCorte(e.target.value); setGenerado(false); setSaved(false); }} style={inputStyle} />
                                         </div>
                                     </div>
-                                    <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '0.5rem' }} disabled={!clientId || selectedRemIds.length === 0} onClick={handleGenerate}>
+                                    <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '0.5rem' }} disabled={!clientId} onClick={handleGenerate}>
                                         <Calculator size={18} /> Calcular Liquidación
                                     </button>
                                 </div>
                             </div>
-
-                            {clientId && availableRems.length > 0 && (
-                                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                        <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#2365AB', textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <Truck size={16} /> Seleccionar Remisiones
-                                        </p>
-                                        <button 
-                                            onClick={() => setSelectedRemIds(selectedRemIds.length === availableRems.length ? [] : availableRems.map(r => r.id))}
-                                            style={{ background: 'none', border: 'none', color: '#2365AB', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
-                                        >
-                                            {selectedRemIds.length === availableRems.length ? 'Deseleccionar' : 'Todo'}
-                                        </button>
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
-                                        {availableRems.map(r => (
-                                            <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem', borderRadius: '8px', background: '#f8fafc', cursor: 'pointer', transition: 'all 0.2s' }}>
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={selectedRemIds.includes(r.id)} 
-                                                    onChange={() => {
-                                                        setSelectedRemIds(prev => prev.includes(r.id) ? prev.filter(id => id !== r.id) : [...prev, r.id]);
-                                                        setGenerado(false);
-                                                    }}
-                                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                                                />
-                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b' }}>#{r.id}</span>
-                                                    <span style={{ fontSize: '0.65rem', color: '#64748b' }}>{r.fecha}</span>
-                                                </div>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
 
                             {selectedClient && (
                                 <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '0.75rem 1rem' }}>
@@ -529,50 +514,69 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                 return acc;
                                             }, {});
 
-                                            return Object.entries(grouped).map(([remId, lines]) => (
-                                                <div key={remId} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-                                                    <div style={{ background: '#f8fafc', padding: '1rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                            <Truck size={18} style={{ color: '#2365AB' }} />
-                                                            <span style={{ fontWeight: 800, color: '#104166', fontSize: '1rem' }}>Remisión #{remId}</span>
-                                                            <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500 }}>— Despachada el {lines[0].remFecha}</span>
+                                            return Object.entries(grouped).map(([remId, lines]) => {
+                                                const isSelected = selectedRemIds.includes(remId);
+                                                return (
+                                                    <div key={remId} style={{ 
+                                                        background: 'white', 
+                                                        border: '1px solid #e2e8f0', 
+                                                        borderRadius: '20px', 
+                                                        overflow: 'hidden', 
+                                                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                                                        opacity: isSelected ? 1 : 0.6,
+                                                        transition: 'opacity 0.2s'
+                                                    }}>
+                                                        <div style={{ background: '#f8fafc', padding: '1rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                <input 
+                                                                    type="checkbox" 
+                                                                    checked={isSelected}
+                                                                    onChange={() => setSelectedRemIds(prev => prev.includes(remId) ? prev.filter(id => id !== remId) : [...prev, remId])}
+                                                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
+                                                                />
+                                                                <Truck size={18} style={{ color: '#2365AB' }} />
+                                                                <span style={{ fontWeight: 800, color: '#104166', fontSize: '1rem' }}>Remisión #{remId}</span>
+                                                                <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500 }}>— Despachada el {lines[0].remFecha}</span>
+                                                            </div>
+                                                            <div style={{ background: '#dcfce7', color: '#166534', padding: '4px 12px', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                                                                {lines[0].estado}
+                                                            </div>
                                                         </div>
-                                                        <div style={{ background: '#dcfce7', color: '#166534', padding: '4px 12px', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase' }}>
-                                                            {lines[0].estado}
-                                                        </div>
+                                                        {isSelected && (
+                                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', tableLayout: 'fixed' }}>
+                                                                <thead>
+                                                                    <tr style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
+                                                                        <th style={{ width: '40%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Equipo / Descripción</th>
+                                                                        <th style={{ width: '12%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cant.</th>
+                                                                        <th style={{ width: '12%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Días</th>
+                                                                        <th style={{ width: '18%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tarifa</th>
+                                                                        <th style={{ width: '18%', padding: '0.85rem 1.5rem', textAlign: 'right', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subtotal</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {lines.map((l, idx) => (
+                                                                        <tr key={idx} style={{ borderBottom: idx === lines.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
+                                                                            <td style={{ padding: '0.85rem 1.5rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.equipo}</td>
+                                                                            <td style={{ padding: '0.85rem 1.5rem', textAlign: 'center' }}>{l.cantidad}</td>
+                                                                            <td style={{ padding: '0.85rem 1.5rem', fontWeight: 700, color: '#f97316', textAlign: 'center' }}>{l.dias}d</td>
+                                                                            <td style={{ padding: '0.85rem 1.5rem', color: '#64748b' }}>{fmtCOP(l.tarifaDia)}</td>
+                                                                            <td style={{ padding: '0.85rem 1.5rem', fontWeight: 800, textAlign: 'right', color: '#1e293b' }}>{fmtCOP(l.subtotal)}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                                <tfoot>
+                                                                    <tr style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+                                                                        <td colSpan="4" style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: '0.8rem' }}>Subtotal Remisión:</td>
+                                                                        <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 800, color: '#2365AB' }}>
+                                                                            {fmtCOP(lines.reduce((s, ln) => s + ln.subtotal, 0))}
+                                                                        </td>
+                                                                    </tr>
+                                                                </tfoot>
+                                                            </table>
+                                                        )}
                                                     </div>
-                                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', tableLayout: 'fixed' }}>
-                                                        <thead>
-                                                            <tr style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
-                                                                <th style={{ width: '40%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Equipo / Descripción</th>
-                                                                <th style={{ width: '12%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cant.</th>
-                                                                <th style={{ width: '12%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Días</th>
-                                                                <th style={{ width: '18%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tarifa</th>
-                                                                <th style={{ width: '18%', padding: '0.85rem 1.5rem', textAlign: 'right', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subtotal</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {lines.map((l, idx) => (
-                                                                <tr key={idx} style={{ borderBottom: idx === lines.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
-                                                                    <td style={{ padding: '0.85rem 1.5rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.equipo}</td>
-                                                                    <td style={{ padding: '0.85rem 1.5rem', textAlign: 'center' }}>{l.cantidad}</td>
-                                                                    <td style={{ padding: '0.85rem 1.5rem', fontWeight: 700, color: '#f97316', textAlign: 'center' }}>{l.dias}d</td>
-                                                                    <td style={{ padding: '0.85rem 1.5rem', color: '#64748b' }}>{fmtCOP(l.tarifaDia)}</td>
-                                                                    <td style={{ padding: '0.85rem 1.5rem', fontWeight: 800, textAlign: 'right', color: '#1e293b' }}>{fmtCOP(l.subtotal)}</td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                        <tfoot>
-                                                            <tr style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
-                                                                <td colSpan="4" style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: '0.8rem' }}>Subtotal Remisión:</td>
-                                                                <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 800, color: '#2365AB' }}>
-                                                                    {fmtCOP(lines.reduce((s, ln) => s + ln.subtotal, 0))}
-                                                                </td>
-                                                            </tr>
-                                                        </tfoot>
-                                                    </table>
-                                                </div>
-                                            ));
+                                                );
+                                            });
                                         })()}
                                     </div>
 
