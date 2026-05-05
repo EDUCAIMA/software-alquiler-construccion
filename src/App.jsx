@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react
 import {
   LayoutDashboard, Users, Package, Activity,
   Wrench, LogOut, ShieldAlert, Calculator, Briefcase, Settings,
-  Plus, RotateCcw, DollarSign, ArrowDownCircle
+  Plus, RotateCcw, DollarSign, ArrowDownCircle, FileText
 } from 'lucide-react';
 import { AppProvider, useAppContext } from './context/AppContext';
 
