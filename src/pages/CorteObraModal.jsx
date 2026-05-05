@@ -519,61 +519,68 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                 return (
                                                     <div key={remId} style={{ 
                                                         background: 'white', 
-                                                        border: '1px solid #e2e8f0', 
+                                                        border: isSelected ? '1px solid #3b82f6' : '1px solid #e2e8f0', 
                                                         borderRadius: '20px', 
                                                         overflow: 'hidden', 
-                                                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                                                        opacity: isSelected ? 1 : 0.6,
-                                                        transition: 'opacity 0.2s'
+                                                        boxShadow: isSelected ? '0 10px 25px -5px rgba(59, 130, 246, 0.1)' : '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                                                        opacity: isSelected ? 1 : 0.65,
+                                                        transition: 'all 0.3s ease',
+                                                        marginBottom: '1.5rem'
                                                     }}>
                                                         <div style={{ background: '#f8fafc', padding: '1rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                                <input 
-                                                                    type="checkbox" 
-                                                                    checked={isSelected}
-                                                                    onChange={() => setSelectedRemIds(prev => prev.includes(remId) ? prev.filter(id => id !== remId) : [...prev, remId])}
-                                                                    style={{ width: 18, height: 18, cursor: 'pointer' }}
-                                                                />
-                                                                <Truck size={18} style={{ color: '#2365AB' }} />
+                                                                <Truck size={18} style={{ color: isSelected ? '#2563eb' : '#64748b' }} />
                                                                 <span style={{ fontWeight: 800, color: '#104166', fontSize: '1rem' }}>Remisión #{remId}</span>
                                                                 <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500 }}>— Despachada el {lines[0].remFecha}</span>
                                                             </div>
-                                                            <div style={{ background: '#dcfce7', color: '#166534', padding: '4px 12px', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase' }}>
-                                                                {lines[0].estado}
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                                <div style={{ background: lines[0].estado === 'Cerrada' ? '#f1f5f9' : '#dcfce7', color: lines[0].estado === 'Cerrada' ? '#475569' : '#166534', padding: '4px 12px', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                                                                    {lines[0].estado}
+                                                                </div>
+                                                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '6px 12px', borderRadius: '10px', background: isSelected ? '#eff6ff' : '#ffffff', border: `1px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`, cursor: 'pointer', userSelect: 'none', transition: 'all 0.2s' }}>
+                                                                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: isSelected ? '#2563eb' : '#64748b' }}>
+                                                                        {isSelected ? 'INCLUIR EN CORTE' : 'EXCLUIR DEL CORTE'}
+                                                                    </span>
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        checked={isSelected}
+                                                                        onChange={() => setSelectedRemIds(prev => prev.includes(remId) ? prev.filter(id => id !== remId) : [...prev, remId])}
+                                                                        style={{ width: 18, height: 18, cursor: 'pointer', margin: 0, accentColor: '#2563eb' }}
+                                                                    />
+                                                                </label>
                                                             </div>
                                                         </div>
-                                                        {isSelected && (
-                                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', tableLayout: 'fixed' }}>
-                                                                <thead>
-                                                                    <tr style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
-                                                                        <th style={{ width: '40%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Equipo / Descripción</th>
-                                                                        <th style={{ width: '12%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cant.</th>
-                                                                        <th style={{ width: '12%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Días</th>
-                                                                        <th style={{ width: '18%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tarifa</th>
-                                                                        <th style={{ width: '18%', padding: '0.85rem 1.5rem', textAlign: 'right', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subtotal</th>
+                                                        
+                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', tableLayout: 'fixed', filter: isSelected ? 'none' : 'grayscale(1) opacity(0.5)' }}>
+                                                            <thead>
+                                                                <tr style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
+                                                                    <th style={{ width: '40%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Equipo / Descripción</th>
+                                                                    <th style={{ width: '12%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cant.</th>
+                                                                    <th style={{ width: '12%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Días</th>
+                                                                    <th style={{ width: '18%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tarifa</th>
+                                                                    <th style={{ width: '18%', padding: '0.85rem 1.5rem', textAlign: 'right', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subtotal</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {lines.map((l, idx) => (
+                                                                    <tr key={idx} style={{ borderBottom: idx === lines.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
+                                                                        <td style={{ padding: '0.85rem 1.5rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.equipo}</td>
+                                                                        <td style={{ padding: '0.85rem 1.5rem', textAlign: 'center' }}>{l.cantidad}</td>
+                                                                        <td style={{ padding: '0.85rem 1.5rem', fontWeight: 700, color: '#f97316', textAlign: 'center' }}>{l.dias}d</td>
+                                                                        <td style={{ padding: '0.85rem 1.5rem', color: '#64748b' }}>{fmtCOP(l.tarifaDia)}</td>
+                                                                        <td style={{ padding: '0.85rem 1.5rem', fontWeight: 800, textAlign: 'right', color: '#1e293b' }}>{fmtCOP(l.subtotal)}</td>
                                                                     </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {lines.map((l, idx) => (
-                                                                        <tr key={idx} style={{ borderBottom: idx === lines.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
-                                                                            <td style={{ padding: '0.85rem 1.5rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.equipo}</td>
-                                                                            <td style={{ padding: '0.85rem 1.5rem', textAlign: 'center' }}>{l.cantidad}</td>
-                                                                            <td style={{ padding: '0.85rem 1.5rem', fontWeight: 700, color: '#f97316', textAlign: 'center' }}>{l.dias}d</td>
-                                                                            <td style={{ padding: '0.85rem 1.5rem', color: '#64748b' }}>{fmtCOP(l.tarifaDia)}</td>
-                                                                            <td style={{ padding: '0.85rem 1.5rem', fontWeight: 800, textAlign: 'right', color: '#1e293b' }}>{fmtCOP(l.subtotal)}</td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                                <tfoot>
-                                                                    <tr style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
-                                                                        <td colSpan="4" style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: '0.8rem' }}>Subtotal Remisión:</td>
-                                                                        <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 800, color: '#2365AB' }}>
-                                                                            {fmtCOP(lines.reduce((s, ln) => s + ln.subtotal, 0))}
-                                                                        </td>
-                                                                    </tr>
-                                                                </tfoot>
-                                                            </table>
-                                                        )}
+                                                                ))}
+                                                            </tbody>
+                                                            <tfoot>
+                                                                <tr style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+                                                                    <td colSpan="4" style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: '0.8rem' }}>Subtotal Remisión:</td>
+                                                                    <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 800, color: '#2365AB' }}>
+                                                                        {fmtCOP(lines.reduce((s, ln) => s + ln.subtotal, 0))}
+                                                                    </td>
+                                                                </tr>
+                                                            </tfoot>
+                                                        </table>
                                                     </div>
                                                 );
                                             });
