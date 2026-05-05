@@ -6,6 +6,7 @@ import { format, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
+import { generateInvoicePDF } from './CotizacionesHelpers';
 
 export default function Invoices({ hideHeader = false } = {}) {
     const { invoices, clients, products, settings, createInvoice, payInvoice, deleteInvoice, remisiones = [] } = useAppContext();
@@ -183,148 +184,9 @@ export default function Invoices({ hideHeader = false } = {}) {
         }
     };
 
-    const generatePDF = (invoice) => {
+    const handleGeneratePDF = (invoice) => {
         const client = clients.find(c => c.id === invoice.clientId);
-        const doc = new jsPDF();
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 10;
-
-        let y = applyStandardLayout(doc, 'Factura', settings, invoice.id);
-
-        y = drawInfoGrid(doc, y, client, {
-            valTopLeft: invoice.date,
-            valTopRight: invoice.status === 'Paid' ? 'PAGADA' : 'PENDIENTE',
-            labelTopLeft: 'Fecha Emisión',
-            labelTopRight: 'Estado Pago',
-            valMidLeft: client?.obra || '—',
-            valMidRight: 'CONTADO',
-            valBottom: (Number(invoice.transporte) || 0) > 0 ? `$${invoice.transporte.toLocaleString()}` : '0',
-            labelBottom: 'Valor Transporte:',
-            obraDireccion: client?.obraUbicacion || client?.direccion
-        });
-
-        autoTable(doc, {
-            startY: y,
-            margin: { left: margin, right: margin },
-            head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
-            body: (invoice.items || []).map((item, idx) => {
-                const productName = item.nombre || products.find(p => p.id === item.productId)?.name || 'EQUIPO';
-                const qty = Number(item.quantity || item.cantidad || 0);
-                const days = Number(item.days || item.dias || 1);
-                const price = Number(item.price || item.tarifaDia || 0);
-                
-                return [
-                    idx + 1,
-                    productName.toUpperCase(),
-                    qty,
-                    days,
-                    price.toLocaleString('es-CO'),
-                    (qty * days * price).toLocaleString('es-CO')
-                ];
-            }),
-            theme: 'plain',
-            headStyles: { 
-                fillColor: [241, 245, 249], 
-                textColor: [30, 41, 59], 
-                fontSize: 7.5, 
-                fontStyle: 'bold', 
-                halign: 'center',
-                lineWidth: 0.1,
-                lineColor: [30, 41, 59]
-            },
-            styles: { 
-                fontSize: 7.5, 
-                cellPadding: 2, 
-                textColor: [30, 41, 59], 
-                halign: 'center',
-                lineWidth: 0.1,
-                lineColor: [30, 41, 59]
-            },
-            columnStyles: {
-                0: { cellWidth: 10 },
-                1: { halign: 'left', cellWidth: 'auto' },
-                2: { cellWidth: 15 },
-                3: { cellWidth: 15 },
-                4: { halign: 'right', cellWidth: 25 },
-                5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
-            }
-        });
-
-        try {
-            // --- Totales Estilo Profesional (Recuadros) ---
-            const subtotal = (invoice.items || []).reduce((s, item) => {
-                const qty = Number(item.quantity || item.cantidad || 0);
-                const days = Number(item.days || item.dias || 1);
-                const price = Number(item.price || item.tarifaDia || 0);
-                return s + (qty * days * price);
-            }, 0);
-
-            const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
-            const iva = Math.round(subtotal * porcIVA / 100);
-            const porcRet = client?.porcRetencion || 0;
-            const ret = Math.round(subtotal * porcRet / 100);
-            const totalVal = subtotal + iva + ret + (Number(invoice.transporte) || 0);
-
-            let ty = (doc.lastAutoTable?.finalY || y + 20) + 10;
-            const totW = 80;
-            const totX = pageWidth - margin - totW;
-            const totH = 7;
-
-            const totals = [
-                ['SUB-TOTAL', subtotal.toLocaleString('es-CO')],
-                [`IVA (${porcIVA}%)`, iva.toLocaleString('es-CO')],
-                [`RETENCIÓN (${porcRet}%)`, ret.toLocaleString('es-CO')],
-                ['TRANSPORTE', (Number(invoice.transporte) || 0).toLocaleString('es-CO')]
-            ];
-
-            totals.forEach(([label, value]) => {
-                doc.setLineWidth(0.1);
-                doc.setDrawColor(30, 41, 59);
-                doc.rect(totX, ty, 50, totH);
-                doc.rect(totX + 50, ty, 30, totH);
-                doc.setFontSize(7);
-                doc.setFont('helvetica', 'bold');
-                doc.text(label, totX + 2, ty + 4.5);
-                doc.setFont('helvetica', 'normal');
-                doc.text(value, totX + 78, ty + 4.5, { align: 'right' });
-                ty += totH;
-            });
-
-            // Gran Total Box
-            doc.setFillColor(241, 245, 249);
-            doc.rect(totX, ty, 50, 9, 'F');
-            doc.rect(totX, ty, 50, 9, 'S');
-            doc.rect(totX + 50, ty, 30, 9, 'S');
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'bold');
-            doc.text('TOTAL', totX + 2, ty + 6);
-            doc.text(`$${totalVal.toLocaleString('es-CO')}`, totX + 78, ty + 6, { align: 'right' });
-            
-            y = ty + 20;
-        } catch (err) {
-            console.error('Error in total calculation or summary:', err);
-        }
-
-        // --- Signature / Stamp ---
-        const pageHeight = doc.internal.pageSize.getHeight();
-        const signatureY = Math.max(pageHeight - 50, y + 30);
-
-        if (invoice.status === 'Paid') {
-            doc.setFontSize(22);
-            doc.setTextColor(16, 185, 129);
-            doc.setFont(undefined, 'bold');
-            doc.setGState(new doc.GState({ opacity: 0.2 }));
-            doc.text('PAGADA', margin, y + 10);
-            doc.setGState(new doc.GState({ opacity: 1 }));
-        }
-
-        doc.setFontSize(8);
-        doc.setTextColor(100, 116, 139);
-        doc.setFont(undefined, 'normal');
-        doc.text('Firma Recibido:', margin, signatureY);
-        doc.line(margin, signatureY + 2, margin + 50, signatureY + 2);
-
-        doc.save(`Factura_${invoice.id}.pdf`);
+        generateInvoicePDF(invoice, client, products, settings);
     };
 
     const handleGenerateReport = () => {
@@ -480,7 +342,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                                                 <button className="btn btn-secondary btn-sm" onClick={() => handleViewInvoice(invoice)} title="Ver Factura">
                                                     <Eye size={15} /> Ver
                                                 </button>
-                                                <button className="btn btn-primary btn-sm" onClick={() => generatePDF(invoice)} title="Descargar PDF">
+                                                <button className="btn btn-primary btn-sm" onClick={() => handleGeneratePDF(invoice)} title="Descargar PDF">
                                                     <Download size={15} /> PDF
                                                 </button>
                                                 {invoice.status !== 'Paid' && (
@@ -908,7 +770,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                                     >
                                         <Trash2 size={18} /> Eliminar
                                     </button>
-                                    <button className="btn btn-primary" style={{ padding: '0.6rem 1.25rem', fontSize: '0.95rem' }} onClick={() => generatePDF(inv)}>
+                                    <button className="btn btn-primary" style={{ padding: '0.6rem 1.25rem', fontSize: '0.95rem' }} onClick={() => handleGeneratePDF(inv)}>
                                         <Download size={18} /> Descargar PDF
                                     </button>
                                 </div>

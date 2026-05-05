@@ -890,51 +890,85 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         obraDireccion: (client?.obras || []).find(o => o.id === invoice.obraId)?.ubicacion || client?.direccion
     });
 
-    autoTable(doc, {
-        startY: y,
-        margin: { left: margin, right: margin },
-        head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
-        body: (invoice.items || []).map((item, idx) => {
-            const productName = item.nombre || item.name || products.find(p => p.id === item.productId)?.name || 'EQUIPO';
-            const qty = Number(item.quantity || item.cantidad || 0);
-            const days = Number(item.days || item.dias || 1);
-            const price = Number(item.price || item.tarifaDia || 0);
+    // Group items by remId
+    const grouped = (invoice.items || []).reduce((acc, item) => {
+        const rId = item.remId || 'OTROS';
+        if (!acc[rId]) acc[rId] = [];
+        acc[rId].push(item);
+        return acc;
+    }, {});
+
+    Object.entries(grouped).forEach(([remId, groupItems], idx) => {
+        // Add a sub-header for the group if it's a remission
+        if (remId !== 'OTROS') {
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 41, 59);
+            const headerY = (idx === 0) ? y : doc.lastAutoTable.finalY + 10;
             
-            return [
-                idx + 1,
-                productName.toUpperCase(),
-                qty,
-                days,
-                price.toLocaleString('es-CO'),
-                (qty * days * price).toLocaleString('es-CO')
-            ];
-        }),
-        theme: 'plain',
-        headStyles: { 
-            fillColor: [241, 245, 249], 
-            textColor: [30, 41, 59], 
-            fontSize: 7.5, 
-            fontStyle: 'bold', 
-            halign: 'center',
-            lineWidth: 0.1,
-            lineColor: [30, 41, 59]
-        },
-        styles: { 
-            fontSize: 7.5, 
-            cellPadding: 2, 
-            textColor: [30, 41, 59], 
-            halign: 'center',
-            lineWidth: 0.1,
-            lineColor: [30, 41, 59]
-        },
-        columnStyles: {
-            0: { cellWidth: 10 },
-            1: { halign: 'left', cellWidth: 'auto' },
-            2: { cellWidth: 15 },
-            3: { cellWidth: 15 },
-            4: { halign: 'right', cellWidth: 25 },
-            5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
+            // Check if we need a new page
+            if (headerY > doc.internal.pageSize.getHeight() - 40) {
+                doc.addPage();
+                y = 20; // reset y for new page (approx)
+            } else {
+                y = headerY;
+            }
+
+            const remFecha = groupItems[0]?.remFecha || '';
+            doc.text(`REMISIÓN #${remId} ${remFecha ? `— DESPACHADA EL ${remFecha}` : ''}`, margin, y);
+            y += 5;
+        } else if (idx > 0) {
+            y = doc.lastAutoTable.finalY + 10;
         }
+
+        autoTable(doc, {
+            startY: y,
+            margin: { left: margin, right: margin },
+            head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
+            body: groupItems.map((item, gIdx) => {
+                const productName = item.nombre || item.name || products.find(p => p.id === item.productId)?.name || 'EQUIPO';
+                const qty = Number(item.quantity || item.cantidad || 0);
+                const days = Number(item.days || item.dias || 1);
+                const price = Number(item.price || item.tarifaDia || 0);
+                
+                return [
+                    gIdx + 1,
+                    productName.toUpperCase(),
+                    qty,
+                    days,
+                    price.toLocaleString('es-CO'),
+                    (qty * days * price).toLocaleString('es-CO')
+                ];
+            }),
+            theme: 'plain',
+            headStyles: { 
+                fillColor: [241, 245, 249], 
+                textColor: [30, 41, 59], 
+                fontSize: 7.5, 
+                fontStyle: 'bold', 
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [30, 41, 59]
+            },
+            styles: { 
+                fontSize: 7.5, 
+                cellPadding: 2, 
+                textColor: [30, 41, 59], 
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [30, 41, 59]
+            },
+            columnStyles: {
+                0: { cellWidth: 10 },
+                1: { halign: 'left', cellWidth: 'auto' },
+                2: { cellWidth: 15 },
+                3: { cellWidth: 15 },
+                4: { halign: 'right', cellWidth: 25 },
+                5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
+            }
+        });
+        
+        y = doc.lastAutoTable.finalY;
     });
 
     try {

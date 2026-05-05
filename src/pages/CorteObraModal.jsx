@@ -357,7 +357,9 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             nombre: l.equipo, 
             quantity: l.cantidad, 
             days: l.dias, 
-            price: l.tarifaDia 
+            price: l.tarifaDia,
+            remId: l.remId,
+            remFecha: l.remFecha
         }));
 
         if (resultado.pagosPrevios > 0) {
