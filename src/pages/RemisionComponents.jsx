@@ -73,8 +73,8 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
         setLoading(true);
         try {
             const rem = await onSave({ clientId, obraId, fecha, transporte: Number(transporte), notas, items });
-            setCreatedRem(rem);
-            setStep(4);
+            generateRemisionPDF(rem, selectedClient, obrasDisp.find(o => o.id === obraId), settings);
+            onClose();
         } catch (e) {
             console.error(e);
         } finally {
@@ -99,7 +99,7 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
                         </h3>
                         {/* Step indicator */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            {['Destino', 'Equipos', 'Confirmar', 'Imprimir'].map((s, i) => (
+                            {['Destino', 'Equipos'].map((s, i) => (
                                 <React.Fragment key={s}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                         <div style={{ width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, background: step > i + 1 ? '#10b981' : step === i + 1 ? '#2365AB' : '#e2e8f0', color: step > i ? 'white' : '#64748b' }}>
@@ -107,7 +107,7 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
                                         </div>
                                         <span style={{ fontSize: '0.75rem', color: step === i + 1 ? '#2365AB' : '#64748b', fontWeight: step === i + 1 ? 700 : 500 }}>{s}</span>
                                     </div>
-                                    {i < 3 && <div style={{ width: 24, height: 2, background: step > i + 1 ? '#10b981' : '#e2e8f0', borderRadius: 2 }} />}
+                                    {i < 1 && <div style={{ width: 24, height: 2, background: step > i + 1 ? '#10b981' : '#e2e8f0', borderRadius: 2 }} />}
                                 </React.Fragment>
                             ))}
                         </div>
@@ -231,87 +231,8 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
                                 <button className="btn btn-secondary" onClick={() => setStep(1)} style={{ minWidth: 120 }}>← Atrás</button>
-                                <button className="btn btn-primary" disabled={items.length === 0} onClick={() => setStep(3)} style={{ minWidth: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>Revisar <ChevronRight size={16} /></button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 3: Confirmar */}
-                    {step === 3 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                            {/* Summary boxes */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                                {[
-                                    ['Cliente', selectedClient?.name, '#2365AB'],
-                                    ['Obra', obrasDisp.find(o => o.id === obraId)?.nombre || obraId, '#f97316'],
-                                    ['Fecha', fecha, '#10b981']
-                                ].map(([k, v, c]) => (
-                                    <div key={k} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: '0.85rem' }}>
-                                        <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{k}</div>
-                                        <div style={{ fontWeight: 700, color: c, marginTop: 4, fontSize: '0.9rem' }}>{v}</div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
-                                <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', fontSize: '0.75rem', fontWeight: 700, color: '#104166', textTransform: 'uppercase', borderBottom: '1px solid #e2e8f0' }}>
-                                    Equipos a despachar
-                                </div>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                                    <tbody>
-                                        {items.map((item, idx) => (
-                                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#104166' }}>{item.nombre}</td>
-                                                <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{item.cantidad} unidad(es)</td>
-                                                <td style={{ padding: '0.75rem 1rem', fontWeight: 500, color: '#10b981', textAlign: 'right' }}>${(item.tarifaDia * item.cantidad).toLocaleString()}/día</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {transporte > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff7ed', border: '1px solid #ffedd5', borderRadius: 10, padding: '1rem 1.25rem' }}>
-                                    <span style={{ fontSize: '0.85rem', color: '#9a3412', fontWeight: 600 }}>Costo de Transporte</span>
-                                    <span style={{ fontWeight: 800, color: '#f97316', fontSize: '1.05rem' }}>${Number(transporte).toLocaleString()}</span>
-                                </div>
-                            )}
-
-                            {notas && (
-                                <div style={{ display: 'flex', gap: '0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1rem' }}>
-                                    <Info size={16} style={{ color: '#64748b', flexShrink: 0, marginTop: 2 }} />
-                                    <span style={{ fontSize: '0.85rem', color: '#263777', lineHeight: 1.5 }}>{notas}</span>
-                                </div>
-                            )}
-
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
-                                <button className="btn btn-secondary" onClick={() => setStep(2)} style={{ minWidth: 120 }}>← Atrás</button>
-                                <button className="btn btn-primary" disabled={items.length === 0 || loading} onClick={handleSave} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', minWidth: 180 }}>
-                                    {loading ? 'Procesando...' : <><Truck size={18} /> Despachar Remisión</>}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 4: Finalizado / Imprimir */}
-                    {step === 4 && (
-                        <div style={{ textAlign: 'center', padding: '2rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
-                            <div style={{ background: '#dcfce7', color: '#10b981', width: 64, height: 64, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <CheckCircle size={32} />
-                            </div>
-                            <div>
-                                <h4 style={{ margin: 0, color: '#104166', fontSize: '1.25rem', marginBottom: '0.5rem' }}>¡Remisión creada con éxito!</h4>
-                                <p style={{ color: '#64748b', fontSize: '0.9rem', maxWidth: 400, margin: '0 auto' }}>
-                                    La remisión <strong style={{ color: '#2365AB' }}>{createdRem?.id}</strong> ha sido registrada y el inventario ha sido actualizado.
-                                </p>
-                            </div>
-
-                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: '1.5rem', width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <button className="btn btn-secondary" onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: 48 }}>
-                                    Cerrar Ventana
-                                </button>
-                                <button className="btn btn-primary" onClick={() => generateRemisionPDF(createdRem, selectedClient, obrasDisp.find(o => o.id === obraId), settings)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: 48 }}>
-                                    <Printer size={18} /> Imprimir Remisión
+                                <button className="btn btn-primary" disabled={items.length === 0 || loading} onClick={handleSave} style={{ minWidth: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                    {loading ? 'Procesando...' : <><Truck size={18} /> Despachar e Imprimir</>}
                                 </button>
                             </div>
                         </div>
