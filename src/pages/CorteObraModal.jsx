@@ -48,11 +48,14 @@ function generateCortePDF(resultado, client, obra, settings) {
 
     // For each remission group, create a table
     Object.entries(grouped).forEach(([remId, lines]) => {
+        const remObj = remisiones.find(r => r.id === remId);
+        const displayId = remObj?.cotizacionId || remId;
+
         // Add a sub-header for the remission
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(35, 101, 171); // #2365AB
-        doc.text(`REMISION #${remId} - Despachada el ${lines[0].remFecha}`, margin, y + 6);
+        doc.text(`REMISION #${displayId} - Despachada el ${lines[0].remFecha}`, margin, y + 6);
         y += 8;
 
         autoTable(doc, {
@@ -516,6 +519,9 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
 
                                             return Object.entries(grouped).map(([remId, lines]) => {
                                                 const isSelected = selectedRemIds.includes(remId);
+                                                const remObj = remisiones.find(r => r.id === remId);
+                                                const displayId = remObj?.cotizacionId || remId;
+
                                                 return (
                                                     <div key={remId} style={{ 
                                                         background: 'white', 
@@ -530,7 +536,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                         <div style={{ background: '#f8fafc', padding: '1rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                                                 <Truck size={18} style={{ color: isSelected ? '#2563eb' : '#64748b' }} />
-                                                                <span style={{ fontWeight: 800, color: '#104166', fontSize: '1rem' }}>Remisión #{remId}</span>
+                                                                <span style={{ fontWeight: 800, color: '#104166', fontSize: '1rem' }}>Remisión #{displayId}</span>
                                                                 <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500 }}>— Despachada el {lines[0].remFecha}</span>
                                                             </div>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
