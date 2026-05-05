@@ -250,14 +250,14 @@ function Topbar() {
             onClick={logout}
             title="Cerrar Sesión"
             style={{
-              width: 34,
-              height: 34,
+              width: 42,
+              height: 42,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               background: 'rgba(239,68,68,0.12)',
               border: '1px solid rgba(239,68,68,0.25)',
-              borderRadius: 8,
+              borderRadius: '50%',
               color: '#f87171',
               cursor: 'pointer',
               transition: 'all 0.15s',
@@ -272,7 +272,7 @@ function Topbar() {
               e.currentTarget.style.color = '#f87171';
             }}
           >
-            <LogOut size={15} />
+            <LogOut size={20} />
           </button>
         </div>
       </div>
@@ -286,7 +286,7 @@ function Layout({ children }) {
     <div style={{ minHeight: '100vh', background: 'var(--background)' }}>
       <Topbar />
       <main style={{
-        paddingTop: '62px',
+        paddingTop: '80px',
         minHeight: '100vh',
       }}>
         <div className="page-container" style={{ margin: '0 auto', padding: '0.75rem 0' }}>
