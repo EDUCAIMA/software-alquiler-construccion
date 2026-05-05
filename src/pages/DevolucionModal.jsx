@@ -83,7 +83,7 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
 
         setLoading(true);
         try {
-            await onSave(devoluciones, fechaDevolucion);
+            await onSave(selClientId, selObraId, devoluciones, fechaDevolucion);
             onClose();
         } catch (error) {
             console.error('Error saving return:', error);

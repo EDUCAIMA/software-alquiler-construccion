@@ -1072,7 +1072,7 @@ export default function Remisiones() {
                     products={products}
                     clients={clients}
                     onClose={() => setDevolucionTarget(null)}
-                    onSave={(devoluciones, fecha) => registrarDevolucion(devolucionTarget.clientId, devolucionTarget.obraId, devoluciones, fecha)}
+                    onSave={(cId, oId, devoluciones, fecha) => registrarDevolucion(cId, oId, devoluciones, fecha)}
                 />
             )}
 

@@ -798,8 +798,8 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     clientId={devolucionTarget.clientId}
                     obraId={devolucionTarget.obraId}
                     onClose={() => setDevolucionTarget(null)}
-                    onSave={(devs, fecha) => {
-                        registrarDevolucion(devolucionTarget.clientId, devolucionTarget.obraId, devs, fecha);
+                    onSave={(cId, oId, devs, fecha) => {
+                        registrarDevolucion(cId, oId, devs, fecha);
                         Swal.fire({
                             title: '¡Devolución Exitosa!',
                             text: 'Los equipos han reingresado al inventario.',
