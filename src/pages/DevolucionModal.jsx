@@ -73,13 +73,24 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
         return preview;
     }, [quantities, remisiones, selClientId, selObraId, products]);
 
-    const handleSave = () => {
+    const [loading, setLoading] = useState(false);
+
+    const handleSave = async () => {
         const devoluciones = Object.entries(quantities)
             .filter(([, v]) => v > 0)
             .map(([productId, cantidad]) => ({ productId, cantidad }));
         if (devoluciones.length === 0) return;
-        onSave(devoluciones, fechaDevolucion);
-        onClose();
+
+        setLoading(true);
+        try {
+            await onSave(devoluciones, fechaDevolucion);
+            onClose();
+        } catch (error) {
+            console.error('Error saving return:', error);
+            alert('Error al procesar la devolución: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const inputStyle = { width: '100%', padding: '0.55rem 0.75rem', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#104166', fontSize: '0.875rem', textAlign: 'center', boxSizing: 'border-box', outline: 'none' };
@@ -236,9 +247,9 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
                     </div>
                     <div style={{ display: 'flex', gap: '0.75rem' }}>
                         <button className="btn btn-secondary" onClick={onClose} style={{ height: '40px', padding: '0 1.5rem' }}>Cancelar</button>
-                        <button className="btn btn-primary" disabled={totalADevolver === 0} onClick={handleSave}
-                            style={{ background: totalADevolver === 0 ? '#cbd5e1' : '#f97316', border: 'none', color: 'white', fontWeight: 700, padding: '0 1.5rem', borderRadius: '8px', cursor: totalADevolver === 0 ? 'not-allowed' : 'pointer', height: '40px' }}>
-                            Procesar Devolución
+                        <button className="btn btn-primary" disabled={totalADevolver === 0 || loading} onClick={handleSave}
+                            style={{ background: (totalADevolver === 0 || loading) ? '#cbd5e1' : '#f97316', border: 'none', color: 'white', fontWeight: 700, padding: '0 1.5rem', borderRadius: '8px', cursor: (totalADevolver === 0 || loading) ? 'not-allowed' : 'pointer', height: '40px' }}>
+                            {loading ? 'Procesando...' : 'Procesar Devolución'}
                         </button>
                     </div>
                 </div>
