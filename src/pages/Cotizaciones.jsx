@@ -810,6 +810,8 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     initialObraId={corteModalParams.obraId}
                     onClose={() => setShowCorteModal(false)}
                 />
+            )}
+
             {remPreloadData && (
                 <NuevaRemisionModal 
                     onClose={() => setRemPreloadData(null)}
