@@ -8,6 +8,7 @@ import { differenceInDays, format, eachDayOfInterval, isSunday, isSaturday, addD
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
+import { generateInvoicePDF } from './CotizacionesHelpers';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtCOP = n => `$${(n || 0).toLocaleString('es-CO')}`;
@@ -348,7 +349,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient]);
 
     const handleGenerate = () => { if (resultado) setGenerado(true); };
-    const handleSaveInvoice = () => {
+    const handleSaveInvoice = async () => {
         if (!resultado || saved) return;
 
         const itemsToFacturar = resultado.selectedLineas.map(l => ({ 
@@ -369,14 +370,26 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             });
         }
 
-        createInvoice({
-            clientId,
-            obraId,
-            items: itemsToFacturar,
-        });
-        
-        generateCortePDF({ ...resultado, lineas: resultado.selectedLineas }, selectedClient, selectedObra, settings);
-        setSaved(true);
+        try {
+            const newInvoice = await createInvoice({
+                clientId,
+                obraId,
+                items: itemsToFacturar,
+                transporte: resultado.transporte
+            });
+            
+            // Download Invoice PDF
+            if (newInvoice) {
+                generateInvoicePDF(newInvoice, selectedClient, products, settings);
+            }
+
+            // Also download the Corte PDF (Liquidación)
+            generateCortePDF({ ...resultado, lineas: resultado.selectedLineas }, selectedClient, selectedObra, settings);
+            
+            setSaved(true);
+        } catch (e) {
+            console.error('Error saving invoice:', e);
+        }
     };
 
     const inputStyle = {

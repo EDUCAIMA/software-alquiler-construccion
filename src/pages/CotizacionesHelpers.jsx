@@ -870,6 +870,147 @@ function exportClientPDF(client, invoices, products, settings) {
     doc.save(`Ficha_${client.name.replace(/\s+/g, '_')}_${client.id}.pdf`);
 }
 
+// ─── PDF Factura / Cobro (Nuevo Formato Profesional) ──────────────────────────
+export function generateInvoicePDF(invoice, client, products, settings) {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 10;
+
+    let y = applyStandardLayout(doc, 'FACTURA DE COBRO', settings, invoice.id);
+
+    y = drawInfoGrid(doc, y, client, {
+        valTopLeft: invoice.date || format(new Date(), 'yyyy-MM-dd'),
+        valTopRight: (invoice.status === 'Paid' || invoice.status === 'Pagada') ? 'PAGADA' : 'PENDIENTE',
+        labelTopLeft: 'Fecha Emisión',
+        labelTopRight: 'Estado Pago',
+        valMidLeft: (client?.obras || []).find(o => o.id === invoice.obraId)?.nombre || '—',
+        valMidRight: (invoice.paymentType || 'CONTADO').toUpperCase(),
+        valBottom: (Number(invoice.transporte) || 0) > 0 ? `$${Number(invoice.transporte).toLocaleString('es-CO')}` : '0',
+        labelBottom: 'Valor Transporte:',
+        obraDireccion: (client?.obras || []).find(o => o.id === invoice.obraId)?.ubicacion || client?.direccion
+    });
+
+    autoTable(doc, {
+        startY: y,
+        margin: { left: margin, right: margin },
+        head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
+        body: (invoice.items || []).map((item, idx) => {
+            const productName = item.nombre || item.name || products.find(p => p.id === item.productId)?.name || 'EQUIPO';
+            const qty = Number(item.quantity || item.cantidad || 0);
+            const days = Number(item.days || item.dias || 1);
+            const price = Number(item.price || item.tarifaDia || 0);
+            
+            return [
+                idx + 1,
+                productName.toUpperCase(),
+                qty,
+                days,
+                price.toLocaleString('es-CO'),
+                (qty * days * price).toLocaleString('es-CO')
+            ];
+        }),
+        theme: 'plain',
+        headStyles: { 
+            fillColor: [241, 245, 249], 
+            textColor: [30, 41, 59], 
+            fontSize: 7.5, 
+            fontStyle: 'bold', 
+            halign: 'center',
+            lineWidth: 0.1,
+            lineColor: [30, 41, 59]
+        },
+        styles: { 
+            fontSize: 7.5, 
+            cellPadding: 2, 
+            textColor: [30, 41, 59], 
+            halign: 'center',
+            lineWidth: 0.1,
+            lineColor: [30, 41, 59]
+        },
+        columnStyles: {
+            0: { cellWidth: 10 },
+            1: { halign: 'left', cellWidth: 'auto' },
+            2: { cellWidth: 15 },
+            3: { cellWidth: 15 },
+            4: { halign: 'right', cellWidth: 25 },
+            5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
+        }
+    });
+
+    try {
+        const subtotal = (invoice.items || []).reduce((s, item) => {
+            const qty = Number(item.quantity || item.cantidad || 0);
+            const days = Number(item.days || item.dias || 1);
+            const price = Number(item.price || item.tarifaDia || 0);
+            return s + (qty * days * price);
+        }, 0);
+
+        const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
+        const iva = Math.round(subtotal * porcIVA / 100);
+        const porcRet = client?.porcRetencion || 0;
+        const ret = Math.round(subtotal * porcRet / 100);
+        const totalVal = subtotal + iva + ret + (Number(invoice.transporte) || 0);
+
+        let ty = (doc.lastAutoTable?.finalY || y + 20) + 10;
+        const totW = 80;
+        const totX = pageWidth - margin - totW;
+        const totH = 7;
+
+        const totals = [
+            ['SUB-TOTAL', subtotal.toLocaleString('es-CO')],
+            [`IVA (${porcIVA}%)`, iva.toLocaleString('es-CO')],
+            [`RETENCIÓN (${porcRet}%)`, ret.toLocaleString('es-CO')],
+            ['TRANSPORTE', (Number(invoice.transporte) || 0).toLocaleString('es-CO')]
+        ];
+
+        totals.forEach(([label, value]) => {
+            doc.setLineWidth(0.1);
+            doc.setDrawColor(30, 41, 59);
+            doc.rect(totX, ty, 50, totH);
+            doc.rect(totX + 50, ty, 30, totH);
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'bold');
+            doc.text(label, totX + 2, ty + 4.5);
+            doc.setFont('helvetica', 'normal');
+            doc.text(value, totX + 78, ty + 4.5, { align: 'right' });
+            ty += totH;
+        });
+
+        doc.setFillColor(241, 245, 249);
+        doc.rect(totX, ty, 50, 9, 'F');
+        doc.rect(totX, ty, 50, 9, 'S');
+        doc.rect(totX + 50, ty, 30, 9, 'S');
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text('TOTAL', totX + 2, ty + 6);
+        doc.text(`$${totalVal.toLocaleString('es-CO')}`, totX + 78, ty + 6, { align: 'right' });
+        
+        y = ty + 20;
+    } catch (err) {
+        console.error('Error in total calculation or summary:', err);
+    }
+
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const signatureY = Math.max(pageHeight - 50, y + 30);
+
+    if (invoice.status === 'Paid' || invoice.status === 'Pagada') {
+        doc.setFontSize(22);
+        doc.setTextColor(16, 185, 129);
+        doc.setFont(undefined, 'bold');
+        doc.setGState(new doc.GState({ opacity: 0.2 }));
+        doc.text('PAGADA', margin, y + 10);
+        doc.setGState(new doc.GState({ opacity: 1 }));
+    }
+
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.setFont(undefined, 'normal');
+    doc.text('Firma Recibido:', margin, signatureY);
+    doc.line(margin, signatureY + 2, margin + 50, signatureY + 2);
+
+    doc.save(`Factura_${invoice.id}.pdf`);
+}
+
 export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, generateCortePDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP, exportClientPDF };
 
 

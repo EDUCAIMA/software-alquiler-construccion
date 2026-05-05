@@ -256,6 +256,7 @@ export const AppProvider = ({ children }) => {
     await reloadAll();
     sendEmail(client?.email || 'N/A', newInvoice);
     logAction('Rental Order Generated', `Invoice ${newInvoice.id}`, client?.name || 'Unknown', 'exit');
+    return newInvoice;
   };
 
   // ─── Crear factura directamente desde una cotización aprobada ─────────────
