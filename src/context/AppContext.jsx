@@ -622,10 +622,17 @@ export const AppProvider = ({ children }) => {
         // Registrar la devolución
         item.cantidadDevuelta = (item.cantidadDevuelta || 0) + descuento;
         if (!item.devoluciones) item.devoluciones = [];
-        item.devoluciones.push({ 
-            cantidad: descuento, 
-            fecha: fecha || format(new Date(), 'yyyy-MM-dd') 
-        });
+        
+        const returnDate = fecha || format(new Date(), 'yyyy-MM-dd');
+        const existingDev = item.devoluciones.find(d => d.fecha === returnDate);
+        if (existingDev) {
+            existingDev.cantidad += descuento;
+        } else {
+            item.devoluciones.push({ 
+                cantidad: descuento, 
+                fecha: returnDate 
+            });
+        }
         
         restante -= descuento;
         stockReintegrar[productId] = (stockReintegrar[productId] || 0) + descuento;

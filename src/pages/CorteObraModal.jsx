@@ -203,20 +203,26 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                     let accountedQty = 0;
 
                     if (item.devoluciones && Array.isArray(item.devoluciones)) {
+                        const devMap = {};
                         item.devoluciones.forEach(dev => {
-                            const dDate = parseUTCDate(dev.fecha);
+                            if (!devMap[dev.fecha]) devMap[dev.fecha] = 0;
+                            devMap[dev.fecha] += dev.cantidad;
+                        });
+
+                        Object.entries(devMap).forEach(([fecha, cantidad]) => {
+                            const dDate = parseUTCDate(fecha);
                             const effectiveStart = equipStart > fStart ? equipStart : fStart;
                             const effectiveEnd = dDate < fEnd ? dDate : fEnd;
 
                             if (effectiveStart <= effectiveEnd) {
                                 const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
-                                const sub = dev.cantidad * dDays * tarifa;
+                                const sub = cantidad * dDays * tarifa;
                                 subtotalTotal += sub;
                                 lineas.push({
                                     remId: rem.id,
                                     remFecha: rem.fecha,
-                                    equipo: `${prod?.name || item.productId} (Dev: ${dev.fecha})`,
-                                    cantidad: dev.cantidad,
+                                    equipo: `${prod?.name || item.productId} (Dev: ${fecha})`,
+                                    cantidad: cantidad,
                                     dias: dDays,
                                     tarifaDia: tarifa,
                                     subtotal: sub,
@@ -224,7 +230,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                     esquema: scheme,
                                 });
                             }
-                            accountedQty += dev.cantidad;
+                            accountedQty += cantidad;
                         });
                     }
 
