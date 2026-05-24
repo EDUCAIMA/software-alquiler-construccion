@@ -30,8 +30,9 @@ async function initDB() {
         console.log('⚠️  No DATABASE_URL encontrada. Configura tu archivo .env con la URL de Railway.');
         return;
     }
-    const client = await pool.connect();
+    let client;
     try {
+        client = await pool.connect();
         // --- Productos ---
         await client.query(`
       CREATE TABLE IF NOT EXISTS products (
@@ -262,7 +263,7 @@ async function initDB() {
     } catch (err) {
         console.error('❌ Error inicializando la base de datos:', err.message);
     } finally {
-        client.release();
+        if (client) client.release();
     }
 }
 
