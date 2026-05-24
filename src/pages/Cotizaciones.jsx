@@ -516,6 +516,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     settings={settings}
                     onClose={() => setSelected(null)}
                     onUpdateEstado={actualizarEstadoCotizacion}
+                    onUpdateCot={updateCotizacion}
                     onOpenApproval={() => { setApproving(selectedCot.id); setSelected(null); }}
                     onFacturar={() => { createInvoiceFromCotizacion(selectedCot.id); onInvoiceCreated?.(); }}
                     onSendLink={handleSendQuote}

@@ -76,9 +76,9 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
             responsableTransporte: respTransporte,
             transporte: Number(transporte) || 0,
             notas, items,
-            validezDias: 15, // Default as requested to remove field
-            metodoPago: 'Crédito 30 días', // Default as requested to remove field
-            plazoEntrega: '24 horas' // Default as requested to remove field
+            validezDias: initialData?.validezDias || 15, // Default as requested to remove field
+            metodoPago: initialData?.metodoPago || 'Crédito 30 días', // Default as requested to remove field
+            plazoEntrega: initialData?.plazoEntrega || '24 horas' // Default as requested to remove field
         });
         onClose();
     };

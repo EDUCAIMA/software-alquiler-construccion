@@ -39,10 +39,74 @@ export default function CotDetailPanel({
     onSendLink, onEditContrato, onEdit, onDelete, invoices = [], remisiones = [],
     onCreateRemision, onFinalizeDispatch, onDevolucion, onTrazabilidad, onPrintRemision, 
     onCorteObra, onCorteAction, onTriggerPay, canCreateRem, linkedRems = [], activeRems = [],
-    getClient, getObra 
+    getClient, getObra, onUpdateCot
 }) {
 
     const [activeTab, setActiveTab] = useState('cotizacion');
+    const handleEditMetodoPago = async () => {
+        const options = {
+            'Crédito 30 días': 'Crédito 30 días',
+            'Crédito 15 días': 'Crédito 15 días',
+            'Contado': 'Contado',
+            'Contra entrega': 'Contra entrega',
+            'custom': 'Otro (Especificar...)'
+        };
+
+        const { value: nuevoMetodo } = await Swal.fire({
+            title: 'Editar Forma de Pago',
+            input: 'select',
+            inputOptions: options,
+            inputPlaceholder: 'Seleccione forma de pago',
+            showCancelButton: true,
+            confirmButtonColor: '#2365AB',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Siguiente',
+            cancelButtonText: 'Cancelar',
+            inputValue: ['Crédito 30 días', 'Crédito 15 días', 'Contado', 'Contra entrega'].includes(cot.metodoPago) ? cot.metodoPago : 'custom'
+        });
+
+        if (nuevoMetodo) {
+            let finalMetodo = nuevoMetodo;
+            if (nuevoMetodo === 'custom') {
+                const { value: customMetodo } = await Swal.fire({
+                    title: 'Especificar Forma de Pago',
+                    input: 'text',
+                    inputPlaceholder: 'Ej. Crédito 45 días',
+                    showCancelButton: true,
+                    confirmButtonColor: '#2365AB',
+                    cancelButtonColor: '#64748b',
+                    confirmButtonText: 'Guardar',
+                    cancelButtonText: 'Cancelar',
+                    inputValue: !['Crédito 30 días', 'Crédito 15 días', 'Contado', 'Contra entrega'].includes(cot.metodoPago) ? cot.metodoPago : ''
+                });
+                if (customMetodo !== undefined) {
+                    finalMetodo = customMetodo;
+                } else {
+                    return; // cancelado
+                }
+            }
+            
+            if (finalMetodo.trim() !== '') {
+                try {
+                    await onUpdateCot(cot.id, { metodoPago: finalMetodo });
+                    Swal.fire({
+                        title: '¡Actualizado!',
+                        text: 'La forma de pago ha sido actualizada con éxito.',
+                        icon: 'success',
+                        confirmButtonColor: '#2365AB'
+                    });
+                } catch (e) {
+                    Swal.fire({
+                        title: 'Error',
+                        text: e.message,
+                        icon: 'error',
+                        confirmButtonColor: '#ef4444'
+                    });
+                }
+            }
+        }
+    };
+
     const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
     const subtotal = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0);
     const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
@@ -327,11 +391,50 @@ export default function CotDetailPanel({
                             </div>
 
                             <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '0.75rem 0.85rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-                                {[['Método Pago', cot.metodoPago], ['Resp. Transporte', cot.responsableTransporte], ['Plazo Entrega', cot.plazoEntrega]].map(([k, v]) => v ? (
-                                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '0.25rem 0', borderBottom: '1px solid #f1f5f9' }}>
-                                        <span style={{ color: '#64748b' }}>{k}</span><span style={{ fontWeight: 600, color: '#104166' }}>{v}</span>
+                                {/* Método Pago */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', padding: '0.25rem 0', borderBottom: '1px solid #f1f5f9' }}>
+                                    <span style={{ color: '#64748b' }}>Método Pago</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <span style={{ fontWeight: 600, color: '#104166' }}>{cot.metodoPago || '—'}</span>
+                                        {onUpdateCot && (
+                                            <button 
+                                                onClick={handleEditMetodoPago}
+                                                style={{ 
+                                                    background: 'none', 
+                                                    border: 'none', 
+                                                    cursor: 'pointer', 
+                                                    color: '#2365AB', 
+                                                    padding: '2px', 
+                                                    display: 'flex', 
+                                                    alignItems: 'center',
+                                                    borderRadius: '4px',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                title="Editar forma de pago"
+                                            >
+                                                <Edit2 size={12} />
+                                            </button>
+                                        )}
                                     </div>
-                                ) : null)}
+                                </div>
+
+                                {/* Resp. Transporte */}
+                                {cot.responsableTransporte && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '0.25rem 0', borderBottom: cot.plazoEntrega ? '1px solid #f1f5f9' : 'none' }}>
+                                        <span style={{ color: '#64748b' }}>Resp. Transporte</span>
+                                        <span style={{ fontWeight: 600, color: '#104166' }}>{cot.responsableTransporte}</span>
+                                    </div>
+                                )}
+
+                                {/* Plazo Entrega */}
+                                {cot.plazoEntrega && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', padding: '0.25rem 0' }}>
+                                        <span style={{ color: '#64748b' }}>Plazo Entrega</span>
+                                        <span style={{ fontWeight: 600, color: '#104166' }}>{cot.plazoEntrega}</span>
+                                    </div>
+                                )}
                             </div>
 
                             {cot.notas && <div style={{ fontSize: '0.78rem', color: '#64748b', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.65rem 0.85rem' }}>{cot.notas}</div>}
