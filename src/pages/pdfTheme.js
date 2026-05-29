@@ -54,7 +54,7 @@ export const applyStandardLayout = (doc, title, settings, number = '') => {
     
     if (number) {
         doc.setFontSize(11);
-        doc.text(`Nro - ${number}`, W - margin - 32.5, y + 15, { align: 'center' });
+        doc.text(`Nro - ${number.replace('--', '-')}`, W - margin - 32.5, y + 15, { align: 'center' });
     }
 
     // --- PIE DE PÁGINA ---

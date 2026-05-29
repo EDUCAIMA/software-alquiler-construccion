@@ -239,7 +239,7 @@ export const AppProvider = ({ children }) => {
 
     const newInvoice = {
       ...invoiceDetails,
-      id: nextId(invoices, 'F-'),
+      id: nextId(invoices, 'F'),
       amount,
       status: 'Pending',
       date: format(new Date(), 'yyyy-MM-dd'),
@@ -289,7 +289,7 @@ export const AppProvider = ({ children }) => {
         date: format(new Date(), 'yyyy-MM-dd'),
         remisionEnabled: false,
         remisionCreada: false,
-        id: nextId(invoices, 'F-'),
+        id: nextId(invoices, 'F'),
       };
       await api.post('/api/invoices', newInvoice);
 
@@ -491,7 +491,7 @@ export const AppProvider = ({ children }) => {
             const totalAmount = subtotal + iva + ret + (Number(nueva.transporte) || 0);
 
             // Usar formato de ID estándar para evitar problemas de filtro
-            const autoInvoiceId = nextId(invoices, 'F-');
+            const autoInvoiceId = nextId(invoices, 'F');
 
             const autoInvoice = {
                 id: autoInvoiceId,
@@ -728,7 +728,7 @@ export const AppProvider = ({ children }) => {
 
   // ─── COTIZACIONES CRUD ────────────────────────────────────────────────────
   const addCotizacion = async (data) => {
-    const id = nextId(cotizaciones, 'C-');
+    const id = nextId(cotizaciones, 'C');
     const defaultClausulas = [
         '1. El ARRENDATARIO se compromete a utilizar los equipos únicamente en la obra indicada y a devolverlos en perfectas condiciones de funcionamiento.',
         '2. Cualquier daño, pérdida o robo de los equipos será de responsabilidad exclusiva del ARRENDATARIO.',

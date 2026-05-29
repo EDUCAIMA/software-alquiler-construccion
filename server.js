@@ -259,6 +259,16 @@ async function initDB() {
             console.log('✅ Productos de muestra insertados.');
         }
 
+        // --- Normalización de IDs con doble guión ---
+        try {
+            await client.query("UPDATE cotizaciones SET id = REPLACE(id, '--', '-'), factura_id = REPLACE(factura_id, '--', '-') WHERE id LIKE '%--%' OR factura_id LIKE '%--%'");
+            await client.query("UPDATE invoices SET id = REPLACE(id, '--', '-'), cotizacion_id = REPLACE(cotizacion_id, '--', '-') WHERE id LIKE '%--%' OR cotizacion_id LIKE '%--%'");
+            await client.query("UPDATE remisiones SET id = REPLACE(id, '--', '-'), cotizacion_id = REPLACE(cotizacion_id, '--', '-'), factura_id = REPLACE(factura_id, '--', '-') WHERE id LIKE '%--%' OR cotizacion_id LIKE '%--%' OR factura_id LIKE '%--%'");
+            console.log('✅ IDs de base de datos normalizados (sin doble guión).');
+        } catch (e) {
+            console.error('⚠️ Error al normalizar IDs en base de datos:', e.message);
+        }
+
         console.log('✅ Base de datos inicializada correctamente.');
     } catch (err) {
         console.error('❌ Error inicializando la base de datos:', err.message);
