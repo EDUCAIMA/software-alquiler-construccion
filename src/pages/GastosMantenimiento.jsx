@@ -414,8 +414,8 @@ export default function GastosMantenimiento() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                    {['ID', 'Clasificación Gasto', 'Subconcepto', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
-                                        <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal', textTransform: 'none' }}>{h}</th>
+                                    {['ID', 'Clasificación Gasto', 'Subconcepto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
+                                        <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.85rem', color: '#104166', fontWeight: 'bold', textTransform: 'none' }}>{h}</th>
                                     ))}
                                 </tr>
                             </thead>
@@ -432,6 +432,12 @@ export default function GastosMantenimiento() {
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
                                                 {g.subtipo_gasto || 'Sin clasificar'}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
+                                                {g.proveedor_beneficiario || 'N/A'}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
+                                                {g.referencia_soporte || 'N/A'}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#104166', fontWeight: 'normal' }} title={g.descripcion}>
                                                 {g.descripcion || 'Sin descripción'}
