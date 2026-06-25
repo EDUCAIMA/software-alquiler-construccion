@@ -19,6 +19,7 @@ import Login from './pages/Login';
 import SettingsPage from './pages/Settings';
 import PublicCotizacionApproval from './pages/PublicCotizacionApproval';
 import Invoices from './pages/Invoices';
+import GastosMantenimiento from './pages/GastosMantenimiento';
 
 // ─── Route Guard ──────────────────────────────────────────────────────────────
 function ProtectedRoute({ children, requireDashboard }) {
@@ -53,6 +54,7 @@ function Topbar() {
     { icon: FileText,        label: 'Facturación',           path: '/invoices',    restricted: false },
     { icon: Activity,        label: 'Trazabilidad',          path: '/trazability', restricted: false },
     { icon: Wrench,          label: 'Mantenimientos',        path: '/maintenance', restricted: false },
+    { icon: Calculator,      label: 'Gastos de Equipos',     path: '/gastos-mantenimiento', restricted: false },
     { icon: Settings,        label: 'Configuración',         path: '/settings',    restricted: true  },
   ].filter(item => !item.restricted || canViewDashboard);
 
@@ -327,6 +329,7 @@ function AppShell() {
         <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
         <Route path="/financiero" element={<ProtectedRoute><Financiero /></ProtectedRoute>} />
         <Route path="/maintenance" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
+        <Route path="/gastos-mantenimiento" element={<ProtectedRoute><GastosMantenimiento /></ProtectedRoute>} />
         <Route path="/trazability" element={<ProtectedRoute><Trazability /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute requireDashboard><SettingsPage /></ProtectedRoute>} />
         <Route path="/login" element={<Navigate to="/" replace />} />

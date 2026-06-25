@@ -77,6 +77,7 @@ export const AppProvider = ({ children }) => {
   const [remisiones, setRemisiones] = useState([]);
   const [maintenances, setMaintenances] = useState([]);
   const [gastos, setGastos] = useState([]);
+  const [gastosMantenimiento, setGastosMantenimiento] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -90,7 +91,7 @@ export const AppProvider = ({ children }) => {
     try {
       const fetchSafe = (url, fallback) => api.get(url).catch(e => { console.error(`Error fetching ${url}:`, e); return fallback; });
       
-      const [p, c, inv, cot, rem, maint, g, emp, liq, s] = await Promise.all([
+      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm] = await Promise.all([
         fetchSafe('/api/products', []),
         fetchSafe('/api/clients', []),
         fetchSafe('/api/invoices', []),
@@ -101,6 +102,7 @@ export const AppProvider = ({ children }) => {
         fetchSafe('/api/empleados', []),
         fetchSafe('/api/liquidaciones', []),
         fetchSafe('/api/settings', { companyName: 'CIELO', logo: '', headerExtra: '' }),
+        fetchSafe('/api/gastos-mantenimiento', []),
       ]);
       
       console.log('API Data loaded:', { products: p.length, clients: c.length, settings: s });
@@ -114,6 +116,7 @@ export const AppProvider = ({ children }) => {
       setGastos(Array.isArray(g) ? g : []);
       setEmpleados(Array.isArray(emp) ? emp : []);
       setLiquidaciones(Array.isArray(liq) ? liq : []);
+      setGastosMantenimiento(Array.isArray(gm) ? gm : []);
       if (s && !s.error) setSettings(s);
     } catch (err) {
       console.error('Error crítico en reloadAll:', err);
@@ -812,6 +815,28 @@ export const AppProvider = ({ children }) => {
     logAction('Gasto Pagado', id, '', 'system');
   };
 
+  // ─── GASTOS MANTENIMIENTO CRUD ─────────────────────────────────────────────
+  const addGastoMantenimiento = async (data) => {
+    const id = nextId(gastosMantenimiento, 'GM');
+    const nuevo = { ...data, id, costo: Number(data.costo || 0) };
+    await api.post('/api/gastos-mantenimiento', nuevo);
+    await reloadAll();
+    logAction('Gasto Mantenimiento Registrado', `${id} — ${data.tipo_gasto}`, data.id_maquina || 'General', 'exit');
+  };
+
+  const editGastoMantenimiento = async (id, data) => {
+    const editado = { ...data, costo: Number(data.costo || 0) };
+    await api.put(`/api/gastos-mantenimiento/${id}`, editado);
+    await reloadAll();
+    logAction('Gasto Mantenimiento Modificado', id, data.id_maquina || 'General', 'system');
+  };
+
+  const deleteGastoMantenimiento = async (id) => {
+    await api.del(`/api/gastos-mantenimiento/${id}`);
+    await reloadAll();
+    logAction('Gasto Mantenimiento Eliminado', id, '', 'system');
+  };
+
   // ─── EMPLEADOS + NÓMINA ───────────────────────────────────────────────────
   const addEmpleado = async (data) => {
     const id = nextId(empleados, 'EMP');
@@ -869,6 +894,8 @@ export const AppProvider = ({ children }) => {
       cotizaciones, addCotizacion, actualizarEstadoCotizacion, updateCotizacion, deleteCotizacion,
       // Gastos
       gastos, addGasto, pagarGasto,
+      // Gastos Mantenimiento
+      gastosMantenimiento, addGastoMantenimiento, editGastoMantenimiento, deleteGastoMantenimiento,
       empleados, addEmpleado,
       liquidaciones, addLiquidacion, pagarLiquidacion,
       // Settings

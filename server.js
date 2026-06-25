@@ -231,6 +231,19 @@ async function initDB() {
                 address TEXT
             )
             `);
+
+        // --- Gastos de Mantenimiento ---
+        await client.query(`
+      CREATE TABLE IF NOT EXISTS gastos_mantenimiento(
+                id VARCHAR(50) PRIMARY KEY,
+                id_maquina VARCHAR(50) REFERENCES products(id) ON DELETE SET NULL,
+                tipo_gasto VARCHAR(100) NOT NULL,
+                descripcion TEXT,
+                costo NUMERIC(12, 2) DEFAULT 0,
+                fecha_gasto DATE DEFAULT CURRENT_DATE,
+                fecha_registro TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            `);
         // Migración: agregar columnas si no existen
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS short_name VARCHAR(100)`);
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS name_complement VARCHAR(255)`);
@@ -768,6 +781,65 @@ app.put('/api/settings', async (req, res) => {
     } catch (e) { 
         console.error('ERROR UPDATING SETTINGS:', e.message);
         res.status(500).json({ error: e.message }); 
+    }
+// ─── GASTOS MANTENIMIENTO CRUD ───────────────────────────────────────────────
+app.get('/api/gastos-mantenimiento', async (req, res) => {
+    try {
+        const { rows } = await pool.query(`
+            SELECT gm.*, p.name as name_maquina 
+            FROM gastos_mantenimiento gm
+            LEFT JOIN products p ON gm.id_maquina = p.id
+            ORDER BY gm.fecha_gasto DESC, gm.fecha_registro DESC
+        `);
+        res.json(rows);
+    } catch (e) {
+        console.error('ERROR GETTING GASTOS MANTENIMIENTO:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/gastos-mantenimiento', async (req, res) => {
+    const { id, id_maquina, tipo_gasto, descripcion, costo, fecha_gasto } = req.body;
+    try {
+        const { rows } = await pool.query(`
+            INSERT INTO gastos_mantenimiento (id, id_maquina, tipo_gasto, descripcion, costo, fecha_gasto)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *
+        `, [id, id_maquina || null, tipo_gasto, descripcion, Number(costo) || 0, fecha_gasto]);
+        res.status(201).json(rows[0]);
+    } catch (e) {
+        console.error('ERROR CREATING GASTO MANTENIMIENTO:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put('/api/gastos-mantenimiento/:id', async (req, res) => {
+    const { id } = req.params;
+    const { id_maquina, tipo_gasto, descripcion, costo, fecha_gasto } = req.body;
+    try {
+        const { rows } = await pool.query(`
+            UPDATE gastos_mantenimiento
+            SET id_maquina = $1, tipo_gasto = $2, descripcion = $3, costo = $4, fecha_gasto = $5
+            WHERE id = $6
+            RETURNING *
+        `, [id_maquina || null, tipo_gasto, descripcion, Number(costo) || 0, fecha_gasto, id]);
+        if (rows.length === 0) return res.status(404).json({ error: 'Gasto de mantenimiento no encontrado' });
+        res.json(rows[0]);
+    } catch (e) {
+        console.error('ERROR UPDATING GASTO MANTENIMIENTO:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/gastos-mantenimiento/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const { rowCount } = await pool.query('DELETE FROM gastos_mantenimiento WHERE id = $1', [id]);
+        if (rowCount === 0) return res.status(404).json({ error: 'Gasto de mantenimiento no encontrado' });
+        res.json({ success: true });
+    } catch (e) {
+        console.error('ERROR DELETING GASTO MANTENIMIENTO:', e.message);
+        res.status(500).json({ error: e.message });
     }
 });
 
