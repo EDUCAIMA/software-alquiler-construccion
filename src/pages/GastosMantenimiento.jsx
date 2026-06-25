@@ -4,7 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import { format } from 'date-fns';
 
 const CATEGORIES_MAP = {
-    'Compra de Inventario': [
+    'Compra de Máquina o Herramienta': [
         'Maquinaria Pesada',
         'Herramientas Eléctricas',
         'Estructuras y Andamios',
@@ -58,7 +58,7 @@ const CATEGORIES_MAP = {
 };
 
 const TIPO_CONFIG = {
-    'Compra de Inventario': { color: '#8b5cf6', label: 'Compra de Inventario' },
+    'Compra de Máquina o Herramienta': { color: '#8b5cf6', label: 'Compra de Máquina o Herramienta' },
     'Mantenimiento': { color: '#2365AB', label: 'Mantenimiento' },
     'Gastos de Sostenimiento': { color: '#f97316', label: 'Sostenimiento' },
     'Servicios': { color: '#eab308', label: 'Servicios' },
@@ -94,13 +94,13 @@ export default function GastosMantenimiento() {
     // KPIs
     const totalGasto = gastosMantenimiento.reduce((s, g) => s + (Number(g.costo) || 0), 0);
     const gastoInventario = gastosMantenimiento
-        .filter(g => g.tipo_gasto === 'Compra de Inventario')
+        .filter(g => g.tipo_gasto === 'Compra de Inventario' || g.tipo_gasto === 'Compra de Máquina o Herramienta')
         .reduce((s, g) => s + (Number(g.costo) || 0), 0);
     const gastoMantenimiento = gastosMantenimiento
         .filter(g => g.tipo_gasto === 'Mantenimiento')
         .reduce((s, g) => s + (Number(g.costo) || 0), 0);
     const gastoOperativos = gastosMantenimiento
-        .filter(g => g.tipo_gasto !== 'Compra de Inventario' && g.tipo_gasto !== 'Mantenimiento')
+        .filter(g => g.tipo_gasto !== 'Compra de Inventario' && g.tipo_gasto !== 'Compra de Máquina o Herramienta' && g.tipo_gasto !== 'Mantenimiento')
         .reduce((s, g) => s + (Number(g.costo) || 0), 0);
 
     // Filtered data
@@ -343,15 +343,6 @@ export default function GastosMantenimiento() {
                             <button onClick={closeForm} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={16} /></button>
                         </div>
                         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.5rem', margin: 0 }}>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Equipo Relacionado (Opcional)</label>
-                                <select value={form.id_maquina} onChange={e => setForm(f => ({ ...f, id_maquina: e.target.value }))}
-                                    style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}>
-                                    <option value="">Gasto General / Costo Operativo</option>
-                                    {products.map(p => <option key={p.id} value={p.id}>{p.name} (ID: {p.id})</option>)}
-                                </select>
-                            </div>
-                            
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Categoría Principal</label>
@@ -363,7 +354,8 @@ export default function GastosMantenimiento() {
                                             setForm(f => ({ 
                                                 ...f, 
                                                 tipo_gasto: val, 
-                                                subtipo_gasto: subs[0] || '' 
+                                                subtipo_gasto: subs[0] || '',
+                                                id_maquina: (val === 'Mantenimiento' || val === 'Compra de Máquina o Herramienta') ? f.id_maquina : ''
                                             }));
                                         }} 
                                         required
@@ -384,6 +376,17 @@ export default function GastosMantenimiento() {
                                     </select>
                                 </div>
                             </div>
+
+                            {(form.tipo_gasto === 'Mantenimiento' || form.tipo_gasto === 'Compra de Máquina o Herramienta') && (
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Equipo Relacionado (Opcional)</label>
+                                    <select value={form.id_maquina} onChange={e => setForm(f => ({ ...f, id_maquina: e.target.value }))}
+                                        style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}>
+                                        <option value="">Gasto General (Sin equipo específico)</option>
+                                        {products.map(p => <option key={p.id} value={p.id}>{p.name} (ID: {p.id})</option>)}
+                                    </select>
+                                </div>
+                            )}
                             
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
