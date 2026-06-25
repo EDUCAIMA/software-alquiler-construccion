@@ -1,19 +1,70 @@
 import React, { useState } from 'react';
-import { Calculator, Plus, Trash2, Edit3, X, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
+import { Calculator, Plus, Trash2, Edit3, X, TrendingUp, AlertTriangle, Clock, Package, Wrench, Receipt } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format } from 'date-fns';
 
+const CATEGORIES_MAP = {
+    'Compra de Inventario': [
+        'Maquinaria Pesada',
+        'Herramientas Eléctricas',
+        'Estructuras y Andamios',
+        'Repuestos de Inventario',
+        'Otros'
+    ],
+    'Mantenimiento': [
+        'Mantenimiento Preventivo',
+        'Reparación Correctiva',
+        'Mantenimiento Predictivo',
+        'Calibración / Ajuste',
+        'Otros'
+    ],
+    'Gastos de Sostenimiento': [
+        'Alimentación / Refrigerios',
+        'Tinto / Cafetería',
+        'Transporte / Viáticos',
+        'Combustible / Lubricantes',
+        'Limpieza y Aseo',
+        'Otros'
+    ],
+    'Servicios': [
+        'Energía Eléctrica',
+        'Agua / Alcantarillado',
+        'Internet / Telefonía',
+        'Gas',
+        'Servicios de Soporte',
+        'Otros'
+    ],
+    'Arriendo': [
+        'Arriendo de Local / Bodega',
+        'Arriendo de Equipos Externos',
+        'Arriendo de Vehículos',
+        'Otros'
+    ],
+    'Nómina': [
+        'Salario de Operarios',
+        'Salario Administrativo',
+        'Horas Extra',
+        'Seguridad Social / Prestaciones',
+        'Mano de Obra Externa / Contratistas',
+        'Otros'
+    ],
+    'Otros Gastos': [
+        'Papelería / Oficina',
+        'Impuestos / Tasas',
+        'Seguros',
+        'Imprevistos',
+        'Varios'
+    ]
+};
+
 const TIPO_CONFIG = {
-    'Consumo / Combustible': { color: '#06b6d4', label: 'Consumo / Combustible' },
-    'Mantenimiento Preventivo': { color: '#2365AB', label: 'Mantenimiento Preventivo' },
-    'Reparación': { color: '#ef4444', label: 'Reparación' },
-    'Repuestos': { color: '#8b5cf6', label: 'Repuestos' },
-    'Alimentación / Refrigerios': { color: '#f97316', label: 'Alimentación / Refrigerios' },
-    'Nómina / Mano de obra': { color: '#10b981', label: 'Nómina / Mano de obra' },
-    'Transporte / Viáticos': { color: '#3b82f6', label: 'Transporte / Viáticos' },
-    'Papelería / Oficina': { color: '#ec4899', label: 'Papelería / Oficina' },
-    'Servicios y Facturas': { color: '#eab308', label: 'Servicios y Facturas' },
-    'Otros': { color: '#64748b', label: 'Otros' }
+    'Compra de Inventario': { color: '#8b5cf6', label: 'Compra de Inventario' },
+    'Mantenimiento': { color: '#2365AB', label: 'Mantenimiento' },
+    'Gastos de Sostenimiento': { color: '#f97316', label: 'Sostenimiento' },
+    'Servicios': { color: '#eab308', label: 'Servicios' },
+    'Arriendo': { color: '#ec4899', label: 'Arriendo' },
+    'Nómina': { color: '#10b981', label: 'Nómina' },
+    'Otros Gastos': { color: '#64748b', label: 'Otros Gastos' }
 };
 
 export default function GastosMantenimiento() {
@@ -29,7 +80,8 @@ export default function GastosMantenimiento() {
     const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState({
         id_maquina: '', 
-        tipo_gasto: 'Mantenimiento Preventivo', 
+        tipo_gasto: 'Mantenimiento', 
+        subtipo_gasto: 'Mantenimiento Preventivo', 
         descripcion: '', 
         costo: '', 
         fecha_gasto: format(new Date(), 'yyyy-MM-dd'),
@@ -41,10 +93,14 @@ export default function GastosMantenimiento() {
 
     // KPIs
     const totalGasto = gastosMantenimiento.reduce((s, g) => s + (Number(g.costo) || 0), 0);
-    const totalRegistros = gastosMantenimiento.length;
-    const gastoPromedio = totalRegistros > 0 ? Math.round(totalGasto / totalRegistros) : 0;
-    const gastoReparaciones = gastosMantenimiento
-        .filter(g => g.tipo_gasto === 'Reparación')
+    const gastoInventario = gastosMantenimiento
+        .filter(g => g.tipo_gasto === 'Compra de Inventario')
+        .reduce((s, g) => s + (Number(g.costo) || 0), 0);
+    const gastoMantenimiento = gastosMantenimiento
+        .filter(g => g.tipo_gasto === 'Mantenimiento')
+        .reduce((s, g) => s + (Number(g.costo) || 0), 0);
+    const gastoOperativos = gastosMantenimiento
+        .filter(g => g.tipo_gasto !== 'Compra de Inventario' && g.tipo_gasto !== 'Mantenimiento')
         .reduce((s, g) => s + (Number(g.costo) || 0), 0);
 
     // Filtered data
@@ -53,6 +109,7 @@ export default function GastosMantenimiento() {
         const product = products.find(p => p.id === g.id_maquina);
         return (
             g.tipo_gasto.toLowerCase().includes(query) ||
+            (g.subtipo_gasto && g.subtipo_gasto.toLowerCase().includes(query)) ||
             (g.descripcion && g.descripcion.toLowerCase().includes(query)) ||
             (g.proveedor_beneficiario && g.proveedor_beneficiario.toLowerCase().includes(query)) ||
             (g.referencia_soporte && g.referencia_soporte.toLowerCase().includes(query)) ||
@@ -66,6 +123,7 @@ export default function GastosMantenimiento() {
         const payload = {
             id_maquina: form.id_maquina || null,
             tipo_gasto: form.tipo_gasto,
+            subtipo_gasto: form.subtipo_gasto,
             descripcion: form.descripcion,
             costo: Number(form.costo) || 0,
             fecha_gasto: form.fecha_gasto,
@@ -90,7 +148,8 @@ export default function GastosMantenimiento() {
         setEditingId(gasto.id);
         setForm({
             id_maquina: gasto.id_maquina || '',
-            tipo_gasto: gasto.tipo_gasto,
+            tipo_gasto: gasto.tipo_gasto || 'Mantenimiento',
+            subtipo_gasto: gasto.subtipo_gasto || (CATEGORIES_MAP[gasto.tipo_gasto || 'Mantenimiento']?.[0] || ''),
             descripcion: gasto.descripcion || '',
             costo: gasto.costo,
             fecha_gasto: format(new Date(gasto.fecha_gasto), 'yyyy-MM-dd'),
@@ -115,7 +174,8 @@ export default function GastosMantenimiento() {
         setEditingId(null);
         setForm({
             id_maquina: '', 
-            tipo_gasto: 'Mantenimiento Preventivo', 
+            tipo_gasto: 'Mantenimiento', 
+            subtipo_gasto: 'Mantenimiento Preventivo', 
             descripcion: '', 
             costo: '', 
             fecha_gasto: format(new Date(), 'yyyy-MM-dd'),
@@ -140,33 +200,33 @@ export default function GastosMantenimiento() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid-cards" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1.5rem', gap: '1rem' }}>
-                <div className="stat-card blue">
-                    <div className="icon-wrapper blue"><Calculator size={24} /></div>
+            <div className="grid-cards" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: '1.5rem', gap: '0.75rem' }}>
+                <div className="stat-card blue" style={{ padding: '0.85rem 1rem', flexDirection: 'row', alignItems: 'center', gap: '0.75rem' }}>
+                    <div className="icon-wrapper blue" style={{ width: '38px', height: '38px', minWidth: '38px', borderRadius: '10px', margin: 0 }}><Calculator size={18} /></div>
                     <div>
-                        <div className="stat-value">${totalGasto.toLocaleString()}</div>
-                        <div className="stat-label">Gasto Total</div>
+                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${totalGasto.toLocaleString()}</div>
+                        <div className="stat-label" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Gasto Total</div>
                     </div>
                 </div>
-                <div className="stat-card orange">
-                    <div className="icon-wrapper orange"><TrendingUp size={24} /></div>
+                <div className="stat-card green" style={{ padding: '0.85rem 1rem', flexDirection: 'row', alignItems: 'center', gap: '0.75rem' }}>
+                    <div className="icon-wrapper green" style={{ width: '38px', height: '38px', minWidth: '38px', borderRadius: '10px', margin: 0 }}><Package size={18} /></div>
                     <div>
-                        <div className="stat-value">{totalRegistros}</div>
-                        <div className="stat-label">Total Transacciones</div>
+                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${gastoInventario.toLocaleString()}</div>
+                        <div className="stat-label" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Compra Inventario</div>
                     </div>
                 </div>
-                <div className="stat-card purple">
-                    <div className="icon-wrapper purple"><Clock size={24} /></div>
+                <div className="stat-card orange" style={{ padding: '0.85rem 1rem', flexDirection: 'row', alignItems: 'center', gap: '0.75rem' }}>
+                    <div className="icon-wrapper orange" style={{ width: '38px', height: '38px', minWidth: '38px', borderRadius: '10px', margin: 0 }}><Wrench size={18} /></div>
                     <div>
-                        <div className="stat-value">${gastoPromedio.toLocaleString()}</div>
-                        <div className="stat-label">Gasto Promedio</div>
+                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${gastoMantenimiento.toLocaleString()}</div>
+                        <div className="stat-label" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Mantenimiento</div>
                     </div>
                 </div>
-                <div className="stat-card red">
-                    <div className="icon-wrapper red"><AlertTriangle size={24} /></div>
+                <div className="stat-card red" style={{ padding: '0.85rem 1rem', flexDirection: 'row', alignItems: 'center', gap: '0.75rem' }}>
+                    <div className="icon-wrapper red" style={{ width: '38px', height: '38px', minWidth: '38px', borderRadius: '10px', margin: 0 }}><Receipt size={18} /></div>
                     <div>
-                        <div className="stat-value">${gastoReparaciones.toLocaleString()}</div>
-                        <div className="stat-label">Gastos por Reparación</div>
+                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${gastoOperativos.toLocaleString()}</div>
+                        <div className="stat-label" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Gastos Operativos</div>
                     </div>
                 </div>
             </div>
@@ -177,7 +237,7 @@ export default function GastosMantenimiento() {
                     <h3 style={{ margin: 0 }}>Historial de Egresos</h3>
                     <input 
                         type="text" 
-                        placeholder="Buscar por tipo, máquina, proveedor o descripción..." 
+                        placeholder="Buscar por tipo, subconcepto, máquina, proveedor o descripción..." 
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         style={{
@@ -203,7 +263,7 @@ export default function GastosMantenimiento() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                    {['ID', 'Equipo Relacionado', 'Tipo de Gasto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
+                                    {['ID', 'Equipo Relacionado', 'Clasificación Gasto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
                                         <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                                     ))}
                                 </tr>
@@ -211,7 +271,7 @@ export default function GastosMantenimiento() {
                             <tbody>
                                 {filteredGastos.map(g => {
                                     const product = products.find(p => p.id === g.id_maquina);
-                                    const config = TIPO_CONFIG[g.tipo_gasto] || TIPO_CONFIG['Otros'];
+                                    const config = TIPO_CONFIG[g.tipo_gasto] || TIPO_CONFIG['Otros Gastos'];
                                     return (
                                         <tr key={g.id} style={{ borderBottom: '1px solid var(--surface-border)', transition: 'background 0.15s' }}
                                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
@@ -228,9 +288,14 @@ export default function GastosMantenimiento() {
                                                 )}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem' }}>
-                                                <span style={{ padding: '0.2rem 0.6rem', borderRadius: 20, background: `${config.color}22`, color: config.color, fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                                    {config.label}
-                                                </span>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
+                                                    <span style={{ padding: '0.2rem 0.6rem', borderRadius: 20, background: `${config.color}22`, color: config.color, fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                                        {config.label}
+                                                    </span>
+                                                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 500, paddingLeft: '0.25rem' }}>
+                                                        {g.subtipo_gasto || <span style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>Sin clasificar</span>}
+                                                    </span>
+                                                </div>
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem' }}>
                                                 {g.proveedor_beneficiario || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>N/A</span>}
@@ -289,18 +354,56 @@ export default function GastosMantenimiento() {
                             
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Tipo de Gasto</label>
-                                    <select value={form.tipo_gasto} onChange={e => setForm(f => ({ ...f, tipo_gasto: e.target.value }))} required
-                                        style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}>
-                                        {Object.keys(TIPO_CONFIG).map(k => <option key={k}>{k}</option>)}
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Categoría Principal</label>
+                                    <select 
+                                        value={form.tipo_gasto} 
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            const subs = CATEGORIES_MAP[val] || [];
+                                            setForm(f => ({ 
+                                                ...f, 
+                                                tipo_gasto: val, 
+                                                subtipo_gasto: subs[0] || '' 
+                                            }));
+                                        }} 
+                                        required
+                                        style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+                                    >
+                                        {Object.keys(CATEGORIES_MAP).map(k => <option key={k}>{k}</option>)}
                                     </select>
                                 </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Subcategoría / Concepto</label>
+                                    <select 
+                                        value={form.subtipo_gasto} 
+                                        onChange={e => setForm(f => ({ ...f, subtipo_gasto: e.target.value }))} 
+                                        required
+                                        style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+                                    >
+                                        {(CATEGORIES_MAP[form.tipo_gasto] || []).map(sk => <option key={sk}>{sk}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Fecha de Gasto</label>
                                     <input 
                                         type="date" 
                                         value={form.fecha_gasto} 
                                         onChange={e => setForm(f => ({ ...f, fecha_gasto: e.target.value }))} 
+                                        required
+                                        style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} 
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Costo ($)</label>
+                                    <input 
+                                        type="number" 
+                                        min="0" 
+                                        value={form.costo} 
+                                        onChange={e => setForm(f => ({ ...f, costo: e.target.value }))} 
+                                        placeholder="0" 
                                         required
                                         style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} 
                                     />
@@ -335,12 +438,6 @@ export default function GastosMantenimiento() {
                                 <textarea value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} required rows={3}
                                     placeholder="Detalles sobre el gasto..."
                                     style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
-                            </div>
-                            
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Costo ($)</label>
-                                <input type="number" min="0" value={form.costo} onChange={e => setForm(f => ({ ...f, costo: e.target.value }))} placeholder="0" required
-                                    style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
                             </div>
                             
                             <div style={{ padding: '1rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderRadius: '0 0 16px 16px', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', margin: '0.5rem -1.5rem -1.5rem -1.5rem' }}>
