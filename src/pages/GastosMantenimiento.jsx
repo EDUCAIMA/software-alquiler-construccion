@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Calculator, Plus, Trash2, Edit3, X, TrendingUp, AlertTriangle, Clock, Package, Wrench, Receipt } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format } from 'date-fns';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { applyStandardLayout } from './pdfTheme';
 
 const CATEGORIES_MAP = {
     'Compra de Máquina o Herramienta': [
@@ -73,7 +76,8 @@ export default function GastosMantenimiento() {
         addGastoMantenimiento, 
         editGastoMantenimiento, 
         deleteGastoMantenimiento, 
-        products 
+        products,
+        settings
     } = useAppContext();
 
     const [showModal, setShowModal] = useState(false);
@@ -90,33 +94,50 @@ export default function GastosMantenimiento() {
     });
     
     const [search, setSearch] = useState('');
-
-    // KPIs
-    const totalGasto = gastosMantenimiento.reduce((s, g) => s + (Number(g.costo) || 0), 0);
-    const gastoInventario = gastosMantenimiento
-        .filter(g => g.tipo_gasto === 'Compra de Inventario' || g.tipo_gasto === 'Compra de Máquina o Herramienta')
-        .reduce((s, g) => s + (Number(g.costo) || 0), 0);
-    const gastoMantenimiento = gastosMantenimiento
-        .filter(g => g.tipo_gasto === 'Mantenimiento')
-        .reduce((s, g) => s + (Number(g.costo) || 0), 0);
-    const gastoOperativos = gastosMantenimiento
-        .filter(g => g.tipo_gasto !== 'Compra de Inventario' && g.tipo_gasto !== 'Compra de Máquina o Herramienta' && g.tipo_gasto !== 'Mantenimiento')
-        .reduce((s, g) => s + (Number(g.costo) || 0), 0);
+    const [filtroFechaInicio, setFiltroFechaInicio] = useState('');
+    const [filtroFechaFin, setFiltroFechaFin] = useState('');
+    const [filtroCategoria, setFiltroCategoria] = useState('Todos');
+    const [filtroSubcategoria, setFiltroSubcategoria] = useState('Todos');
 
     // Filtered data
     const filteredGastos = gastosMantenimiento.filter(g => {
         const query = search.toLowerCase();
-        const product = products.find(p => p.id === g.id_maquina);
-        return (
+        
+        // Text search match
+        const matchesSearch = (
             g.tipo_gasto.toLowerCase().includes(query) ||
             (g.subtipo_gasto && g.subtipo_gasto.toLowerCase().includes(query)) ||
             (g.descripcion && g.descripcion.toLowerCase().includes(query)) ||
             (g.proveedor_beneficiario && g.proveedor_beneficiario.toLowerCase().includes(query)) ||
             (g.referencia_soporte && g.referencia_soporte.toLowerCase().includes(query)) ||
-            (product && product.name.toLowerCase().includes(query)) ||
             g.id.toLowerCase().includes(query)
         );
+        
+        // Date range match
+        const dateVal = g.fecha_gasto ? format(new Date(g.fecha_gasto), 'yyyy-MM-dd') : '';
+        const matchesStartDate = !filtroFechaInicio || dateVal >= filtroFechaInicio;
+        const matchesEndDate = !filtroFechaFin || dateVal <= filtroFechaFin;
+        
+        // Category match
+        const matchesCategory = filtroCategoria === 'Todos' || g.tipo_gasto === filtroCategoria;
+        
+        // Subcategory match
+        const matchesSubcategory = filtroSubcategoria === 'Todos' || g.subtipo_gasto === filtroSubcategoria;
+        
+        return matchesSearch && matchesStartDate && matchesEndDate && matchesCategory && matchesSubcategory;
     });
+
+    // KPIs based on filtered data
+    const totalGasto = filteredGastos.reduce((s, g) => s + (Number(g.costo) || 0), 0);
+    const gastoInventario = filteredGastos
+        .filter(g => g.tipo_gasto === 'Compra de Inventario' || g.tipo_gasto === 'Compra de Máquina o Herramienta')
+        .reduce((s, g) => s + (Number(g.costo) || 0), 0);
+    const gastoMantenimiento = filteredGastos
+        .filter(g => g.tipo_gasto === 'Mantenimiento')
+        .reduce((s, g) => s + (Number(g.costo) || 0), 0);
+    const gastoOperativos = filteredGastos
+        .filter(g => g.tipo_gasto !== 'Compra de Inventario' && g.tipo_gasto !== 'Compra de Máquina o Herramienta' && g.tipo_gasto !== 'Mantenimiento')
+        .reduce((s, g) => s + (Number(g.costo) || 0), 0);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -185,6 +206,81 @@ export default function GastosMantenimiento() {
         setShowModal(false);
     };
 
+    const exportToCSV = () => {
+        const headers = ['ID', 'Categoria Principal', 'Subcategoria / Concepto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripcion', 'Costo', 'Fecha Gasto'];
+        const rows = filteredGastos.map(g => [
+            g.id,
+            g.tipo_gasto,
+            g.subtipo_gasto || '',
+            g.proveedor_beneficiario || '',
+            g.referencia_soporte || '',
+            (g.descripcion || '').replace(/"/g, '""'),
+            g.costo || 0,
+            format(new Date(g.fecha_gasto), 'dd/MM/yyyy')
+        ]);
+        
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+        csvContent += headers.map(h => `"${h}"`).join(",") + "\n";
+        csvContent += rows.map(r => r.map(val => `"${val}"`).join(",")).join("\n");
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `reporte_gastos_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const exportToPDF = () => {
+        const doc = new jsPDF();
+        const margin = 10;
+        let y = applyStandardLayout(doc, 'Reporte de Gastos', settings);
+
+        doc.setTextColor(100, 116, 139); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+        doc.text('Reporte de Gastos y Costos Operativos Filtrados', margin, y + 8);
+        
+        let filterSummary = [];
+        if (filtroFechaInicio) filterSummary.push(`Desde: ${filtroFechaInicio}`);
+        if (filtroFechaFin) filterSummary.push(`Hasta: ${filtroFechaFin}`);
+        if (filtroCategoria !== 'Todos') filterSummary.push(`Cat: ${filtroCategoria}`);
+        if (filtroSubcategoria !== 'Todos') filterSummary.push(`Subcat: ${filtroSubcategoria}`);
+        if (search) filterSummary.push(`Busqueda: "${search}"`);
+        
+        if (filterSummary.length > 0) {
+            doc.text(`Filtros: ${filterSummary.join('  |  ')}`, margin, y + 13);
+            y += 5;
+        }
+
+        const bodyData = filteredGastos.map(g => [
+            g.id,
+            g.tipo_gasto,
+            g.subtipo_gasto || '—',
+            g.proveedor_beneficiario || '—',
+            g.referencia_soporte || '—',
+            g.descripcion || '—',
+            `$${(g.costo || 0).toLocaleString()}`,
+            format(new Date(g.fecha_gasto), 'dd/MM/yyyy')
+        ]);
+
+        const totalCosto = filteredGastos.reduce((s, g) => s + (Number(g.costo) || 0), 0);
+
+        autoTable(doc, {
+            startY: y + 17,
+            head: [['ID', 'Categoria', 'Subcategoria', 'Proveedor', 'Ref. Soporte', 'Descripcion', 'Costo', 'Fecha']],
+            body: [
+                ...bodyData,
+                ['', '', '', '', '', 'TOTAL FILTRADO:', `$${totalCosto.toLocaleString()}`, '']
+            ],
+            headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
+            styles: { fontSize: 7.5, cellPadding: 3 },
+            footStyles: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [30, 41, 59] },
+            margin: { left: margin, right: margin },
+        });
+
+        doc.save(`Reporte_Gastos_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`);
+    };
+
     return (
         <>
             {/* Header */}
@@ -233,24 +329,79 @@ export default function GastosMantenimiento() {
 
             {/* Filters & Table */}
             <div className="glass-panel p-6">
-                <div className="flex justify-between items-center mb-4 gap-4 flex-wrap">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
                     <h3 style={{ margin: 0 }}>Historial de Egresos</h3>
-                    <input 
-                        type="text" 
-                        placeholder="Buscar por tipo, subconcepto, máquina, proveedor o descripción..." 
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        style={{
-                            padding: '0.5rem 0.75rem',
-                            borderRadius: '8px',
-                            border: '1px solid var(--surface-border)',
-                            background: '#ffffff',
-                            color: 'var(--text-primary)',
-                            fontSize: '0.85rem',
-                            outline: 'none',
-                            minWidth: '280px'
-                        }}
-                    />
+                    
+                    {/* Action buttons to Export */}
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button onClick={exportToCSV} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.4rem 0.75rem', background: '#f8fafc', border: '1px solid #cbd5e1', cursor: 'pointer' }}>
+                            Descargar CSV
+                        </button>
+                        <button onClick={exportToPDF} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', padding: '0.4rem 0.75rem', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', cursor: 'pointer' }}>
+                            Descargar PDF
+                        </button>
+                    </div>
+                </div>
+
+                {/* Filter Controls Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem', background: 'rgba(255, 255, 255, 0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--surface-border)' }}>
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.25rem' }}>Fecha Inicio</label>
+                        <input 
+                            type="date" 
+                            value={filtroFechaInicio}
+                            onChange={e => setFiltroFechaInicio(e.target.value)}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.25rem' }}>Fecha Fin</label>
+                        <input 
+                            type="date" 
+                            value={filtroFechaFin}
+                            onChange={e => setFiltroFechaFin(e.target.value)}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.25rem' }}>Categoría Principal</label>
+                        <select 
+                            value={filtroCategoria}
+                            onChange={e => {
+                                const val = e.target.value;
+                                setFiltroCategoria(val);
+                                setFiltroSubcategoria('Todos');
+                            }}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
+                        >
+                            <option value="Todos">Todas las categorías</option>
+                            {Object.keys(CATEGORIES_MAP).map(k => <option key={k} value={k}>{k}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.25rem' }}>Subcategoría / Concepto</label>
+                        <select 
+                            value={filtroSubcategoria}
+                            onChange={e => setFiltroSubcategoria(e.target.value)}
+                            disabled={filtroCategoria === 'Todos'}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', boxSizing: 'border-box', opacity: filtroCategoria === 'Todos' ? 0.6 : 1 }}
+                        >
+                            <option value="Todos">Todas las subcategorías</option>
+                            {filtroCategoria !== 'Todos' && (CATEGORIES_MAP[filtroCategoria] || []).map(sk => (
+                                <option key={sk} value={sk}>{sk}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.25rem' }}>Texto de Búsqueda</label>
+                        <input 
+                            type="text" 
+                            placeholder="Buscar proveedor, soporte..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                    </div>
                 </div>
 
                 {filteredGastos.length === 0 ? (
@@ -263,30 +414,19 @@ export default function GastosMantenimiento() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                    {['ID', 'Equipo Relacionado', 'Clasificación Gasto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
+                                    {['ID', 'Clasificación Gasto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
                                         <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredGastos.map(g => {
-                                    const product = products.find(p => p.id === g.id_maquina);
                                     const config = TIPO_CONFIG[g.tipo_gasto] || TIPO_CONFIG['Otros Gastos'];
                                     return (
                                         <tr key={g.id} style={{ borderBottom: '1px solid var(--surface-border)', transition: 'background 0.15s' }}
                                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
                                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                             <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{g.id}</td>
-                                            <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>
-                                                {product ? (
-                                                    <span style={{ display: 'flex', flexDirection: 'column' }}>
-                                                        <span>{product.name}</span>
-                                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>ID: {product.id}</span>
-                                                    </span>
-                                                ) : (
-                                                    <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Gasto General / Operativo</span>
-                                                )}
-                                            </td>
                                             <td style={{ padding: '0.75rem 1rem' }}>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
                                                     <span style={{ padding: '0.2rem 0.6rem', borderRadius: 20, background: `${config.color}22`, color: config.color, fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
@@ -355,7 +495,7 @@ export default function GastosMantenimiento() {
                                                 ...f, 
                                                 tipo_gasto: val, 
                                                 subtipo_gasto: subs[0] || '',
-                                                id_maquina: (val === 'Mantenimiento' || val === 'Compra de Máquina o Herramienta') ? f.id_maquina : ''
+                                                id_maquina: ''
                                             }));
                                         }} 
                                         required
@@ -376,17 +516,6 @@ export default function GastosMantenimiento() {
                                     </select>
                                 </div>
                             </div>
-
-                            {(form.tipo_gasto === 'Mantenimiento' || form.tipo_gasto === 'Compra de Máquina o Herramienta') && (
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Equipo Relacionado (Opcional)</label>
-                                    <select value={form.id_maquina} onChange={e => setForm(f => ({ ...f, id_maquina: e.target.value }))}
-                                        style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}>
-                                        <option value="">Gasto General (Sin equipo específico)</option>
-                                        {products.map(p => <option key={p.id} value={p.id}>{p.name} (ID: {p.id})</option>)}
-                                    </select>
-                                </div>
-                            )}
                             
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
