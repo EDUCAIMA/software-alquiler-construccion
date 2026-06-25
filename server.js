@@ -241,9 +241,13 @@ async function initDB() {
                 descripcion TEXT,
                 costo NUMERIC(12, 2) DEFAULT 0,
                 fecha_gasto DATE DEFAULT CURRENT_DATE,
-                fecha_registro TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                fecha_registro TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                proveedor_beneficiario VARCHAR(255),
+                referencia_soporte VARCHAR(100)
             )
             `);
+        await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS proveedor_beneficiario VARCHAR(255)`);
+        await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS referencia_soporte VARCHAR(100)`);
         // Migración: agregar columnas si no existen
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS short_name VARCHAR(100)`);
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS name_complement VARCHAR(255)`);
@@ -801,13 +805,13 @@ app.get('/api/gastos-mantenimiento', async (req, res) => {
 });
 
 app.post('/api/gastos-mantenimiento', async (req, res) => {
-    const { id, id_maquina, tipo_gasto, descripcion, costo, fecha_gasto } = req.body;
+    const { id, id_maquina, tipo_gasto, descripcion, costo, fecha_gasto, proveedor_beneficiario, referencia_soporte } = req.body;
     try {
         const { rows } = await pool.query(`
-            INSERT INTO gastos_mantenimiento (id, id_maquina, tipo_gasto, descripcion, costo, fecha_gasto)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO gastos_mantenimiento (id, id_maquina, tipo_gasto, descripcion, costo, fecha_gasto, proveedor_beneficiario, referencia_soporte)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
-        `, [id, id_maquina || null, tipo_gasto, descripcion, Number(costo) || 0, fecha_gasto]);
+        `, [id, id_maquina || null, tipo_gasto, descripcion, Number(costo) || 0, fecha_gasto, proveedor_beneficiario || null, referencia_soporte || null]);
         res.status(201).json(rows[0]);
     } catch (e) {
         console.error('ERROR CREATING GASTO MANTENIMIENTO:', e.message);
@@ -817,14 +821,14 @@ app.post('/api/gastos-mantenimiento', async (req, res) => {
 
 app.put('/api/gastos-mantenimiento/:id', async (req, res) => {
     const { id } = req.params;
-    const { id_maquina, tipo_gasto, descripcion, costo, fecha_gasto } = req.body;
+    const { id_maquina, tipo_gasto, descripcion, costo, fecha_gasto, proveedor_beneficiario, referencia_soporte } = req.body;
     try {
         const { rows } = await pool.query(`
             UPDATE gastos_mantenimiento
-            SET id_maquina = $1, tipo_gasto = $2, descripcion = $3, costo = $4, fecha_gasto = $5
-            WHERE id = $6
+            SET id_maquina = $1, tipo_gasto = $2, descripcion = $3, costo = $4, fecha_gasto = $5, proveedor_beneficiario = $6, referencia_soporte = $7
+            WHERE id = $8
             RETURNING *
-        `, [id_maquina || null, tipo_gasto, descripcion, Number(costo) || 0, fecha_gasto, id]);
+        `, [id_maquina || null, tipo_gasto, descripcion, Number(costo) || 0, fecha_gasto, proveedor_beneficiario || null, referencia_soporte || null, id]);
         if (rows.length === 0) return res.status(404).json({ error: 'Gasto de mantenimiento no encontrado' });
         res.json(rows[0]);
     } catch (e) {

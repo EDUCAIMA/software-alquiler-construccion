@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
-import { Calculator, Plus, Trash2, Edit3, X, TrendingUp, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Calculator, Plus, Trash2, Edit3, X, TrendingUp, AlertTriangle, Clock } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format } from 'date-fns';
 
 const TIPO_CONFIG = {
-    'Consumo': { color: '#06b6d4', label: 'Consumo' },
+    'Consumo / Combustible': { color: '#06b6d4', label: 'Consumo / Combustible' },
     'Mantenimiento Preventivo': { color: '#2365AB', label: 'Mantenimiento Preventivo' },
     'Reparación': { color: '#ef4444', label: 'Reparación' },
     'Repuestos': { color: '#8b5cf6', label: 'Repuestos' },
+    'Alimentación / Refrigerios': { color: '#f97316', label: 'Alimentación / Refrigerios' },
+    'Nómina / Mano de obra': { color: '#10b981', label: 'Nómina / Mano de obra' },
+    'Transporte / Viáticos': { color: '#3b82f6', label: 'Transporte / Viáticos' },
+    'Papelería / Oficina': { color: '#ec4899', label: 'Papelería / Oficina' },
+    'Servicios y Facturas': { color: '#eab308', label: 'Servicios y Facturas' },
     'Otros': { color: '#64748b', label: 'Otros' }
 };
 
@@ -27,7 +32,9 @@ export default function GastosMantenimiento() {
         tipo_gasto: 'Mantenimiento Preventivo', 
         descripcion: '', 
         costo: '', 
-        fecha_gasto: format(new Date(), 'yyyy-MM-dd')
+        fecha_gasto: format(new Date(), 'yyyy-MM-dd'),
+        proveedor_beneficiario: '',
+        referencia_soporte: ''
     });
     
     const [search, setSearch] = useState('');
@@ -47,6 +54,8 @@ export default function GastosMantenimiento() {
         return (
             g.tipo_gasto.toLowerCase().includes(query) ||
             (g.descripcion && g.descripcion.toLowerCase().includes(query)) ||
+            (g.proveedor_beneficiario && g.proveedor_beneficiario.toLowerCase().includes(query)) ||
+            (g.referencia_soporte && g.referencia_soporte.toLowerCase().includes(query)) ||
             (product && product.name.toLowerCase().includes(query)) ||
             g.id.toLowerCase().includes(query)
         );
@@ -59,7 +68,9 @@ export default function GastosMantenimiento() {
             tipo_gasto: form.tipo_gasto,
             descripcion: form.descripcion,
             costo: Number(form.costo) || 0,
-            fecha_gasto: form.fecha_gasto
+            fecha_gasto: form.fecha_gasto,
+            proveedor_beneficiario: form.proveedor_beneficiario || '',
+            referencia_soporte: form.referencia_soporte || ''
         };
 
         try {
@@ -82,7 +93,9 @@ export default function GastosMantenimiento() {
             tipo_gasto: gasto.tipo_gasto,
             descripcion: gasto.descripcion || '',
             costo: gasto.costo,
-            fecha_gasto: format(new Date(gasto.fecha_gasto), 'yyyy-MM-dd')
+            fecha_gasto: format(new Date(gasto.fecha_gasto), 'yyyy-MM-dd'),
+            proveedor_beneficiario: gasto.proveedor_beneficiario || '',
+            referencia_soporte: gasto.referencia_soporte || ''
         });
         setShowModal(true);
     };
@@ -105,7 +118,9 @@ export default function GastosMantenimiento() {
             tipo_gasto: 'Mantenimiento Preventivo', 
             descripcion: '', 
             costo: '', 
-            fecha_gasto: format(new Date(), 'yyyy-MM-dd')
+            fecha_gasto: format(new Date(), 'yyyy-MM-dd'),
+            proveedor_beneficiario: '',
+            referencia_soporte: ''
         });
         setShowModal(false);
     };
@@ -115,12 +130,12 @@ export default function GastosMantenimiento() {
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
                 <div>
-                    <h1>Gastos de Mantenimiento</h1>
-                    <p className="text-muted">Registro y control de egresos destinados al mantenimiento y consumo de equipos</p>
+                    <h1>Gastos y Costos Operativos</h1>
+                    <p className="text-muted">Registro y control unificado de mantenimientos, consumos, nómina, refrigerios y gastos generales</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => setShowModal(true)}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Plus size={16} /> Registrar Gasto
+                    <Plus size={16} /> Registrar Egresos
                 </button>
             </div>
 
@@ -162,7 +177,7 @@ export default function GastosMantenimiento() {
                     <h3 style={{ margin: 0 }}>Historial de Egresos</h3>
                     <input 
                         type="text" 
-                        placeholder="Buscar por tipo, máquina o descripción..." 
+                        placeholder="Buscar por tipo, máquina, proveedor o descripción..." 
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         style={{
@@ -188,7 +203,7 @@ export default function GastosMantenimiento() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                    {['ID', 'Equipo Relacionado', 'Tipo de Gasto', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
+                                    {['ID', 'Equipo Relacionado', 'Tipo de Gasto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
                                         <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                                     ))}
                                 </tr>
@@ -209,7 +224,7 @@ export default function GastosMantenimiento() {
                                                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>ID: {product.id}</span>
                                                     </span>
                                                 ) : (
-                                                    <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Gasto General (Sin Máquina)</span>
+                                                    <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Gasto General / Operativo</span>
                                                 )}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem' }}>
@@ -217,7 +232,13 @@ export default function GastosMantenimiento() {
                                                     {config.label}
                                                 </span>
                                             </td>
-                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={g.descripcion}>
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem' }}>
+                                                {g.proveedor_beneficiario || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>N/A</span>}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontFamily: 'monospace' }}>
+                                                {g.referencia_soporte || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>N/A</span>}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={g.descripcion}>
                                                 {g.descripcion || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin descripción</span>}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -261,7 +282,7 @@ export default function GastosMantenimiento() {
                                 <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Equipo Relacionado (Opcional)</label>
                                 <select value={form.id_maquina} onChange={e => setForm(f => ({ ...f, id_maquina: e.target.value }))}
                                     style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}>
-                                    <option value="">Gasto General (Sin equipo específico)</option>
+                                    <option value="">Gasto General / Costo Operativo</option>
                                     {products.map(p => <option key={p.id} value={p.id}>{p.name} (ID: {p.id})</option>)}
                                 </select>
                             </div>
@@ -281,6 +302,29 @@ export default function GastosMantenimiento() {
                                         value={form.fecha_gasto} 
                                         onChange={e => setForm(f => ({ ...f, fecha_gasto: e.target.value }))} 
                                         required
+                                        style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} 
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Proveedor / Beneficiario</label>
+                                    <input 
+                                        type="text" 
+                                        value={form.proveedor_beneficiario} 
+                                        onChange={e => setForm(f => ({ ...f, proveedor_beneficiario: e.target.value }))} 
+                                        placeholder="A quién se pagó..."
+                                        style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} 
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Referencia Soporte</label>
+                                    <input 
+                                        type="text" 
+                                        value={form.referencia_soporte} 
+                                        onChange={e => setForm(f => ({ ...f, referencia_soporte: e.target.value }))} 
+                                        placeholder="Nº Factura, recibo, etc..."
                                         style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} 
                                     />
                                 </div>
