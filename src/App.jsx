@@ -53,8 +53,8 @@ function Topbar() {
     { icon: Briefcase,       label: 'Comercial',             path: '/comercial',   restricted: false },
     { icon: FileText,        label: 'Facturación',           path: '/invoices',    restricted: false },
     { icon: Activity,        label: 'Trazabilidad',          path: '/trazability', restricted: false },
-    { icon: Wrench,          label: 'Mantenimientos',        path: '/maintenance', restricted: false },
     { icon: Calculator,      label: 'Gastos de Equipos',     path: '/gastos-mantenimiento', restricted: false },
+    { icon: Wrench,          label: 'Mantenimientos',        path: '/maintenance', restricted: false },
     { icon: Settings,        label: 'Configuración',         path: '/settings',    restricted: true  },
   ].filter(item => !item.restricted || canViewDashboard);
 
@@ -138,9 +138,21 @@ function Topbar() {
         </div>
 
         {/* ── Page Titles ── */}
-        {location.pathname === '/comercial' && <div style={titleStyle}>Módulo Comercial</div>}
-        {location.pathname === '/products' && <div style={titleStyle}>Inventario & Alquiler</div>}
-        {location.pathname === '/clients' && <div style={titleStyle}>Gestión de Clientes</div>}
+        {(() => {
+          const titles = {
+            '/': 'Panel de Control',
+            '/clients': 'Gestión de Clientes',
+            '/products': 'Inventario & Alquiler',
+            '/comercial': 'Módulo Comercial',
+            '/invoices': 'Facturación',
+            '/trazability': 'Trazabilidad',
+            '/maintenance': 'Mantenimientos',
+            '/gastos-mantenimiento': 'Gastos de Equipos',
+            '/settings': 'Configuración'
+          };
+          const title = titles[location.pathname];
+          return title ? <div style={titleStyle}>{title}</div> : null;
+        })()}
       </div>
 
       {/* ── CENTER SECTION: Nav Icons (Stable) ── */}

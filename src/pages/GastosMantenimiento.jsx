@@ -259,7 +259,7 @@ export default function GastosMantenimiento() {
             g.proveedor_beneficiario || '—',
             g.referencia_soporte || '—',
             g.descripcion || '—',
-            `$${(g.costo || 0).toLocaleString()}`,
+            `$${Math.round(g.costo || 0).toLocaleString()}`,
             format(new Date(g.fecha_gasto), 'dd/MM/yyyy')
         ]);
 
@@ -270,7 +270,7 @@ export default function GastosMantenimiento() {
             head: [['ID', 'Categoria', 'Subcategoria', 'Proveedor', 'Ref. Soporte', 'Descripcion', 'Costo', 'Fecha']],
             body: [
                 ...bodyData,
-                ['', '', '', '', '', 'TOTAL FILTRADO:', `$${totalCosto.toLocaleString()}`, '']
+                ['', '', '', '', '', 'TOTAL FILTRADO:', `$${Math.round(totalCosto).toLocaleString()}`, '']
             ],
             headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
             styles: { fontSize: 7.5, cellPadding: 3 },
@@ -300,28 +300,28 @@ export default function GastosMantenimiento() {
                 <div className="stat-card blue" style={{ padding: '0.85rem 1rem', flexDirection: 'row', alignItems: 'center', gap: '0.75rem' }}>
                     <div className="icon-wrapper blue" style={{ width: '38px', height: '38px', minWidth: '38px', borderRadius: '10px', margin: 0 }}><Calculator size={18} /></div>
                     <div>
-                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${totalGasto.toLocaleString()}</div>
+                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${Math.round(totalGasto).toLocaleString()}</div>
                         <div className="stat-label" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Gasto Total</div>
                     </div>
                 </div>
                 <div className="stat-card green" style={{ padding: '0.85rem 1rem', flexDirection: 'row', alignItems: 'center', gap: '0.75rem' }}>
                     <div className="icon-wrapper green" style={{ width: '38px', height: '38px', minWidth: '38px', borderRadius: '10px', margin: 0 }}><Package size={18} /></div>
                     <div>
-                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${gastoInventario.toLocaleString()}</div>
+                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${Math.round(gastoInventario).toLocaleString()}</div>
                         <div className="stat-label" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Compra Inventario</div>
                     </div>
                 </div>
                 <div className="stat-card orange" style={{ padding: '0.85rem 1rem', flexDirection: 'row', alignItems: 'center', gap: '0.75rem' }}>
                     <div className="icon-wrapper orange" style={{ width: '38px', height: '38px', minWidth: '38px', borderRadius: '10px', margin: 0 }}><Wrench size={18} /></div>
                     <div>
-                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${gastoMantenimiento.toLocaleString()}</div>
+                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${Math.round(gastoMantenimiento).toLocaleString()}</div>
                         <div className="stat-label" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Mantenimiento</div>
                     </div>
                 </div>
                 <div className="stat-card red" style={{ padding: '0.85rem 1rem', flexDirection: 'row', alignItems: 'center', gap: '0.75rem' }}>
                     <div className="icon-wrapper red" style={{ width: '38px', height: '38px', minWidth: '38px', borderRadius: '10px', margin: 0 }}><Receipt size={18} /></div>
                     <div>
-                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${gastoOperativos.toLocaleString()}</div>
+                        <div className="stat-value" style={{ fontSize: '1.15rem', lineHeight: 1.2 }}>${Math.round(gastoOperativos).toLocaleString()}</div>
                         <div className="stat-label" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>Gastos Operativos</div>
                     </div>
                 </div>
@@ -443,7 +443,7 @@ export default function GastosMantenimiento() {
                                                 {g.descripcion || 'Sin descripción'}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 'normal', color: '#104166' }}>
-                                                ${(g.costo || 0).toLocaleString()}
+                                                ${Math.round(g.costo || 0).toLocaleString()}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
                                                 {format(new Date(g.fecha_gasto), 'dd/MM/yyyy')}
