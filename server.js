@@ -782,6 +782,8 @@ app.put('/api/settings', async (req, res) => {
         console.error('ERROR UPDATING SETTINGS:', e.message);
         res.status(500).json({ error: e.message }); 
     }
+});
+
 // ─── GASTOS MANTENIMIENTO CRUD ───────────────────────────────────────────────
 app.get('/api/gastos-mantenimiento', async (req, res) => {
     try {
