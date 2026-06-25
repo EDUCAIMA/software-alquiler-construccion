@@ -414,7 +414,7 @@ export default function GastosMantenimiento() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                    {['ID', 'Clasificación Gasto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
+                                    {['ID', 'Clasificación Gasto', 'Subconcepto', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
                                         <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal', textTransform: 'none' }}>{h}</th>
                                     ))}
                                 </tr>
@@ -427,21 +427,11 @@ export default function GastosMantenimiento() {
                                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
                                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>{g.id}</td>
-                                            <td style={{ padding: '0.75rem 1rem' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-                                                    <span style={{ fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
-                                                        {config.label}
-                                                    </span>
-                                                    <span style={{ fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
-                                                        {g.subtipo_gasto || 'Sin clasificar'}
-                                                    </span>
-                                                </div>
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
+                                                {config.label}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
-                                                {g.proveedor_beneficiario || 'N/A'}
-                                            </td>
-                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
-                                                {g.referencia_soporte || 'N/A'}
+                                                {g.subtipo_gasto || 'Sin clasificar'}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#104166', fontWeight: 'normal' }} title={g.descripcion}>
                                                 {g.descripcion || 'Sin descripción'}
