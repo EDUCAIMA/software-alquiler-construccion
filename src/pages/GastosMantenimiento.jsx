@@ -330,7 +330,7 @@ export default function GastosMantenimiento() {
             {/* Filters & Table */}
             <div className="glass-panel p-6">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
-                    <h3 style={{ margin: 0 }}>Historial de Egresos</h3>
+                    <h3 style={{ margin: 0, color: '#104166', fontWeight: 700 }}>Historial de Egresos</h3>
                     
                     {/* Action buttons to Export */}
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -346,25 +346,25 @@ export default function GastosMantenimiento() {
                 {/* Filter Controls Row */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem', background: 'rgba(255, 255, 255, 0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--surface-border)' }}>
                     <div>
-                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.25rem' }}>Fecha Inicio</label>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#104166', fontWeight: 700, marginBottom: '0.25rem' }}>Fecha Inicio</label>
                         <input 
                             type="date" 
                             value={filtroFechaInicio}
                             onChange={e => setFiltroFechaInicio(e.target.value)}
-                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: '#104166', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
                         />
                     </div>
                     <div>
-                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.25rem' }}>Fecha Fin</label>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#104166', fontWeight: 700, marginBottom: '0.25rem' }}>Fecha Fin</label>
                         <input 
                             type="date" 
                             value={filtroFechaFin}
                             onChange={e => setFiltroFechaFin(e.target.value)}
-                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: '#104166', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
                         />
                     </div>
                     <div>
-                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.25rem' }}>Categoría Principal</label>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#104166', fontWeight: 700, marginBottom: '0.25rem' }}>Categoría Principal</label>
                         <select 
                             value={filtroCategoria}
                             onChange={e => {
@@ -372,19 +372,19 @@ export default function GastosMantenimiento() {
                                 setFiltroCategoria(val);
                                 setFiltroSubcategoria('Todos');
                             }}
-                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: '#104166', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
                         >
                             <option value="Todos">Todas las categorías</option>
                             {Object.keys(CATEGORIES_MAP).map(k => <option key={k} value={k}>{k}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.25rem' }}>Subcategoría / Concepto</label>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#104166', fontWeight: 700, marginBottom: '0.25rem' }}>Subcategoría / Concepto</label>
                         <select 
                             value={filtroSubcategoria}
                             onChange={e => setFiltroSubcategoria(e.target.value)}
                             disabled={filtroCategoria === 'Todos'}
-                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', boxSizing: 'border-box', opacity: filtroCategoria === 'Todos' ? 0.6 : 1 }}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: '#104166', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', boxSizing: 'border-box', opacity: filtroCategoria === 'Todos' ? 0.6 : 1 }}
                         >
                             <option value="Todos">Todas las subcategorías</option>
                             {filtroCategoria !== 'Todos' && (CATEGORIES_MAP[filtroCategoria] || []).map(sk => (
@@ -393,13 +393,13 @@ export default function GastosMantenimiento() {
                         </select>
                     </div>
                     <div>
-                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '0.25rem' }}>Texto de Búsqueda</label>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#104166', fontWeight: 700, marginBottom: '0.25rem' }}>Texto de Búsqueda</label>
                         <input 
                             type="text" 
-                            placeholder="Buscar proveedor, soporte..."
+                            placeholder="Buscar por tipo, subconcepto, máquina, proveedor o descripción..."
                             value={search}
                             onChange={e => setSearch(e.target.value)}
-                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: '#104166', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }}
                         />
                     </div>
                 </div>
@@ -415,7 +415,7 @@ export default function GastosMantenimiento() {
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
                                     {['ID', 'Clasificación Gasto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
-                                        <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                                        <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal', textTransform: 'none' }}>{h}</th>
                                     ))}
                                 </tr>
                             </thead>
@@ -426,30 +426,30 @@ export default function GastosMantenimiento() {
                                         <tr key={g.id} style={{ borderBottom: '1px solid var(--surface-border)', transition: 'background 0.15s' }}
                                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
                                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                            <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{g.id}</td>
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>{g.id}</td>
                                             <td style={{ padding: '0.75rem 1rem' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
-                                                    <span style={{ padding: '0.2rem 0.6rem', borderRadius: 20, background: `${config.color}22`, color: config.color, fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                                                    <span style={{ fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
                                                         {config.label}
                                                     </span>
-                                                    <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 500, paddingLeft: '0.25rem' }}>
-                                                        {g.subtipo_gasto || <span style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>Sin clasificar</span>}
+                                                    <span style={{ fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
+                                                        {g.subtipo_gasto || 'Sin clasificar'}
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem' }}>
-                                                {g.proveedor_beneficiario || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>N/A</span>}
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
+                                                {g.proveedor_beneficiario || 'N/A'}
                                             </td>
-                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontFamily: 'monospace' }}>
-                                                {g.referencia_soporte || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>N/A</span>}
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal' }}>
+                                                {g.referencia_soporte || 'N/A'}
                                             </td>
-                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={g.descripcion}>
-                                                {g.descripcion || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin descripción</span>}
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#104166', fontWeight: 'normal' }} title={g.descripcion}>
+                                                {g.descripcion || 'Sin descripción'}
                                             </td>
-                                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 'normal', color: '#104166' }}>
                                                 ${(g.costo || 0).toLocaleString()}
                                             </td>
-                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
                                                 {format(new Date(g.fecha_gasto), 'dd/MM/yyyy')}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
