@@ -91,7 +91,7 @@ export const AppProvider = ({ children }) => {
     try {
       const fetchSafe = (url, fallback) => api.get(url).catch(e => { console.error(`Error fetching ${url}:`, e); return fallback; });
       
-      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm] = await Promise.all([
+      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs] = await Promise.all([
         fetchSafe('/api/products', []),
         fetchSafe('/api/clients', []),
         fetchSafe('/api/invoices', []),
@@ -103,6 +103,7 @@ export const AppProvider = ({ children }) => {
         fetchSafe('/api/liquidaciones', []),
         fetchSafe('/api/settings', { companyName: 'CIELO', logo: '', headerExtra: '' }),
         fetchSafe('/api/gastos-mantenimiento', []),
+        fetchSafe('/api/logs', []),
       ]);
       
       console.log('API Data loaded:', { products: p.length, clients: c.length, settings: s });
@@ -117,6 +118,7 @@ export const AppProvider = ({ children }) => {
       setEmpleados(Array.isArray(emp) ? emp : []);
       setLiquidaciones(Array.isArray(liq) ? liq : []);
       setGastosMantenimiento(Array.isArray(gm) ? gm : []);
+      setLogs(Array.isArray(lgs) ? lgs : []);
       if (s && !s.error) setSettings(s);
     } catch (err) {
       console.error('Error crítico en reloadAll:', err);
@@ -126,8 +128,21 @@ export const AppProvider = ({ children }) => {
   useEffect(() => { reloadAll(); }, [reloadAll]);
 
   // ─── HELPERS ─────────────────────────────────────────────────────────────
-  const logAction = (action, product, client, type) => {
-    setLogs(prev => [{ id: Date.now(), action, product, client, time: format(new Date(), 'yyyy-MM-dd hh:mm a'), type }, ...prev]);
+  const logAction = async (action, product, client, type) => {
+    const timeStr = format(new Date(), 'yyyy-MM-dd hh:mm a');
+    try {
+      const { data } = await api.post('/api/logs', {
+        action,
+        product: product ? String(product) : '',
+        client: client ? String(client) : '',
+        time: timeStr,
+        type: type || 'system'
+      });
+      setLogs(prev => [data, ...prev]);
+    } catch (e) {
+      console.error('Error recording log:', e);
+      setLogs(prev => [{ id: Date.now(), action, product, client, time: timeStr, type: type || 'system' }, ...prev]);
+    }
   };
 
   const nextId = (list, prefix, minStart = 1) => {

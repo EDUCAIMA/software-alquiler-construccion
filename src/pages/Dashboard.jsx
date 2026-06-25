@@ -69,7 +69,7 @@ const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent
 };
 
 export default function Dashboard() {
-  const { clients, products, invoices, settings, remisiones = [], maintenances = [] } = useAppContext();
+  const { clients, products, invoices, settings, remisiones = [], maintenances = [], gastosMantenimiento = [] } = useAppContext();
 
   // ── Derived Alerts ──────────────────────────────────────────────────────────
   const alerts = useMemo(() => {
@@ -157,11 +157,32 @@ export default function Dashboard() {
     });
   }, [invoices]);
 
-  // ── Chart 2: Cartera – Pagado vs Pendiente ────────────────────────────────
-  const carteraData = [
-    { name: 'Pagado', value: totalRevenue, color: COLORS.green },
-    { name: 'Pendiente', value: pendingRevenue, color: COLORS.orange },
-  ];
+  // ── Chart 2: Egresos por día (últimos 7 días) ─────────────────────────────
+  const expensesByDay = useMemo(() => {
+    const today = new Date();
+    const days = eachDayOfInterval({ start: subDays(today, 6), end: today });
+    return days.map(day => {
+      const dayStr = format(day, 'yyyy-MM-dd');
+      const totalExpense = gastosMantenimiento
+        .filter(g => {
+          if (!g.fecha_gasto) return false;
+          try {
+            return format(new Date(g.fecha_gasto), 'yyyy-MM-dd') === dayStr;
+          } catch (e) {
+            return false;
+          }
+        })
+        .reduce((s, g) => s + (Number(g.costo) || 0), 0);
+      return {
+        name: format(day, 'EEE', { locale: es }),
+        'Egreso ($)': totalExpense
+      };
+    });
+  }, [gastosMantenimiento]);
+
+  const totalExpenses7Days = useMemo(() => {
+    return expensesByDay.reduce((sum, d) => sum + d['Egreso ($)'], 0);
+  }, [expensesByDay]);
 
   // ── Chart 3: Inventario – En Calle vs En Bodega ───────────────────────────
   const inventoryData = [
@@ -360,42 +381,55 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Pie – Cartera */}
+        {/* Area chart – Egresos últimos 7 días */}
         <div className="glass-panel p-6">
           <h3 className="mb-4" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <FileText size={18} style={{ color: COLORS.orange }} />
-            Estado de Cartera
+            <ArrowDownRight size={18} style={{ color: COLORS.red }} />
+            Egresos últimos 7 días
           </h3>
-          <div style={{ height: 220 }}>
+          <div style={{ height: 280 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={carteraData}
-                  cx="50%" cy="50%"
-                  innerRadius={55} outerRadius={90}
-                  labelLine={false}
-                  label={renderCustomLabel}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {carteraData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v) => `$${v.toLocaleString()}`} contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} itemStyle={{ color: '#f8fafc' }} />
-                <Legend wrapperStyle={{ fontSize: '0.8rem' }} />
-              </PieChart>
+              <AreaChart data={expensesByDay} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gEgreso" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={COLORS.red} stopOpacity={0.4} />
+                    <stop offset="95%" stopColor={COLORS.red} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="4 4" stroke="rgba(148, 163, 184, 0.1)" vertical={false} />
+                <XAxis 
+                  dataKey="name" 
+                  stroke="#94a3b8" 
+                  tick={{ fontSize: 11, fontWeight: 500 }} 
+                  axisLine={false}
+                  tickLine={false}
+                  dy={10}
+                />
+                <YAxis 
+                  stroke="#94a3b8" 
+                  tick={{ fontSize: 10, fontWeight: 500 }} 
+                  tickFormatter={v => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(148, 163, 184, 0.2)', strokeWidth: 2 }} />
+                <Legend 
+                  verticalAlign="bottom" 
+                  height={36} 
+                  iconType="circle"
+                  wrapperStyle={{ fontSize: '0.75rem', fontWeight: 600, paddingTop: 20 }} 
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="Egreso ($)" 
+                  stroke={COLORS.red} 
+                  fill="url(#gEgreso)" 
+                  strokeWidth={3}
+                  activeDot={{ r: 6, strokeWidth: 0 }}
+                  dot={{ r: 3, fill: COLORS.red, strokeWidth: 0, fillOpacity: 0.4 }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 8 }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ color: COLORS.green, fontWeight: 700, fontSize: '1rem' }}>${totalRevenue.toLocaleString()}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cobrado</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ color: COLORS.orange, fontWeight: 700, fontSize: '1rem' }}>${pendingRevenue.toLocaleString()}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pendiente</div>
-            </div>
           </div>
         </div>
       </div>

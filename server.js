@@ -247,6 +247,16 @@ async function initDB() {
                 subtipo_gasto VARCHAR(100)
             )
             `);
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS logs (
+                id SERIAL PRIMARY KEY,
+                action TEXT NOT NULL,
+                product TEXT,
+                client TEXT,
+                time VARCHAR(100),
+                type VARCHAR(50)
+            )
+        `);
         await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS proveedor_beneficiario VARCHAR(255)`);
         await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS referencia_soporte VARCHAR(100)`);
         await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS subtipo_gasto VARCHAR(100)`);
@@ -847,6 +857,32 @@ app.delete('/api/gastos-mantenimiento/:id', async (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error('ERROR DELETING GASTO MANTENIMIENTO:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── LOGS TRACER CRUD (NO DELETE ENDPOINT) ──────────────────────────────────
+app.get('/api/logs', async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT * FROM logs ORDER BY id DESC');
+        res.json(rows);
+    } catch (e) {
+        console.error('ERROR GETTING LOGS:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/logs', async (req, res) => {
+    const { action, product, client, time, type } = req.body;
+    try {
+        const { rows } = await pool.query(`
+            INSERT INTO logs (action, product, client, time, type)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING *
+        `, [action, product || '', client || '', time, type || 'system']);
+        res.status(201).json(rows[0]);
+    } catch (e) {
+        console.error('ERROR CREATING LOG:', e.message);
         res.status(500).json({ error: e.message });
     }
 });

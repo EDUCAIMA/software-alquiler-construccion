@@ -20,6 +20,25 @@ export default function Trazability() {
                 </div>
             </div>
 
+            <div style={{
+                background: 'rgba(35, 101, 171, 0.08)',
+                border: '1px solid rgba(35, 101, 171, 0.2)',
+                borderRadius: 12,
+                padding: '1rem',
+                marginBottom: '1.5rem',
+                color: '#104166',
+                fontSize: '0.85rem',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem'
+            }}>
+                <Activity size={18} style={{ color: '#2365AB', flexShrink: 0 }} />
+                <span>
+                    <strong>Registro de Auditoría Permanente:</strong> Toda la trazabilidad de los movimientos comerciales y logísticos se almacena de forma inalterable para garantizar el control. Esta información no puede ser modificada ni eliminada.
+                </span>
+            </div>
+
             <div className="glass-panel p-8">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {sortedLogs.map((log, index) => {
