@@ -13,13 +13,6 @@ export default function Trazability() {
 
     return (
         <div className="page-animate">
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1>Trazabilidad Logística</h1>
-                    <p className="text-muted">Registro histórico de todos los movimientos de equipos y estados</p>
-                </div>
-            </div>
-
             <div style={{
                 background: 'rgba(35, 101, 171, 0.08)',
                 border: '1px solid rgba(35, 101, 171, 0.2)',

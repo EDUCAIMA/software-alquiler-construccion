@@ -38,11 +38,7 @@ export default function Maintenance() {
     return (
         <>
             {/* Header */}
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1>Mantenimientos</h1>
-                    <p className="text-muted">Registro de mantenimientos preventivos y correctivos</p>
-                </div>
+            <div className="flex justify-end mb-6">
                 <button className="btn btn-primary" onClick={() => setShowModal(true)}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <Plus size={16} /> Registrar Mantenimiento

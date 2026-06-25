@@ -53,7 +53,7 @@ function Topbar() {
     { icon: Briefcase,       label: 'Comercial',             path: '/comercial',   restricted: false },
     { icon: FileText,        label: 'Facturación',           path: '/invoices',    restricted: false },
     { icon: Activity,        label: 'Trazabilidad',          path: '/trazability', restricted: false },
-    { icon: Calculator,      label: 'Gastos de Equipos',     path: '/gastos-mantenimiento', restricted: false },
+    { icon: Calculator,      label: 'Gastos y Costos Operativos', path: '/gastos-mantenimiento', restricted: false },
     { icon: Wrench,          label: 'Mantenimientos',        path: '/maintenance', restricted: false },
     { icon: Settings,        label: 'Configuración',         path: '/settings',    restricted: true  },
   ].filter(item => !item.restricted || canViewDashboard);
@@ -147,7 +147,7 @@ function Topbar() {
             '/invoices': 'Facturación',
             '/trazability': 'Trazabilidad',
             '/maintenance': 'Mantenimientos',
-            '/gastos-mantenimiento': 'Gastos de Equipos',
+            '/gastos-mantenimiento': 'Gastos y Costos Operativos',
             '/settings': 'Configuración'
           };
           const title = titles[location.pathname];

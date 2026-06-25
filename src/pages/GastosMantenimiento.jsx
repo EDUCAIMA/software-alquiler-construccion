@@ -284,11 +284,7 @@ export default function GastosMantenimiento() {
     return (
         <>
             {/* Header */}
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1>Gastos y Costos Operativos</h1>
-                    <p className="text-muted">Registro y control unificado de mantenimientos, consumos, nómina, refrigerios y gastos generales</p>
-                </div>
+            <div className="flex justify-end mb-6">
                 <button className="btn btn-primary" onClick={() => setShowModal(true)}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <Plus size={16} /> Registrar Egresos

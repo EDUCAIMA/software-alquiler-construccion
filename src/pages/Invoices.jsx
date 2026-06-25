@@ -222,19 +222,13 @@ export default function Invoices({ hideHeader = false } = {}) {
         <>
             {/* Header – oculto cuando se embebe en Comercial */}
             {!hideHeader && (
-                <div className="flex justify-between items-center mb-6">
-                    <div>
-                        <h1>Facturación</h1>
-                        <p className="text-muted">Gestión de cobros y facturas de alquiler</p>
-                    </div>
-                    <div className="flex gap-4">
-                        <button className="btn btn-secondary" onClick={handleGenerateReport}>
-                            <Download size={20} /> Reporte
-                        </button>
-                        <button className="btn btn-primary" onClick={handleOpenNew}>
-                            <Plus size={20} /> Crear Factura
-                        </button>
-                    </div>
+                <div className="flex justify-end gap-4 mb-6">
+                    <button className="btn btn-secondary" onClick={handleGenerateReport}>
+                        <Download size={20} /> Reporte
+                    </button>
+                    <button className="btn btn-primary" onClick={handleOpenNew}>
+                        <Plus size={20} /> Crear Factura
+                    </button>
                 </div>
             )}
             {/* Botón Crear Factura en modo embedded */}
