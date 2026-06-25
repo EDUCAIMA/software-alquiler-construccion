@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -772,12 +773,17 @@ app.put('/api/settings', async (req, res) => {
 
 // ─── Serve React en Producción ───────────────────────────────────────────────
 if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT) {
-    app.use(express.static(path.join(__dirname, 'dist')));
-    app.use((req, res, next) => {
-        if (req.method === 'GET' && !req.path.startsWith('/api')) {
-            res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-        } else { next(); }
-    });
+    const distPath = path.join(__dirname, 'dist');
+    if (fs.existsSync(distPath)) {
+        app.use(express.static(distPath));
+        app.use((req, res, next) => {
+            if (req.method === 'GET' && !req.path.startsWith('/api')) {
+                res.sendFile(path.join(distPath, 'index.html'));
+            } else { next(); }
+        });
+    } else {
+        console.log('ℹ️  "dist" folder not found. Skipping static file serving.');
+    }
 }
 
 app.listen(PORT, () => console.log(`🚀 Servidor corriendo en puerto ${PORT}`));

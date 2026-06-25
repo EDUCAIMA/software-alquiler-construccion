@@ -13,10 +13,12 @@ const USERS = [
 ];
 
 // ─── Helper genérico de API ───────────────────────────────────────────────────
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
 const api = {
-  get: (url) => fetch(url).then(r => r.json()),
+  get: (url) => fetch(API_BASE_URL + url).then(r => r.json()),
   post: async (url, body) => {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch(API_BASE_URL + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.error || `Error en POST ${url} (${res.status})`);
@@ -24,7 +26,7 @@ const api = {
     return res.json();
   },
   put: async (url, data) => {
-    const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const res = await fetch(API_BASE_URL + url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || `Error en PUT ${url} (${res.status})`);
@@ -32,7 +34,7 @@ const api = {
     return res.json();
   },
   del: async (url) => {
-    const res = await fetch(url, { method: 'DELETE' });
+    const res = await fetch(API_BASE_URL + url, { method: 'DELETE' });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.error || `Error en DELETE ${url} (${res.status})`);

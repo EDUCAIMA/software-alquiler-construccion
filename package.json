@@ -12,6 +12,7 @@
     "dev:local": "concurrently \"npm run dev:server\" \"npm run dev\"",
     "build": "vite build",
     "start": "node server.js",
+    "start:frontend": "serve -s dist -l $PORT",
     "lint": "eslint .",
     "preview": "vite preview"
   },

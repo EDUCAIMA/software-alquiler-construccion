@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle, Shield, PenTool, Camera, FileText, MapPin, Printer, ShieldCheck, Mail, Phone, ExternalLink } from 'lucide-react';
 import { SignatureCanvas, WebcamCapture, fmtCOP } from './CotizacionesHelpers';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
 export default function PublicCotizacionApproval() {
     const { id } = useParams();
     const [data, setData] = useState(null);
@@ -17,7 +19,7 @@ export default function PublicCotizacionApproval() {
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        fetch(`/api/public/cotizaciones/${id}`)
+        fetch(`${API_BASE_URL}/api/public/cotizaciones/${id}`)
             .then(res => res.json())
             .then(json => {
                 if (json.error) throw new Error(json.error);
@@ -44,7 +46,7 @@ export default function PublicCotizacionApproval() {
         }
         setSaving(true);
         try {
-            const res = await fetch(`/api/public/cotizaciones/${id}/approve`, {
+            const res = await fetch(`${API_BASE_URL}/api/public/cotizaciones/${id}/approve`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ firma, foto, fotoCC, fotoCCBack })
