@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
     X, FileText, DollarSign, Truck, Download, Edit2, CheckCircle, Package, Shield, 
-    Activity, RotateCcw, Plus, Printer, Check, CreditCard, Clock, AlertTriangle, Ban
+    Activity, RotateCcw, Plus, Printer, Check, CreditCard, Clock, AlertTriangle, Ban,
+    Users
 } from 'lucide-react';
 import { differenceInDays, format } from 'date-fns';
 import Swal from 'sweetalert2';
@@ -10,6 +11,8 @@ import {
     generateCartaPDF, generateRemisionPDF, generateCortePDF 
 } from './CotizacionesHelpers';
 import { ActionSection, ActionBtn, ProcessTimeline, BADGE, REM_ICON } from './CotComponents';
+import { useAppContext } from '../context/AppContext';
+import EditRemisionModal from './EditRemisionModal';
 
 const ESTADO_CFG = {
     'Borrador':  { bg: '#f1f5f9', color: '#64748b' },
@@ -41,8 +44,9 @@ export default function CotDetailPanel({
     onCorteObra, onCorteAction, onTriggerPay, canCreateRem, linkedRems = [], activeRems = [],
     getClient, getObra, onUpdateCot
 }) {
-
+    const { users, editRemision, products = [], clients = [] } = useAppContext();
     const [activeTab, setActiveTab] = useState('cotizacion');
+    const [editingRemisionTarget, setEditingRemisionTarget] = useState(null);
     const handleEditMetodoPago = async () => {
         const options = {
             'Crédito 30 días': 'Crédito 30 días',
@@ -108,7 +112,10 @@ export default function CotDetailPanel({
     };
 
     const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
-    const subtotal = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0);
+    const subtotal = cot.items.reduce((s, i) => {
+        const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+        return s + (i.cantidad * (isServ ? 1 : i.dias) * i.tarifaDia);
+    }, 0);
     const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
     const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
     const totalVal = cot.type === 'inv' ? cot.amount : (subtotal + iva + ret + (cot.transporte || 0));
@@ -353,20 +360,24 @@ export default function CotDetailPanel({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {cot.items.map((item, idx) => (
-                                            <tr key={idx} style={{ 
-                                                borderBottom: '1px solid #f1f5f9',
-                                                background: idx % 2 !== 0 ? '#fcfdfe' : 'transparent'
-                                            }}>
-                                                <td style={{ padding: '0.7rem 0.85rem', fontWeight: 600, color: '#1e293b', fontSize: '0.8rem' }}>{item.nombre}</td>
-                                                <td style={{ padding: '0.7rem 0.5rem', textAlign: 'center', color: '#1e293b', fontSize: '0.8rem', whiteSpace: 'nowrap', fontWeight: 600 }}>
-                                                    {item.cantidad} u × {item.dias}d
-                                                </td>
-                                                <td style={{ padding: '0.7rem 0.85rem', fontWeight: 600, color: '#1e293b', textAlign: 'right', fontSize: '0.8rem' }}>
-                                                    {fmtCOP(item.cantidad * item.dias * item.tarifaDia)}
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {cot.items.map((item, idx) => {
+                                            const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') || (item.category || '').toLowerCase().includes('servicio') || (item.esquemaCobro || '').toLowerCase().includes('única');
+                                            const lineTot = item.cantidad * (isServ ? 1 : item.dias) * item.tarifaDia;
+                                            return (
+                                                <tr key={idx} style={{ 
+                                                    borderBottom: '1px solid #f1f5f9',
+                                                    background: idx % 2 !== 0 ? '#fcfdfe' : 'transparent'
+                                                }}>
+                                                    <td style={{ padding: '0.7rem 0.85rem', fontWeight: 600, color: '#1e293b', fontSize: '0.8rem' }}>{item.nombre}</td>
+                                                    <td style={{ padding: '0.7rem 0.5rem', textAlign: 'center', color: '#1e293b', fontSize: '0.8rem', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                                                        {item.cantidad} u × {isServ ? 'Cobro Único' : `${item.dias}d`}
+                                                    </td>
+                                                    <td style={{ padding: '0.7rem 0.85rem', fontWeight: 600, color: '#1e293b', textAlign: 'right', fontSize: '0.8rem' }}>
+                                                        {fmtCOP(lineTot)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                                 <div style={{ padding: '1rem 0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', borderTop: '1px solid #f1f5f9' }}>
@@ -544,8 +555,51 @@ export default function CotDetailPanel({
                                                 </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                                     <span style={{ fontSize: '0.68rem', fontWeight: 900, color: remCfg.color, background: remCfg.bg, padding: '4px 10px', borderRadius: 8 }}>{rem.estado}</span>
+                                                    <button onClick={() => setEditingRemisionTarget(rem)} title="Editar Remisión" style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: 10, padding: '6px', cursor: 'pointer' }}><Edit2 size={16} /></button>
                                                     <button onClick={() => onPrintRemision(rem)} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: 10, padding: '6px', cursor: 'pointer' }}><Printer size={16} /></button>
                                                 </div>
+                                            </div>
+
+                                            {/* Asignación de Operario */}
+                                            <div style={{ padding: '0.65rem 1.25rem', background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <Users size={14} color="#64748b" /> Operario Asignado:
+                                                </span>
+                                                <select
+                                                    value={rem.assignedOperarioId || ''}
+                                                    onChange={async (e) => {
+                                                        const val = e.target.value;
+                                                        try {
+                                                            await editRemision(rem.id, { assignedOperarioId: val || null });
+                                                            Swal.fire({
+                                                                title: 'Asignación Actualizada',
+                                                                text: 'El operario asignado a la remisión ha sido actualizado.',
+                                                                icon: 'success',
+                                                                toast: true,
+                                                                position: 'top-end',
+                                                                showConfirmButton: false,
+                                                                timer: 2000
+                                                            });
+                                                        } catch (err) {
+                                                            Swal.fire('Error', 'No se pudo actualizar la asignación', 'error');
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        padding: '4px 10px',
+                                                        borderRadius: 8,
+                                                        border: '1px solid #cbd5e1',
+                                                        background: 'white',
+                                                        fontSize: '0.78rem',
+                                                        color: '#334155',
+                                                        outline: 'none',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    <option value="">-- Sin asignar --</option>
+                                                    {(users || []).filter(u => u.role === 'operativo').map(u => (
+                                                        <option key={u.id} value={u.id}>{u.name}</option>
+                                                    ))}
+                                                </select>
                                             </div>
                                             
                                             <div style={{ padding: '1.25rem' }}>
@@ -827,6 +881,16 @@ export default function CotDetailPanel({
                     )}
                 </div>
             </div>
+
+            {editingRemisionTarget && (
+                <EditRemisionModal
+                    remision={editingRemisionTarget}
+                    onClose={() => setEditingRemisionTarget(null)}
+                    onSave={editRemision}
+                    products={products}
+                    clients={clients}
+                />
+            )}
         </div>
     );
 }

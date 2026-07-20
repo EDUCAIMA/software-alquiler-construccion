@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
     ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Search, Plus, 
-    Printer, Trash2, Edit3, X, Mail, Phone, MapPin, Download, User, Building2, Receipt, Percent, FileText, Truck, Eye, CheckCircle, Clock, AlertTriangle, ShieldAlert
+    Printer, Trash2, Edit3, X, Mail, Phone, MapPin, Download, User, Building2, Receipt, Percent, FileText, Truck, Eye, CheckCircle, Clock, AlertTriangle, ShieldAlert, Package
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { exportClientPDF } from './CotizacionesHelpers';
+import { exportClientPDF, generateRemisionPDF } from './CotizacionesHelpers';
 import { NuevaRemisionModal, ESTADO_CFG } from './RemisionComponents';
+import EditRemisionModal from './EditRemisionModal';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
@@ -283,32 +284,40 @@ function DeleteClientModal({ client, onClose, onConfirm }) {
     );
 }
 
-function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, onDelete, remisiones, addRemision, maintenances, settings }) {
+function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, onDelete, remisiones, addRemision, editRemision, maintenances, settings }) {
     const [tab, setTab] = useState('datos');
     const [showObraModal, setShowObraModal] = useState(false);
     const [showRemisionModal, setShowRemisionModal] = useState(false);
+    const [editingRemisionTarget, setEditingRemisionTarget] = useState(null);
+    const [expandedRemIds, setExpandedRemIds] = useState([]);
 
-    const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
-    const totalFacturado = clientInvoices.reduce((s, i) => s + i.amount, 0);
-    const totalPagado = clientInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0);
-    const deuda = client.debt || 0;
-    const obrasActivas = (client.obras || []).filter(o => o.estado === 'Activa').length;
+    const toggleExpandRemision = (id) => {
+        setExpandedRemIds(prev => 
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
+
+    const clientInvoices = (invoices || []).filter(inv => inv && inv.clientId === client?.id);
+    const totalFacturado = clientInvoices.reduce((s, i) => s + (Number(i?.amount) || 0), 0);
+    const totalPagado = clientInvoices.filter(i => i?.status === 'Paid').reduce((s, i) => s + (Number(i?.amount) || 0), 0);
+    const deuda = Number(client?.debt) || 0;
+    const obrasActivas = (client?.obras || []).filter(o => o && o.estado === 'Activa').length;
 
     const handleDelete = () => {
         const pass = prompt('POR SEGURIDAD: Ingrese la contraseña de administrador para eliminar este cliente:');
         if (pass === null) return;
         if (pass === 'admin123') {
-            if (window.confirm(`¿Está seguro de eliminar permanentemente a ${client.name}?`)) onDelete(client.id);
+            if (window.confirm(`¿Está seguro de eliminar permanentemente a ${client?.name}?`)) onDelete(client.id);
         } else {
             alert('Contraseña incorrecta.');
         }
     };
 
-    const clientRemisiones = remisiones.filter(r => r.clientId === client.id);
+    const clientRemisiones = (remisiones || []).filter(r => r && r.clientId === client?.id);
 
     const TABS = [
         { k: 'datos',    label: 'Información' },
-        { k: 'obras',    label: `Obras (${client.obras?.length || 0})` },
+        { k: 'obras',    label: `Obras (${client?.obras?.length || 0})` },
         { k: 'remisiones', label: `Remisiones (${clientRemisiones.length})` },
         { k: 'historial',label: `Historial (${clientInvoices.length})` },
     ];
@@ -461,37 +470,202 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
                                 {clientRemisiones.length === 0 ? (
                                     <div style={{ textAlign:'center', padding:'4rem', color:'#94a3b8', border:'1px dashed #e2e8f0', borderRadius:'14px' }}>No hay remisiones registradas.</div>
                                 ) : (
-                                    <div style={{ border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
-                                        <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                                            <thead>
-                                                <tr style={{ background:'#f8fafc' }}>
-                                                    {['ID','Obra','Fecha','Estado','Equipos'].map(h => (
-                                                        <th key={h} style={{ padding:'0.75rem 1rem', textAlign:'left', fontSize:'0.68rem', fontWeight:700, color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {clientRemisiones.map((rem, idx) => {
-                                                    const cfg = ESTADO_CFG[rem.estado] || ESTADO_CFG['Activa'];
-                                                    const obra = (client.obras || []).find(o => o.id === rem.obraId);
-                                                    return (
-                                                        <tr key={rem.id} style={{ borderBottom:'1px solid #f8fafc', background: idx%2===0 ? 'white' : '#fafafa' }}>
-                                                            <td style={{ padding:'0.75rem 1rem', fontWeight:700, color:'#2365AB', fontSize:'0.83rem' }}>{rem.id}</td>
-                                                            <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#374151' }}>{obra?.nombre || '—'}</td>
-                                                            <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#6b7280' }}>{rem.fecha}</td>
-                                                            <td style={{ padding:'0.75rem 1rem' }}>
-                                                                <span style={{ padding:'3px 10px', borderRadius:'20px', fontSize:'0.65rem', fontWeight:700, background:cfg.bg, color:cfg.color }}>
-                                                                    {rem.estado.toUpperCase()}
-                                                                </span>
-                                                            </td>
-                                                            <td style={{ padding:'0.75rem 1rem', fontSize:'0.83rem', color:'#6b7280' }}>
-                                                                {rem.items?.length || 0} items
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                    <div style={{ display:'flex', flexDirection:'column', gap:'0.85rem' }}>
+                                        {clientRemisiones.map((rem) => {
+                                            if (!rem) return null;
+                                            const obra = (client?.obras || []).find(o => o && o.id === rem.obraId);
+                                            const isExpanded = expandedRemIds.includes(rem.id);
+
+                                            return (
+                                                <div key={rem.id} style={{
+                                                    background: '#ffffff',
+                                                    border: isExpanded ? '1px solid #14335A' : '1px solid #e2e8f0',
+                                                    borderRadius: '8px',
+                                                    boxShadow: isExpanded ? '0 4px 16px rgba(20, 51, 90, 0.12)' : '0 2px 8px rgba(0, 0, 0, 0.06)',
+                                                    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                                                    overflow: 'hidden'
+                                                }}>
+                                                    {/* Header Principal - Clic para Plegar / Desplegar */}
+                                                    <div 
+                                                        onClick={() => toggleExpandRemision(rem.id)}
+                                                        style={{
+                                                            padding: '0.75rem 1rem',
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'center',
+                                                            flexWrap: 'wrap',
+                                                            gap: '0.5rem',
+                                                            cursor: 'pointer',
+                                                            userSelect: 'none',
+                                                            background: isExpanded ? '#14335A' : '#ffffff',
+                                                            transition: 'background 0.15s ease'
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '3.5rem', flexWrap: 'wrap' }}>
+                                                            <span style={{ fontWeight: 800, fontSize: '0.95rem', color: isExpanded ? '#ffffff' : '#2365AB' }}>{rem.id}</span>
+                                                            <span style={{ fontSize: '0.85rem', color: isExpanded ? 'rgba(255,255,255,0.9)' : '#0f172a', fontWeight: 600 }}>{rem.fecha}</span>
+                                                        </div>
+
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    toggleExpandRemision(rem.id);
+                                                                }}
+                                                                className="btn btn-outline btn-sm"
+                                                                style={{
+                                                                    padding: '0.3rem 0.65rem',
+                                                                    fontSize: '0.75rem',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.35rem',
+                                                                    background: isExpanded ? 'rgba(255,255,255,0.15)' : 'transparent',
+                                                                    borderColor: isExpanded ? 'rgba(255,255,255,0.3)' : '#cbd5e1',
+                                                                    color: isExpanded ? '#ffffff' : '#334155'
+                                                                }}
+                                                            >
+                                                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                                {isExpanded ? 'Ocultar' : 'Desplegar ítems'}
+                                                            </button>
+
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setEditingRemisionTarget(rem);
+                                                                }}
+                                                                className="btn btn-outline btn-sm" 
+                                                                style={{
+                                                                    padding: '0.3rem 0.65rem',
+                                                                    fontSize: '0.75rem',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.35rem',
+                                                                    background: isExpanded ? 'rgba(255,255,255,0.15)' : 'transparent',
+                                                                    borderColor: isExpanded ? 'rgba(255,255,255,0.3)' : '#cbd5e1',
+                                                                    color: isExpanded ? '#ffffff' : '#334155'
+                                                                }}
+                                                                title="Editar Remisión"
+                                                            >
+                                                                <Edit3 size={14} /> Editar
+                                                            </button>
+
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    generateRemisionPDF(rem, client, obra, settings);
+                                                                }}
+                                                                className="btn btn-outline btn-sm" 
+                                                                style={{
+                                                                    padding: '0.3rem 0.65rem',
+                                                                    fontSize: '0.75rem',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.35rem',
+                                                                    background: isExpanded ? 'rgba(255,255,255,0.15)' : 'transparent',
+                                                                    borderColor: isExpanded ? 'rgba(255,255,255,0.3)' : '#cbd5e1',
+                                                                    color: isExpanded ? '#ffffff' : '#334155'
+                                                                }}
+                                                                title="Imprimir Remisión"
+                                                            >
+                                                                <Printer size={14} /> Imprimir
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Desplegable: Tabla de Ítems */}
+                                                    {isExpanded && (() => {
+                                                        let diasCalc = 1;
+                                                        if (rem.fecha) {
+                                                            const parts = rem.fecha.split('-');
+                                                            if (parts.length === 3) {
+                                                                const fDate = new Date(parts[0], parts[1] - 1, parts[2]);
+                                                                const now = new Date();
+                                                                const diff = Math.max(0, now - fDate);
+                                                                diasCalc = Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+                                                            }
+                                                        }
+
+                                                        return (
+                                                            <div style={{ borderTop: '1px solid #e2e8f0', background: '#ffffff' }}>
+                                                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                                                    <thead>
+                                                                        <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                                                            <th style={{ padding: '0.55rem 1rem', textAlign: 'center', color: '#64748b', fontWeight: 700, width: '90px' }}>Cantidad</th>
+                                                                            <th style={{ padding: '0.55rem 1rem', textAlign: 'left', color: '#64748b', fontWeight: 700 }}>Descripción</th>
+                                                                            <th style={{ padding: '0.55rem 1rem', textAlign: 'center', color: '#64748b', fontWeight: 700 }}>Estado (Alquiler o Devuelto)</th>
+                                                                            <th style={{ padding: '0.55rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>V. Unitario</th>
+                                                                            <th style={{ padding: '0.55rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>V. al día de hoy</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {(rem.items || []).length === 0 ? (
+                                                                            <tr>
+                                                                                <td colSpan={5} style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#94a3b8' }}>No hay ítems registrados en esta remisión.</td>
+                                                                            </tr>
+                                                                        ) : (
+                                                                            rem.items.map((it, iIdx) => {
+                                                                                const prod = (products || []).find(p => p.id === it.productId);
+                                                                                const name = it.nombre || it.name || prod?.name || it.productId || 'Equipo';
+                                                                                const cant = Number(it.cantidad) || 0;
+                                                                                const cantDev = Number(it.cantidadDevuelta) || 0;
+                                                                                const enCampo = Math.max(0, cant - cantDev);
+                                                                                const tarifa = Number(it.tarifaDia || prod?.value || 0);
+                                                                                const isServ = (it.tipoCobro || '').toLowerCase().includes('servicio') || 
+                                                                                               (it.tipoCobro || '').toLowerCase().includes('única') ||
+                                                                                               (prod?.category || '').toLowerCase().includes('servicio') || 
+                                                                                               (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                                                                               (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                                                                                const vHoy = enCampo > 0 ? (enCampo * tarifa * (isServ ? 1 : diasCalc)) : 0;
+
+                                                                                return (
+                                                                                    <tr key={iIdx} style={{ borderBottom: '1px solid #f1f5f9', background: iIdx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+                                                                                        <td style={{ padding: '0.55rem 1rem', textAlign: 'center', fontWeight: 700, color: '#2365AB' }}>
+                                                                                            {cant}
+                                                                                        </td>
+                                                                                        <td style={{ padding: '0.55rem 1rem', fontWeight: 600, color: '#1e293b' }}>
+                                                                                            {name}
+                                                                                            {it.productId && <span style={{ fontSize: '0.7rem', color: '#94a3b8', marginLeft: '0.5rem', fontWeight: 400 }}>({it.productId})</span>}
+                                                                                        </td>
+                                                                                        <td style={{ padding: '0.55rem 1rem', textAlign: 'center' }}>
+                                                                                            {enCampo > 0 ? (
+                                                                                                <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: 'rgba(35, 101, 171, 0.1)', color: '#2365AB' }}>
+                                                                                                    Alquiler {cantDev > 0 ? `(${enCampo})` : ''}
+                                                                                                </span>
+                                                                                            ) : (
+                                                                                                <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: '#dcfce7', color: '#15803d' }}>
+                                                                                                    Devuelto
+                                                                                                </span>
+                                                                                            )}
+                                                                                            {cantDev > 0 && enCampo > 0 && (
+                                                                                                <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', marginLeft: '6px' }}>
+                                                                                                    Devuelto ({cantDev})
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </td>
+                                                                                        <td style={{ padding: '0.55rem 1rem', textAlign: 'right', color: '#475569', fontWeight: 600 }}>
+                                                                                            ${tarifa.toLocaleString()}
+                                                                                        </td>
+                                                                                        <td style={{ padding: '0.55rem 1rem', textAlign: 'right', color: '#0f172a', fontWeight: 800 }}>
+                                                                                            ${vHoy.toLocaleString()}
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                );
+                                                                            })
+                                                                        )}
+                                                                    </tbody>
+                                                                </table>
+
+                                                                {rem.notas && (
+                                                                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic', background: '#f8fafc', padding: '0.55rem 1rem', borderTop: '1px solid #f1f5f9' }}>
+                                                                        <strong>Notas:</strong> {rem.notas}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </>)}
@@ -548,6 +722,18 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
                 />
             )}
 
+            {editingRemisionTarget && (
+                <EditRemisionModal
+                    remision={editingRemisionTarget}
+                    onClose={() => setEditingRemisionTarget(null)}
+                    onSave={editRemision}
+                    products={products}
+                    clients={[client]}
+                />
+            )}
+
+
+
             <style>{`
                 @keyframes cdFadeIn {
                     from { opacity:0; transform:scale(0.97); }
@@ -562,7 +748,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
 export default function Clients() {
     const { 
         clients, addClient, editClient, deleteClient, addObra, 
-        invoices, products, remisiones, addRemision, maintenances, settings, checkPassword 
+        invoices, products, remisiones, addRemision, editRemision, maintenances, settings, checkPassword 
     } = useAppContext();
 
     const [search, setSearch] = useState('');
@@ -646,8 +832,9 @@ export default function Clients() {
         setEditingClient(null);
     };
 
-    const handleDelete = (password, setError) => {
-        if (checkPassword(password)) {
+    const handleDelete = async (password, setError) => {
+        const isValid = await checkPassword(password);
+        if (isValid) {
             deleteClient(deletingClient.id);
             setDeletingClient(null);
             if (selectedClient?.id === deletingClient.id) setSelectedClient(null);
@@ -901,6 +1088,7 @@ export default function Clients() {
                     products={products}
                     remisiones={remisiones}
                     addRemision={addRemision}
+                    editRemision={editRemision}
                     maintenances={maintenances}
                     settings={settings}
                     onDelete={(id) => {

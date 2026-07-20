@@ -29,7 +29,16 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
         );
     }, [products, searchTerm]);
 
-    const subtotal = items.reduce((s, i) => s + (Number(i.cantidad) || 0) * (Number(i.dias) || 0) * (Number(i.tarifaDia) || 0), 0);
+    const subtotal = items.reduce((s, i) => {
+        const prod = (products || []).find(p => p && p.id === i.productId);
+        const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (i.tipoCobro || '').toLowerCase().includes('única') ||
+                       (i.category || '').toLowerCase().includes('servicio') ||
+                       (prod?.category || '').toLowerCase().includes('servicio') ||
+                       (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (prod?.esquemaCobro || '').toLowerCase().includes('única');
+        return s + (Number(i.cantidad) || 0) * (isServ ? 1 : (Number(i.dias) || 0)) * (Number(i.tarifaDia) || 0);
+    }, 0);
     const porcIVA = selectedClient?.responsableIVA ? (Number(selectedClient?.porcIVA) || 0) : 0;
     const porcRet = Number(selectedClient?.porcRetencion) || 0;
     const iva = Math.round(subtotal * porcIVA / 100);
@@ -37,6 +46,9 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
     const total = subtotal + iva + ret + (Number(transporte) || 0);
 
     const handleProductClick = (prod) => {
+        const isServ = (prod.category || '').toLowerCase().includes('servicio') ||
+                       (prod.tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (prod.esquemaCobro || '').toLowerCase().includes('única');
         const existingIdx = items.findIndex(i => i.productId === prod.id);
         if (existingIdx >= 0) {
             const newItems = [...items];
@@ -47,21 +59,36 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                 productId: prod.id,
                 nombre: prod.name,
                 cantidad: 1,
-                dias: defaultDays,
-                tarifaDia: Number(prod.value) || 0
+                dias: isServ ? 1 : defaultDays,
+                tarifaDia: Number(prod.value) || 0,
+                tipoCobro: prod.tipoCobro,
+                category: prod.category
             }]);
         }
     };
 
     const updateItemQty = (idx, delta) => {
         const newItems = [...items];
-        newItems[idx].cantidad = Math.max(1, newItems[idx].cantidad + delta);
+        const curr = Number(newItems[idx].cantidad) || 0;
+        newItems[idx].cantidad = Math.max(1, curr + delta);
+        setItems(newItems);
+    };
+
+    const setItemQtyDirect = (idx, val) => {
+        const newItems = [...items];
+        newItems[idx].cantidad = val === '' ? '' : Math.max(1, parseInt(val, 10) || 1);
         setItems(newItems);
     };
 
     const updateItemDays = (idx, days) => {
         const newItems = [...items];
-        newItems[idx].dias = Math.max(1, Number(days) || 1);
+        const prod = (products || []).find(p => p && p.id === newItems[idx].productId);
+        const isServ = (newItems[idx].tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (newItems[idx].category || '').toLowerCase().includes('servicio') ||
+                       (prod?.category || '').toLowerCase().includes('servicio') ||
+                       (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (prod?.esquemaCobro || '').toLowerCase().includes('única');
+        newItems[idx].dias = isServ ? 1 : Math.max(1, Number(days) || 1);
         setItems(newItems);
     };
 
@@ -216,37 +243,62 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    {items.map((item, idx) => (
-                                        <div key={idx} style={{ background: 'white', padding: '1rem', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                                                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>{item.nombre}</div>
-                                                <button onClick={() => removeItem(idx)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={16} /></button>
-                                            </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                    <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Cant:</div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: 8, padding: '2px' }}>
-                                                        <button onClick={() => updateItemQty(idx, -1)} style={{ background: 'white', border: 'none', width: 24, height: 24, borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Minus size={12} /></button>
-                                                        <span style={{ width: 30, textAlign: 'center', fontWeight: 800, fontSize: '0.85rem' }}>{item.cantidad}</span>
-                                                        <button onClick={() => updateItemQty(idx, 1)} style={{ background: 'white', border: 'none', width: 24, height: 24, borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={12} /></button>
+                                    {items.map((item, idx) => {
+                                        const prod = (products || []).find(p => p && p.id === item.productId);
+                                        const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                                       (item.tipoCobro || '').toLowerCase().includes('única') ||
+                                                       (item.category || '').toLowerCase().includes('servicio') ||
+                                                       (prod?.category || '').toLowerCase().includes('servicio') ||
+                                                       (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                                       (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                                        const lineTotal = item.cantidad * (isServ ? 1 : item.dias) * item.tarifaDia;
+
+                                        return (
+                                            <div key={idx} style={{ background: 'white', padding: '1rem', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', alignItems: 'center' }}>
+                                                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                        {item.nombre}
+                                                        {isServ && (
+                                                            <span style={{ fontSize: '0.65rem', background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 6, fontWeight: 700 }}>
+                                                                Cobro Único
+                                                            </span>
+                                                        )}
                                                     </div>
+                                                    <button onClick={() => removeItem(idx)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={16} /></button>
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                    <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Días:</div>
-                                                    <input 
-                                                        type="number" 
-                                                        min="1" 
-                                                        value={item.dias} 
-                                                        onChange={(e) => updateItemDays(idx, e.target.value)} 
-                                                        style={{ width: '100%', padding: '0.3rem', border: '1px solid #e2e8f0', borderRadius: 8, textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }} 
-                                                    />
+                                                <div style={{ display: 'grid', gridTemplateColumns: isServ ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Cant:</div>
+                                                        <input 
+                                                            type="number" 
+                                                            min="1" 
+                                                            value={item.cantidad} 
+                                                            onChange={(e) => setItemQtyDirect(idx, e.target.value)}
+                                                            onBlur={() => {
+                                                                if (!item.cantidad || item.cantidad < 1) setItemQtyDirect(idx, 1);
+                                                            }}
+                                                            style={{ width: '100%', padding: '0.3rem', border: '1px solid #e2e8f0', borderRadius: 8, textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }} 
+                                                        />
+                                                    </div>
+                                                    {!isServ && (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Días:</div>
+                                                            <input 
+                                                                type="number" 
+                                                                min="1" 
+                                                                value={item.dias} 
+                                                                onChange={(e) => updateItemDays(idx, e.target.value)} 
+                                                                style={{ width: '100%', padding: '0.3rem', border: '1px solid #e2e8f0', borderRadius: 8, textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }} 
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div style={{ marginTop: '0.75rem', textAlign: 'right', borderTop: '1px dashed #f1f5f9', paddingTop: '0.5rem', fontWeight: 800, color: '#2365AB' }}>
+                                                    {fmtCOP(lineTotal)}
                                                 </div>
                                             </div>
-                                            <div style={{ marginTop: '0.75rem', textAlign: 'right', borderTop: '1px dashed #f1f5f9', paddingTop: '0.5rem', fontWeight: 800, color: '#2365AB' }}>
-                                                {fmtCOP(item.cantidad * item.dias * item.tarifaDia)}
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

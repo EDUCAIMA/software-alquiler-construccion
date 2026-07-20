@@ -900,3 +900,96 @@ h3 {
   color: var(--text-secondary);
   text-align: center;
 }
+
+/* Responsive Header Styles to prevent overlaps */
+.header-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.header-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0 1rem;
+  flex-shrink: 0 !important;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Hide button labels on standard desktop monitors and smaller */
+@media (max-width: 1440px) {
+  .hide-on-mobile {
+    display: none !important;
+  }
+}
+
+/* Enable scrollable nav and hide page title on medium screens */
+@media (max-width: 1200px) {
+  .header-page-title {
+    display: none !important;
+  }
+  .header-nav {
+    overflow-x: auto;
+    max-width: 45%;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    justify-content: flex-start !important;
+    flex-shrink: 1 !important; /* Allow nav container to shrink */
+  }
+  .header-nav::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Scale down items on tablet/small screens */
+@media (max-width: 900px) {
+  .header-nav {
+    max-width: 35%;
+  }
+  .header-nav a {
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 8px !important;
+  }
+  .header-nav a svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+  
+  /* User profile avatar size reduction */
+  header div div[title] {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 0.85rem !important;
+  }
+  
+  /* Logout button and action buttons padding and icon size */
+  header button {
+    padding: 0.4rem 0.6rem !important;
+    border-radius: 8px !important;
+  }
+  header button svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+}
+
+@media (max-width: 580px) {
+  .header-nav {
+    max-width: 30%;
+  }
+  /* Hide company logo text if there is no image to save space */
+  header span {
+    display: none !important;
+  }
+}

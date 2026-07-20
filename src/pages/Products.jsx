@@ -110,7 +110,8 @@ function handleImageUpload(file, setter) {
 // ─── Hoja de Vida Panel ───────────────────────────────────────────────────────
 function HojaDeVidaPanel({ product, maintenances, onClose }) {
     const { settings } = useAppContext();
-    const prodMantenimientos = maintenances.filter(m => m.productId === product.id);
+    const prodMantenimientos = (maintenances || []).filter(m => m.productId === product.id);
+    const hasPending = prodMantenimientos.some(m => m.estado === 'Pendiente' || m.estado === 'En Proceso');
 
 
     const statusColor = s => s === 'Completado' ? '#10b981' : s === 'En Proceso' ? '#f97316' : '#ef4444';
@@ -229,8 +230,9 @@ function BajaModal({ product, onClose, onConfirm }) {
     const [error, setError] = useState('');
     const motivos = ['Pérdida total por siniestro', 'Obsolescencia técnica', 'Robo o hurto', 'Deterioro irreparable', 'Venta del equipo', 'Otro'];
 
-    const handleConfirm = () => {
-        if (!checkPassword(password)) {
+    const handleConfirm = async () => {
+        const isValid = await checkPassword(password);
+        if (!isValid) {
             setError('Contraseña incorrecta');
             return;
         }
@@ -294,8 +296,9 @@ function DeleteModal({ product, onClose, onConfirm }) {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
 
-    const handleConfirm = () => {
-        if (!checkPassword(password)) {
+    const handleConfirm = async () => {
+        const isValid = await checkPassword(password);
+        if (!isValid) {
             setError('Contraseña incorrecta');
             return;
         }
@@ -669,12 +672,16 @@ export default function Products() {
                                         </td>
                                         <td>
                                             <div style={{ fontWeight: 600, color: '#104166' }}>
-                                                ${p.value.toLocaleString()} / {p.tipoCobro || 'Día'}
+                                                {(p.tipoCobro === 'Servicio' || p.category === 'Servicio' || p.esquemaCobro === 'Única Vez')
+                                                    ? `$${p.value.toLocaleString()} (Única vez)`
+                                                    : `$${p.value.toLocaleString()} / ${p.tipoCobro || 'Día'}`}
                                             </div>
                                         </td>
                                         <td>
                                             <div style={{ color: '#475569', fontWeight: 600 }}>
-                                                {p.esquemaCobro || 'Calendario'}
+                                                {(p.tipoCobro === 'Servicio' || p.category === 'Servicio' || p.esquemaCobro === 'Única Vez')
+                                                    ? 'Cobro Único'
+                                                    : (p.esquemaCobro || 'Calendario')}
                                             </div>
                                         </td>
                                         <td>
@@ -877,11 +884,21 @@ export default function Products() {
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Categoría</label>
                                 <select className="input-base" value={newProduct.category}
-                                    onChange={e => setNewProduct(prev => ({ ...prev, category: e.target.value }))}>
+                                    onChange={e => {
+                                        const cat = e.target.value;
+                                        const isServ = cat === 'Servicio';
+                                        setNewProduct(prev => ({
+                                            ...prev,
+                                            category: cat,
+                                            tipoCobro: isServ ? 'Servicio' : (prev.tipoCobro === 'Servicio' ? 'Día' : prev.tipoCobro),
+                                            esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro
+                                        }));
+                                    }}>
                                     <option value="">Seleccione…</option>
                                     <option value="Heavy Machinery">Maquinaria Pesada</option>
                                     <option value="Power Tools">Herramientas Eléctricas</option>
                                     <option value="Structures">Estructuras y Andamios</option>
+                                    <option value="Servicio">Servicio (Cobro Único)</option>
                                     <option value="Other">Otro</option>
                                 </select>
                             </div>
@@ -894,27 +911,49 @@ export default function Products() {
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
-                                <label className="input-label">Tarifa Alquiler ($)</label>
+                                <label className="input-label">Tarifa Alquiler / Servicio ($)</label>
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     <input type="number" className="input-base" value={newProduct.value}
                                         onChange={e => setNewProduct(prev => ({ ...prev, value: e.target.value }))}
                                         placeholder="Ej. 15000" style={{ flex: 1 }} />
-                                    <select className="input-base" style={{ width: 110, padding: '0.6rem' }} value={newProduct.tipoCobro || 'Día'}
-                                        onChange={e => setNewProduct(prev => ({ ...prev, tipoCobro: e.target.value }))}>
+                                    <select className="input-base" style={{ width: 130, padding: '0.6rem' }} value={newProduct.tipoCobro || 'Día'}
+                                        onChange={e => {
+                                            const tc = e.target.value;
+                                            const isServ = tc === 'Servicio' || newProduct.category === 'Servicio';
+                                            setNewProduct(prev => ({
+                                                ...prev,
+                                                tipoCobro: tc,
+                                                esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro
+                                            }));
+                                        }}>
                                         <option value="Día">Día</option>
                                         <option value="Hora">Hora</option>
-                                        <option value="Servicio">Servicio</option>
+                                        <option value="Servicio">Servicio (Única Vez)</option>
                                     </select>
                                 </div>
                             </div>
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Esquema de Cobro</label>
-                                <select className="input-base" value={newProduct.esquemaCobro || 'Calendario'}
-                                    onChange={e => setNewProduct(prev => ({ ...prev, esquemaCobro: e.target.value }))}>
-                                    <option value="Calendario">Días Calendario (Todos)</option>
-                                    <option value="Lunes-Sábado">Lunes a Sábado</option>
-                                    <option value="Lunes-Viernes">Lunes a Viernes</option>
-                                </select>
+                                {(() => {
+                                    const isServ = newProduct.category === 'Servicio' || newProduct.tipoCobro === 'Servicio';
+                                    return (
+                                        <select className="input-base" 
+                                            disabled={isServ}
+                                            value={isServ ? 'Única Vez' : (newProduct.esquemaCobro || 'Calendario')}
+                                            onChange={e => setNewProduct(prev => ({ ...prev, esquemaCobro: e.target.value }))}
+                                            style={{ 
+                                                opacity: isServ ? 0.75 : 1, 
+                                                cursor: isServ ? 'not-allowed' : 'default', 
+                                                background: isServ ? '#f1f5f9' : 'white' 
+                                            }}
+                                        >
+                                            <option value="Calendario">Días Calendario (Todos)</option>
+                                            <option value="Lunes-Sábado">Lunes a Sábado</option>
+                                            <option value="Lunes-Viernes">Lunes a Viernes</option>
+                                            <option value="Única Vez">Única Vez (Cobro Único)</option>
+                                        </select>
+                                    );
+                                })()}
                             </div>
                         </div>
                         <DropZone state={newProduct} setter={setNewProduct} fileInputRef={fileInputRef} />
@@ -943,11 +982,21 @@ export default function Products() {
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Categoría</label>
                                 <select className="input-base" value={editingProduct.category}
-                                    onChange={e => setEditingProduct(prev => ({ ...prev, category: e.target.value }))}>
+                                    onChange={e => {
+                                        const cat = e.target.value;
+                                        const isServ = cat === 'Servicio';
+                                        setEditingProduct(prev => ({
+                                            ...prev,
+                                            category: cat,
+                                            tipoCobro: isServ ? 'Servicio' : (prev.tipoCobro === 'Servicio' ? 'Día' : prev.tipoCobro),
+                                            esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro
+                                        }));
+                                    }}>
                                     <option value="">Seleccione…</option>
                                     <option value="Heavy Machinery">Maquinaria Pesada</option>
                                     <option value="Power Tools">Herramientas Eléctricas</option>
                                     <option value="Structures">Estructuras y Andamios</option>
+                                    <option value="Servicio">Servicio (Cobro Único)</option>
                                     <option value="Equipment">Equipo</option>
                                     <option value="Machinery">Maquinaria</option>
                                     <option value="Other">Otro</option>
@@ -962,26 +1011,48 @@ export default function Products() {
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
-                                <label className="input-label">Tarifa Alquiler ($)</label>
+                                <label className="input-label">Tarifa Alquiler / Servicio ($)</label>
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     <input type="number" className="input-base" value={editingProduct.value}
                                         onChange={e => setEditingProduct(prev => ({ ...prev, value: e.target.value }))} style={{ flex: 1 }} />
-                                    <select className="input-base" style={{ width: 110, padding: '0.6rem' }} value={editingProduct.tipoCobro || 'Día'}
-                                        onChange={e => setEditingProduct(prev => ({ ...prev, tipoCobro: e.target.value }))}>
+                                    <select className="input-base" style={{ width: 130, padding: '0.6rem' }} value={editingProduct.tipoCobro || 'Día'}
+                                        onChange={e => {
+                                            const tc = e.target.value;
+                                            const isServ = tc === 'Servicio' || editingProduct.category === 'Servicio';
+                                            setEditingProduct(prev => ({
+                                                ...prev,
+                                                tipoCobro: tc,
+                                                esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro
+                                            }));
+                                        }}>
                                         <option value="Día">Día</option>
                                         <option value="Hora">Hora</option>
-                                        <option value="Servicio">Servicio</option>
+                                        <option value="Servicio">Servicio (Única Vez)</option>
                                     </select>
                                 </div>
                             </div>
                             <div className="input-group" style={{ margin: 0 }}>
                                 <label className="input-label">Esquema de Cobro</label>
-                                <select className="input-base" value={editingProduct.esquemaCobro || 'Calendario'}
-                                    onChange={e => setEditingProduct(prev => ({ ...prev, esquemaCobro: e.target.value }))}>
-                                    <option value="Calendario">Días Calendario (Todos)</option>
-                                    <option value="Lunes-Sábado">Lunes a Sábado</option>
-                                    <option value="Lunes-Viernes">Lunes a Viernes</option>
-                                </select>
+                                {(() => {
+                                    const isServ = editingProduct.category === 'Servicio' || editingProduct.tipoCobro === 'Servicio';
+                                    return (
+                                        <select className="input-base" 
+                                            disabled={isServ}
+                                            value={isServ ? 'Única Vez' : (editingProduct.esquemaCobro || 'Calendario')}
+                                            onChange={e => setEditingProduct(prev => ({ ...prev, esquemaCobro: e.target.value }))}
+                                            style={{ 
+                                                opacity: isServ ? 0.75 : 1, 
+                                                cursor: isServ ? 'not-allowed' : 'default', 
+                                                background: isServ ? '#f1f5f9' : 'white' 
+                                            }}
+                                        >
+                                            <option value="Calendario">Días Calendario (Todos)</option>
+                                            <option value="Lunes-Sábado">Lunes a Sábado</option>
+                                            <option value="Lunes-Viernes">Lunes a Viernes</option>
+                                            <option value="Única Vez">Única Vez (Cobro Único)</option>
+                                        </select>
+                                    );
+                                })()}
                             </div>
                         </div>
                         <DropZone state={editingProduct} setter={setEditingProduct} fileInputRef={fileInputRef} />

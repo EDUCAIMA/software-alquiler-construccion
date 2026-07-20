@@ -83,7 +83,10 @@ export default function PublicCotizacionApproval() {
 
     const { cot, client, settings } = data;
     const obra = client?.obras?.find(o => o.id === cot.obraId);
-    const subtotal = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0);
+    const subtotal = cot.items.reduce((s, i) => {
+        const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+        return s + (i.cantidad * (isServ ? 1 : i.dias) * i.tarifaDia);
+    }, 0);
     const total = subtotal + (cot.transporte || 0);
 
     return (
@@ -167,14 +170,18 @@ export default function PublicCotizacionApproval() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {cot.items.map((it, idx) => (
-                                                <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                    <td style={{ padding: '1.25rem 1.5rem', fontWeight: 600, color: '#1e293b' }}>{it.nombre}</td>
-                                                    <td style={{ textAlign: 'center', padding: '1.25rem 1rem', color: '#64748b' }}>{it.cantidad}</td>
-                                                    <td style={{ textAlign: 'center', padding: '1.25rem 1rem', color: '#64748b' }}>{it.dias}</td>
-                                                    <td style={{ textAlign: 'right', padding: '1.25rem 1.5rem', color: '#0f172a', fontWeight: 800 }}>{fmtCOP(it.cantidad * it.dias * it.tarifaDia)}</td>
-                                                </tr>
-                                            ))}
+                                            {cot.items.map((it, idx) => {
+                                                const isServ = (it.tipoCobro || '').toLowerCase().includes('servicio') || (it.category || '').toLowerCase().includes('servicio') || (it.esquemaCobro || '').toLowerCase().includes('única');
+                                                const lineTot = it.cantidad * (isServ ? 1 : it.dias) * it.tarifaDia;
+                                                return (
+                                                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                        <td style={{ padding: '1.25rem 1.5rem', fontWeight: 600, color: '#1e293b' }}>{it.nombre}</td>
+                                                        <td style={{ textAlign: 'center', padding: '1.25rem 1rem', color: '#64748b' }}>{it.cantidad}</td>
+                                                        <td style={{ textAlign: 'center', padding: '1.25rem 1rem', color: '#64748b' }}>{isServ ? '1 (Única)' : it.dias}</td>
+                                                        <td style={{ textAlign: 'right', padding: '1.25rem 1.5rem', color: '#0f172a', fontWeight: 800 }}>{fmtCOP(lineTot)}</td>
+                                                    </tr>
+                                                );
+                                            })}
                                             {cot.transporte > 0 && (
                                                 <tr style={{ borderBottom: '1px solid #f1f5f9', background: '#fffcf5' }}>
                                                     <td colSpan={3} style={{ padding: '1rem 1.5rem', fontWeight: 700, color: '#92400e', textAlign: 'right' }}>Servicio de Transporte y Logística</td>

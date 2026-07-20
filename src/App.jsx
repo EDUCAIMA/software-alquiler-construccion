@@ -121,7 +121,7 @@ function Topbar() {
     }}>
 
       {/* ── LEFT SECTION: Logo + Title (Flexible) ── */}
-      <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+      <div className="header-left" style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, marginRight: '1rem' }}>
           {settings?.logoUI ? (
             <img src={settings.logoUI} alt="Logo" style={{ height: 48, width: 'auto', objectFit: 'contain' }} />
@@ -151,18 +151,17 @@ function Topbar() {
             '/settings': 'Configuración'
           };
           const title = titles[location.pathname];
-          return title ? <div style={titleStyle}>{title}</div> : null;
+          return title ? <div style={titleStyle} className="header-page-title">{title}</div> : null;
         })()}
       </div>
 
       {/* ── CENTER SECTION: Nav Icons (Stable) ── */}
-      <nav style={{
+      <nav className="header-nav" style={{
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
         gap: '0.2rem',
         padding: '0 1rem',
-        flexShrink: 0,
       }}>
         {menuItems.map((item) => {
           const isActive = location.pathname === item.path;
@@ -221,7 +220,7 @@ function Topbar() {
       </nav>
 
       {/* ── RIGHT SECTION: Actions + User (Flexible) ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flex: 1, minWidth: 0 }}>
+      <div className="header-right" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flex: 1, minWidth: 0 }}>
         {/* Quick Actions */}
         <div style={{ display: 'flex', gap: '0.6rem', marginRight: '1rem' }}>
           {location.pathname === '/comercial' && [

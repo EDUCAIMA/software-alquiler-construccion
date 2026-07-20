@@ -70,6 +70,18 @@ const TIPO_CONFIG = {
     'Otros Gastos': { color: '#64748b', label: 'Otros Gastos' }
 };
 
+const safeFormatDate = (dateStr, targetFormat = 'dd/MM/yyyy') => {
+    if (!dateStr) return '—';
+    const cleanStr = String(dateStr).split('T')[0];
+    const parts = cleanStr.split('-');
+    if (parts.length === 3) {
+        const [yyyy, mm, dd] = parts;
+        if (targetFormat === 'yyyy-MM-dd') return `${yyyy}-${mm}-${dd}`;
+        if (targetFormat === 'dd/MM/yyyy') return `${dd}/${mm}/${yyyy}`;
+    }
+    return dateStr;
+};
+
 export default function GastosMantenimiento() {
     const { 
         gastosMantenimiento, 
@@ -114,7 +126,7 @@ export default function GastosMantenimiento() {
         );
         
         // Date range match
-        const dateVal = g.fecha_gasto ? format(new Date(g.fecha_gasto), 'yyyy-MM-dd') : '';
+        const dateVal = g.fecha_gasto ? safeFormatDate(g.fecha_gasto, 'yyyy-MM-dd') : '';
         const matchesStartDate = !filtroFechaInicio || dateVal >= filtroFechaInicio;
         const matchesEndDate = !filtroFechaFin || dateVal <= filtroFechaFin;
         
@@ -173,7 +185,7 @@ export default function GastosMantenimiento() {
             subtipo_gasto: gasto.subtipo_gasto || (CATEGORIES_MAP[gasto.tipo_gasto || 'Mantenimiento']?.[0] || ''),
             descripcion: gasto.descripcion || '',
             costo: gasto.costo,
-            fecha_gasto: format(new Date(gasto.fecha_gasto), 'yyyy-MM-dd'),
+            fecha_gasto: safeFormatDate(gasto.fecha_gasto, 'yyyy-MM-dd'),
             proveedor_beneficiario: gasto.proveedor_beneficiario || '',
             referencia_soporte: gasto.referencia_soporte || ''
         });
@@ -216,7 +228,7 @@ export default function GastosMantenimiento() {
             g.referencia_soporte || '',
             (g.descripcion || '').replace(/"/g, '""'),
             g.costo || 0,
-            format(new Date(g.fecha_gasto), 'dd/MM/yyyy')
+            safeFormatDate(g.fecha_gasto, 'dd/MM/yyyy')
         ]);
         
         let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
@@ -260,7 +272,7 @@ export default function GastosMantenimiento() {
             g.referencia_soporte || '—',
             g.descripcion || '—',
             `$${Math.round(g.costo || 0).toLocaleString()}`,
-            format(new Date(g.fecha_gasto), 'dd/MM/yyyy')
+            safeFormatDate(g.fecha_gasto, 'dd/MM/yyyy')
         ]);
 
         const totalCosto = filteredGastos.reduce((s, g) => s + (Number(g.costo) || 0), 0);
@@ -442,7 +454,7 @@ export default function GastosMantenimiento() {
                                                 ${Math.round(g.costo || 0).toLocaleString()}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#104166', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
-                                                {format(new Date(g.fecha_gasto), 'dd/MM/yyyy')}
+                                                {safeFormatDate(g.fecha_gasto, 'dd/MM/yyyy')}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
                                                 <div style={{ display: 'flex', gap: '0.5rem' }}>

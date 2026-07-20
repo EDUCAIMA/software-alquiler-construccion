@@ -51,7 +51,11 @@ function generateCotizacionPDF(cot, client, obra, settings) {
         // y ya incluye el margen de 10px después del grid
 
         // --- TABLA DE ITEMS ESTILO PROFESIONAL ---
-        const subtotal = cot.items.reduce((s, i) => s + (Number(i.cantidad) * Number(i.dias) * Number(i.tarifaDia)), 0);
+        const getItemSubtotal = (i) => {
+            const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+            return Number(i.cantidad) * (isServ ? 1 : Number(i.dias)) * Number(i.tarifaDia);
+        };
+        const subtotal = cot.items.reduce((s, i) => s + getItemSubtotal(i), 0);
         const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
         const porcRet = client?.porcRetencion || 0;
         const iva = Math.round(subtotal * porcIVA / 100);
@@ -62,14 +66,17 @@ function generateCotizacionPDF(cot, client, obra, settings) {
             startY: y,
             margin: { left: margin, right: margin },
             head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
-            body: cot.items.map((i, idx) => [
-                idx + 1,
-                i.nombre.toUpperCase(),
-                i.cantidad,
-                i.dias,
-                fmtN(i.tarifaDia),
-                fmtN(Number(i.cantidad) * Number(i.dias) * Number(i.tarifaDia))
-            ]),
+            body: cot.items.map((i, idx) => {
+                const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+                return [
+                    idx + 1,
+                    i.nombre.toUpperCase(),
+                    i.cantidad,
+                    isServ ? '1 (Única)' : i.dias,
+                    fmtN(i.tarifaDia),
+                    fmtN(getItemSubtotal(i))
+                ];
+            }),
             theme: 'plain',
             headStyles: { 
                 fillColor: [241, 245, 249], 
@@ -234,14 +241,18 @@ function generateContratoPDF(cot, client, obra, settings) {
             startY: y,
             margin: { left: margin, right: margin },
             head: [['ITE', 'EQUIPO / HERRAMIENTA', 'CAN.', 'DÍAS', 'TARIFA/DÍA', 'SUBTOTAL']],
-            body: cot.items.map((i, idx) => [
-                idx + 1,
-                i.nombre.toUpperCase(),
-                i.cantidad,
-                i.dias,
-                i.tarifaDia.toLocaleString('es-CO'),
-                (i.cantidad * i.dias * i.tarifaDia).toLocaleString('es-CO')
-            ]),
+            body: cot.items.map((i, idx) => {
+                const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+                const rowTot = i.cantidad * (isServ ? 1 : i.dias) * i.tarifaDia;
+                return [
+                    idx + 1,
+                    i.nombre.toUpperCase(),
+                    i.cantidad,
+                    isServ ? '1 (Única)' : i.dias,
+                    i.tarifaDia.toLocaleString('es-CO'),
+                    rowTot.toLocaleString('es-CO')
+                ];
+            }),
             theme: 'plain',
             headStyles: { 
                 fillColor: [241, 245, 249], 
@@ -268,7 +279,10 @@ function generateContratoPDF(cot, client, obra, settings) {
                 4: { halign: 'right', cellWidth: 25 },
                 5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
             },
-            foot: [['', '', '', '', 'TOTAL ANTES DE IMP.', (cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (Number(cot.transporte) || 0)).toLocaleString('es-CO')]],
+            foot: [['', '', '', '', 'TOTAL ANTES DE IMP.', (cot.items.reduce((s, i) => {
+                const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+                return s + (i.cantidad * (isServ ? 1 : i.dias) * i.tarifaDia);
+            }, 0) + (Number(cot.transporte) || 0)).toLocaleString('es-CO')]],
             footStyles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [30, 41, 59], halign: 'right', lineWidth: 0.1, lineColor: [30, 41, 59] },
         });
 

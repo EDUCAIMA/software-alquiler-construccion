@@ -137,7 +137,13 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
         }
     };
 
-    const total = (c) => (c.items || []).reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (c.transporte || 0);
+    const total = (c) => (c.items || []).reduce((s, i) => {
+        const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (i.tipoCobro || '').toLowerCase().includes('única') ||
+                       (i.category || '').toLowerCase().includes('servicio') ||
+                       (i.esquemaCobro || '').toLowerCase().includes('única');
+        return s + (Number(i.cantidad || 0) * (isServ ? 1 : Number(i.dias || 1)) * Number(i.tarifaDia || 0));
+    }, 0) + Number(c.transporte || 0);
     const kpi = (est) => cotizaciones.filter(c => c.estado === est).length;
 
     const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });

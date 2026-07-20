@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -266,6 +267,38 @@ async function initDB() {
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS header_extra TEXT`);
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS logo_ui TEXT`);
 
+        // --- Crear Tabla de Usuarios ---
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id VARCHAR(50) PRIMARY KEY,
+                username VARCHAR(100) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                name VARCHAR(255) NOT NULL,
+                role VARCHAR(50) NOT NULL DEFAULT 'operativo',
+                avatar VARCHAR(10)
+            )
+        `);
+
+        // --- Migraciones de Remisiones para Fase 2 ---
+        await client.query(`ALTER TABLE remisiones ADD COLUMN IF NOT EXISTS assigned_operario_id VARCHAR(50)`);
+        await client.query(`ALTER TABLE remisiones ADD COLUMN IF NOT EXISTS fotos_salida_bodega JSONB DEFAULT '[]'`);
+        await client.query(`ALTER TABLE remisiones ADD COLUMN IF NOT EXISTS fotos_entrega_cliente JSONB DEFAULT '[]'`);
+        await client.query(`ALTER TABLE remisiones ADD COLUMN IF NOT EXISTS fotos_retorno JSONB DEFAULT '[]'`);
+        await client.query(`ALTER TABLE remisiones ADD COLUMN IF NOT EXISTS fecha_retorno_efectiva TIMESTAMPTZ`);
+
+        // --- Seed Inicial de Usuarios ---
+        const { rows: uRows } = await client.query('SELECT COUNT(*) FROM users');
+        if (parseInt(uRows[0].count) === 0) {
+            const hashPassword = pwd => crypto.createHash('sha256').update(pwd).digest('hex');
+            await client.query(`
+                INSERT INTO users(id, username, password, name, role, avatar) VALUES
+                ('U-001', 'admin', $1, 'Administrador', 'admin', 'A'),
+                ('U-002', 'gerente', $2, 'Gerente General', 'gerente', 'G'),
+                ('U-003', 'op', $3, 'Operativo', 'operativo', 'O')
+            `, [hashPassword('admin123'), hashPassword('gerente123'), hashPassword('op123')]);
+            console.log('✅ Usuarios de muestra insertados en la base de datos.');
+        }
+
         // Seed inicial de settings si está vacío
         const { rows: sRows } = await client.query('SELECT COUNT(*) FROM settings');
         if (parseInt(sRows[0].count) === 0) {
@@ -366,10 +399,15 @@ const mapCot = r => ({
 
 const mapRem = r => ({
     id: r.id, clientId: r.client_id, obraId: r.obra_id,
-    fecha: r.fecha ? r.fecha.toISOString().split('T')[0] : '',
+    fecha: r.fecha ? (typeof r.fecha === 'string' ? r.fecha : (r.fecha instanceof Date ? r.fecha.toISOString().split('T')[0] : r.fecha)) : '',
     transporte: Number(r.transporte), estado: r.estado,
     notas: r.notas, items: r.items || [],
-    cotizacionId: r.cotizacion_id, facturaId: r.factura_id
+    cotizacionId: r.cotizacion_id, facturaId: r.factura_id,
+    assignedOperarioId: r.assigned_operario_id,
+    fotosSalidaBodega: r.fotos_salida_bodega || [],
+    fotosEntregaCliente: r.fotos_entrega_cliente || [],
+    fotosRetorno: r.fotos_retorno || [],
+    fechaRetornoEfectiva: r.fecha_retorno_efectiva
 });
 
 const mapMaint = r => ({
@@ -640,10 +678,10 @@ app.post('/api/remisiones', async (req, res) => {
 
 app.put('/api/remisiones/:id', async (req, res) => {
     try {
-        const { clientId, obraId, fecha, transporte, estado, notas, items, cotizacionId, facturaId } = req.body;
+        const { clientId, obraId, fecha, transporte, estado, notas, items, cotizacionId, facturaId, assignedOperarioId } = req.body;
         await pool.query(
-            `UPDATE remisiones SET client_id = $1, obra_id = $2, fecha = $3, transporte = $4, estado = $5, notas = $6, items = $7, cotizacion_id = $8, factura_id = $9 WHERE id = $10`,
-            [clientId, obraId, fecha || null, transporte, estado, notas, JSON.stringify(items || []), cotizacionId || null, facturaId || null, req.params.id]
+            `UPDATE remisiones SET client_id = $1, obra_id = $2, fecha = $3, transporte = $4, estado = $5, notas = $6, items = $7, cotizacion_id = $8, factura_id = $9, assigned_operario_id = $10 WHERE id = $11`,
+            [clientId, obraId, fecha || null, transporte, estado, notas, JSON.stringify(items || []), cotizacionId || null, facturaId || null, assignedOperarioId || null, req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -886,6 +924,229 @@ app.post('/api/logs', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+
+// ─── AUTH ENDPOINTS ─────────────────────────────────────────────────────────
+app.post('/api/auth/login', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
+    }
+    try {
+        const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [username.trim()]);
+        if (rows.length === 0) {
+            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+        }
+        
+        const user = rows[0];
+        const hash = crypto.createHash('sha256').update(password).digest('hex');
+        if (user.password !== hash) {
+            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+        }
+        
+        // Retornar información segura (sin la contraseña)
+        const { password: _, ...safeUser } = user;
+        res.json(safeUser);
+    } catch (e) {
+        console.error('ERROR EN LOGIN:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── USER MANAGEMENT ENDPOINTS ────────────────────────────────────────────────
+app.get('/api/users', async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT id, username, name, role, avatar FROM users ORDER BY name ASC');
+        res.json(rows);
+    } catch (e) {
+        console.error('ERROR EN GET USERS:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/users', async (req, res) => {
+    const { username, password, name, role, avatar } = req.body;
+    if (!username || !password || !name || !role) {
+        return res.status(400).json({ error: 'Todos los campos son requeridos' });
+    }
+    try {
+        // Generar un ID único (U-XXX) basado en el último número
+        const { rows: lastUserRows } = await pool.query("SELECT id FROM users WHERE id LIKE 'U-%' ORDER BY id DESC LIMIT 1");
+        let nextNum = 1;
+        if (lastUserRows.length > 0) {
+            const lastId = lastUserRows[0].id;
+            const match = lastId.match(/U-(\d+)/);
+            if (match) {
+                nextNum = parseInt(match[1]) + 1;
+            }
+        }
+        const newId = `U-${String(nextNum).padStart(3, '0')}`;
+        
+        // Hash de contraseña
+        const hash = crypto.createHash('sha256').update(password).digest('hex');
+        
+        await pool.query(
+            `INSERT INTO users(id, username, password, name, role, avatar) VALUES($1, $2, $3, $4, $5, $6)`,
+            [newId, username.trim().toLowerCase(), hash, name.trim(), role, avatar || name.charAt(0).toUpperCase()]
+        );
+        res.status(201).json({ id: newId, username: username.trim().toLowerCase(), name, role, avatar });
+    } catch (e) {
+        console.error('ERROR EN CREAR USER:', e.message);
+        if (e.code === '23505' || e.message.includes('unique') || e.message.includes('duplicado')) {
+            res.status(400).json({ error: 'El nombre de usuario ya está registrado' });
+        } else {
+            res.status(500).json({ error: e.message });
+        }
+    }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+    const { id } = req.params;
+    if (id === 'U-001') {
+        return res.status(400).json({ error: 'No se puede eliminar el usuario administrador principal' });
+    }
+    try {
+        await pool.query('DELETE FROM users WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (e) {
+        console.error('ERROR EN ELIMINAR USER:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/auth/check-password', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
+    }
+    try {
+        const { rows } = await pool.query('SELECT password FROM users WHERE username = $1', [username.trim()]);
+        if (rows.length === 0) {
+            return res.json({ isValid: false });
+        }
+        const hash = crypto.createHash('sha256').update(password).digest('hex');
+        const isValid = rows[0].password === hash;
+        res.json({ isValid });
+    } catch (e) {
+        console.error('ERROR CHECK PASSWORD:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+
+// ─── REMISIONES FASE 2 ENDPOINTS ─────────────────────────────────────────────
+app.get('/api/remisiones/mis-asignaciones', async (req, res) => {
+    const { operarioId } = req.query;
+    if (!operarioId) {
+        return res.status(400).json({ error: 'Se requiere el parámetro operarioId' });
+    }
+    try {
+        const { rows } = await pool.query(
+            'SELECT * FROM remisiones WHERE assigned_operario_id = $1 ORDER BY id DESC', 
+            [operarioId]
+        );
+        res.json(rows.map(mapRem));
+    } catch (e) {
+        console.error('ERROR EN MIS ASIGNACIONES:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put('/api/remisiones/:id/evidencia', async (req, res) => {
+    const { id } = req.params;
+    const { 
+        fotosSalidaBodega, 
+        fotosEntregaCliente, 
+        fotosRetorno, 
+        fechaRetornoEfectiva, 
+        estado, 
+        items,
+        notas 
+    } = req.body;
+    try {
+        // Obtenemos el registro actual
+        const { rows } = await pool.query('SELECT * FROM remisiones WHERE id = $1', [id]);
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Remisión no encontrada' });
+        }
+        
+        const rem = rows[0];
+        
+        // Mezclamos valores existentes con los nuevos recibidos
+        const finalFotosSalida = fotosSalidaBodega ? JSON.stringify(fotosSalidaBodega) : JSON.stringify(rem.fotos_salida_bodega || []);
+        const finalFotosEntrega = fotosEntregaCliente ? JSON.stringify(fotosEntregaCliente) : JSON.stringify(rem.fotos_entrega_cliente || []);
+        const finalFotosRetorno = fotosRetorno ? JSON.stringify(fotosRetorno) : JSON.stringify(rem.fotos_retorno || []);
+        const finalFechaRetorno = fechaRetornoEfectiva || rem.fecha_retorno_efectiva;
+        const finalEstado = estado || rem.estado;
+        const finalItems = items ? JSON.stringify(items) : JSON.stringify(rem.items || []);
+        const finalNotas = notas !== undefined ? notas : rem.notas;
+
+        await pool.query(
+            `UPDATE remisiones 
+             SET fotos_salida_bodega = $1, 
+                 fotos_entrega_cliente = $2, 
+                 fotos_retorno = $3, 
+                 fecha_retorno_efectiva = $4,
+                 estado = $5,
+                 items = $6,
+                 notas = $7
+             WHERE id = $8`,
+            [finalFotosSalida, finalFotosEntrega, finalFotosRetorno, finalFechaRetorno, finalEstado, finalItems, finalNotas, id]
+        );
+
+        // Si el estado cambia a Retornada/Devuelta/Finalizada, devolvemos stock disponible
+        if (estado === 'Retornada' || estado === 'Devuelta' || estado === 'Finalizada') {
+            const itemsList = items || rem.items || [];
+            for (const item of itemsList) {
+                const prodId = item.id || item.productId;
+                const qty = Number(item.qty || item.cantidad || item.quantity || 0);
+                if (prodId && qty > 0) {
+                    await pool.query(
+                        'UPDATE products SET available_stock = LEAST(total_stock, available_stock + $1) WHERE id = $2',
+                        [qty, prodId]
+                    );
+                }
+            }
+        }
+
+        res.json({ success: true });
+    } catch (e) {
+        console.error('ERROR ACTUALIZANDO EVIDENCIA:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── TAREA PROGRAMADA: LIMPIEZA DE EVIDENCIAS FOTOGRÁFICAS (> 1 AÑO) ────────
+setInterval(async () => {
+    console.log('🧹 Iniciando tarea programada: Limpieza de evidencias fotográficas > 1 año...');
+    try {
+        const query = `
+            SELECT id, fotos_salida_bodega, fotos_entrega_cliente, fotos_retorno 
+            FROM remisiones 
+            WHERE fecha_retorno_efectiva < NOW() - INTERVAL '1 year'
+        `;
+        const { rows } = await pool.query(query);
+        if (rows.length > 0) {
+            console.log(`🧹 Se encontraron ${rows.length} remisiones antiguas para limpiar.`);
+            for (const row of rows) {
+                // En un caso real aquí se eliminarían de Cloudinary/S3 usando las URLs
+                await pool.query(
+                    `UPDATE remisiones 
+                     SET fotos_salida_bodega = '[]', 
+                         fotos_entrega_cliente = '[]', 
+                         fotos_retorno = '[]' 
+                     WHERE id = $1`,
+                    [row.id]
+                );
+            }
+            console.log('✅ Limpieza de evidencias completada.');
+        } else {
+            console.log('✅ No se encontraron evidencias antiguas para limpiar.');
+        }
+    } catch (e) {
+        console.error('❌ Error en tarea programada de limpieza:', e.message);
+    }
+}, 24 * 60 * 60 * 1000); // Cada 24 horas
+
 
 // ─── Serve React en Producción ───────────────────────────────────────────────
 if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT) {

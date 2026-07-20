@@ -4,13 +4,14 @@ import {
     AlertTriangle, Clock, X, ChevronRight, Filter, FileText,
     MapPin, ArrowDownCircle, Info, CreditCard,
     ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Trash2, Ban,
-    Printer, Download, Activity, TrendingUp
+    Printer, Download, Activity, TrendingUp, Edit3
 } from 'lucide-react';
 import { generateRemisionPDF } from './CotizacionesHelpers';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
 import Swal from 'sweetalert2';
 import DevolucionModal from './DevolucionModal';
+import EditRemisionModal from './EditRemisionModal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ESTADO_CFG = {
@@ -545,6 +546,7 @@ export default function Remisiones() {
     const [trazabilidadTarget, setTrazabilidadTarget] = useState(null); 
     const [showVerifyModal, setShowVerifyModal] = useState(false);
     const [verifyTarget, setVerifyTarget] = useState(null);
+    const [editingRemisionTarget, setEditingRemisionTarget] = useState(null);
     const [blockMsg, setBlockMsg] = useState('');
 
     React.useEffect(() => {
@@ -920,6 +922,14 @@ export default function Remisiones() {
                                                     </button>
                                                 )}
                                                 <button
+                                                    onClick={() => setEditingRemisionTarget(rem)}
+                                                    className="btn btn-sm"
+                                                    style={{ background: 'rgba(35, 101, 171, 0.08)', color: '#2365AB', border: '1px solid rgba(35, 101, 171, 0.2)', padding: '0.4rem', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    title="Editar Remisión"
+                                                >
+                                                    <Edit3 size={13} />
+                                                </button>
+                                                <button
                                                     onClick={() => generateRemisionPDF(rem, client, obra, settings)}
                                                     className="btn btn-sm"
                                                     style={{ background: 'rgba(35, 101, 171, 0.08)', color: '#2365AB', border: '1px solid rgba(35, 101, 171, 0.2)', padding: '0.4rem', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -1093,6 +1103,16 @@ export default function Remisiones() {
                     onConfirm={handleConfirmFinalDispatch}
                     clients={clients}
                     products={products}
+                />
+            )}
+
+            {editingRemisionTarget && (
+                <EditRemisionModal
+                    remision={editingRemisionTarget}
+                    onClose={() => setEditingRemisionTarget(null)}
+                    onSave={editRemision}
+                    products={products}
+                    clients={clients}
                 />
             )}
         </>

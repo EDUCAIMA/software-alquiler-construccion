@@ -5,12 +5,7 @@ import Swal from 'sweetalert2';
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
 
-// ─── Usuarios (hardcoded, sin DB) ────────────────────────────────────────────
-const USERS = [
-  { id: 'U-001', username: 'admin', password: 'admin123', name: 'Administrador', role: 'admin', avatar: 'A' },
-  { id: 'U-002', username: 'gerente', password: 'gerente123', name: 'Gerente General', role: 'gerente', avatar: 'G' },
-  { id: 'U-003', username: 'op', password: 'op123', name: 'Operativo', role: 'operativo', avatar: 'O' },
-];
+// ─── Usuarios (Cargados de DB) ────────────────────────────────────────────────
 
 // ─── Helper genérico de API ───────────────────────────────────────────────────
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
@@ -49,24 +44,32 @@ export const AppProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(() => {
     try { return JSON.parse(sessionStorage.getItem('cielo_user')); } catch { return null; }
   });
-  const login = (username, password) => {
-    const user = USERS.find(u => u.username === username && u.password === password);
-    if (user) {
-      const { password: _, ...safe } = user;
-      setCurrentUser(safe);
-      sessionStorage.setItem('cielo_user', JSON.stringify(safe));
+  const login = async (username, password) => {
+    try {
+      const data = await api.post('/api/auth/login', { username, password });
+      setCurrentUser(data);
+      sessionStorage.setItem('cielo_user', JSON.stringify(data));
       return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message || 'Usuario o contraseña incorrectos' };
     }
-    return { success: false, error: 'Usuario o contraseña incorrectos' };
   };
   const logout = () => { setCurrentUser(null); sessionStorage.removeItem('cielo_user'); };
   const isAdmin = currentUser?.role === 'admin';
   const isGerente = currentUser?.role === 'gerente';
   const canViewDashboard = isAdmin || isGerente;
 
-  const checkPassword = (password) => {
-    const user = USERS.find(u => u.username === currentUser?.username);
-    return user && user.password === password;
+  const checkPassword = async (password) => {
+    try {
+      const { isValid } = await api.post('/api/auth/check-password', {
+        username: currentUser?.username,
+        password
+      });
+      return isValid;
+    } catch (e) {
+      console.error('Error verifying password:', e);
+      return false;
+    }
   };
 
   // ── Estado general ────────────────────────────────────────────────────────
@@ -81,17 +84,29 @@ export const AppProvider = ({ children }) => {
   const [empleados, setEmpleados] = useState([]);
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [users, setUsers] = useState([]);
   const [globalPreload, setGlobalPreload] = useState(null);
   const [settings, setSettings] = useState({ 
     companyName: '', shortName: '', nameComplement: '', nit: '', phone: '', email: '', logo: '', address: '', headerExtra: '' 
   });
+
+  const addUser = async (userData) => {
+    const newUser = await api.post('/api/users', userData);
+    setUsers(prev => [...prev, newUser]);
+    return newUser;
+  };
+
+  const deleteUser = async (id) => {
+    await api.del(`/api/users/${id}`);
+    setUsers(prev => prev.filter(u => u.id !== id));
+  };
 
   // ── Carga inicial desde la API ───────────────────────────────────────────
   const reloadAll = useCallback(async () => {
     try {
       const fetchSafe = (url, fallback) => api.get(url).catch(e => { console.error(`Error fetching ${url}:`, e); return fallback; });
       
-      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs] = await Promise.all([
+      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs] = await Promise.all([
         fetchSafe('/api/products', []),
         fetchSafe('/api/clients', []),
         fetchSafe('/api/invoices', []),
@@ -104,6 +119,7 @@ export const AppProvider = ({ children }) => {
         fetchSafe('/api/settings', { companyName: 'CIELO', logo: '', headerExtra: '' }),
         fetchSafe('/api/gastos-mantenimiento', []),
         fetchSafe('/api/logs', []),
+        fetchSafe('/api/users', []),
       ]);
       
       console.log('API Data loaded:', { products: p.length, clients: c.length, settings: s });
@@ -119,6 +135,7 @@ export const AppProvider = ({ children }) => {
       setLiquidaciones(Array.isArray(liq) ? liq : []);
       setGastosMantenimiento(Array.isArray(gm) ? gm : []);
       setLogs(Array.isArray(lgs) ? lgs : []);
+      setUsers(Array.isArray(usrs) ? usrs : []);
       if (s && !s.error) setSettings(s);
     } catch (err) {
       console.error('Error crítico en reloadAll:', err);
@@ -915,6 +932,8 @@ export const AppProvider = ({ children }) => {
       liquidaciones, addLiquidacion, pagarLiquidacion,
       // Settings
       settings, updateSettings,
+      // Users & Roles
+      users, addUser, deleteUser,
       // Auth Utils
       checkPassword,
       globalPreload, setGlobalPreload

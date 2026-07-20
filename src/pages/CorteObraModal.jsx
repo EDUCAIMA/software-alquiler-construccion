@@ -227,6 +227,12 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                     const scheme = prod?.esquemaCobro || 'Calendario';
                     const tarifa = prod?.value || 0;
 
+                    const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') || 
+                                   (item.tipoCobro || '').toLowerCase().includes('única') ||
+                                   (prod?.category || '').toLowerCase().includes('servicio') ||
+                                   (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                   (prod?.esquemaCobro || '').toLowerCase().includes('única');
+
                     let accountedQty = 0;
 
                     if (item.devoluciones && Array.isArray(item.devoluciones)) {
@@ -242,7 +248,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                             const effectiveEnd = dDate < fEnd ? dDate : fEnd;
 
                             if (effectiveStart <= effectiveEnd) {
-                                const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
+                                const dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme);
                                 const sub = cantidad * dDays * tarifa;
                                 subtotalTotal += sub;
                                 lineas.push({
@@ -254,7 +260,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                     tarifaDia: tarifa,
                                     subtotal: sub,
                                     estado: rem.estado,
-                                    esquema: scheme,
+                                    esquema: isServ ? 'Cobro Único' : scheme,
                                 });
                             }
                             accountedQty += cantidad;
@@ -266,7 +272,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         const effectiveStart = equipStart > fStart ? equipStart : fStart;
                         const effectiveEnd = equipStart < fEnd ? equipStart : fEnd; 
                         if (effectiveStart <= effectiveEnd) {
-                            const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
+                            const dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme);
                             const sub = orphanReturns * dDays * tarifa;
                             subtotalTotal += sub;
                             lineas.push({
@@ -278,7 +284,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                 tarifaDia: tarifa,
                                 subtotal: sub,
                                 estado: rem.estado,
-                                esquema: scheme,
+                                esquema: isServ ? 'Cobro Único' : scheme,
                             });
                         }
                         accountedQty += orphanReturns;
@@ -290,7 +296,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         const effectiveEnd = fEnd; 
 
                         if (effectiveStart <= effectiveEnd) {
-                            const dDays = calculateBillableDays(effectiveStart, effectiveEnd, scheme);
+                            const dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme);
                             const sub = remainingQty * dDays * tarifa;
                             subtotalTotal += sub;
                             lineas.push({
@@ -302,7 +308,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                 tarifaDia: tarifa,
                                 subtotal: sub,
                                 estado: rem.estado,
-                                esquema: scheme,
+                                esquema: isServ ? 'Cobro Único' : scheme,
                             });
                         }
                     }

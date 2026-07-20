@@ -166,11 +166,8 @@ export default function Dashboard() {
       const totalExpense = gastosMantenimiento
         .filter(g => {
           if (!g.fecha_gasto) return false;
-          try {
-            return format(new Date(g.fecha_gasto), 'yyyy-MM-dd') === dayStr;
-          } catch (e) {
-            return false;
-          }
+          const cleanGastoDate = String(g.fecha_gasto).split('T')[0];
+          return cleanGastoDate === dayStr;
         })
         .reduce((s, g) => s + (Number(g.costo) || 0), 0);
       return {
