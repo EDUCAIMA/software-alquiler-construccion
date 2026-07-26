@@ -809,34 +809,6 @@ export default function Dashboard() {
 
       {/* ── Mini KPI Items ─────────────────────────────────────────────────── */}
       <div className="mini-stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-        {/* Total Clientes */}
-        <div className="mini-stat-dashboard blue" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1.35rem', padding: '1.5rem 1.75rem', textAlign: 'left', justifyContent: 'flex-start' }}>
-          <div style={{
-            width: 54,
-            height: 54,
-            borderRadius: '50%',
-            background: 'rgba(35, 101, 171, 0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#2365AB',
-            flexShrink: 0
-          }}>
-            <UserCheck size={26} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-              Clientes Totales
-            </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2, fontWeight: 500 }}>
-              Registrados en sistema
-            </div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, marginTop: 4 }}>
-              {clients.length}
-            </div>
-          </div>
-        </div>
-
         {/* En Calle / Total */}
         <div className="mini-stat-dashboard orange" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1.35rem', padding: '1.5rem 1.75rem', textAlign: 'left', justifyContent: 'flex-start', overflow: 'visible', position: 'relative', zIndex: 1000 }}>
           <MiniProgressCircle percent={rentedPct} color="#f97316" />
@@ -874,6 +846,34 @@ export default function Dashboard() {
                 <span>Otros:</span>
                 <span style={{ fontWeight: 700 }}>{otros.rented} / {otros.total}</span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Total Clientes */}
+        <div className="mini-stat-dashboard blue" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1.35rem', padding: '1.5rem 1.75rem', textAlign: 'left', justifyContent: 'flex-start' }}>
+          <div style={{
+            width: 54,
+            height: 54,
+            borderRadius: '50%',
+            background: 'rgba(35, 101, 171, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#2365AB',
+            flexShrink: 0
+          }}>
+            <UserCheck size={26} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+              Clientes Totales
+            </div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2, fontWeight: 500 }}>
+              Registrados en sistema
+            </div>
+            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, marginTop: 4 }}>
+              {clients.length}
             </div>
           </div>
         </div>
