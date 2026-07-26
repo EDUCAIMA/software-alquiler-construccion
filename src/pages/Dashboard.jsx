@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Users, Package, FileText, ArrowUpRight, ArrowDownRight,
   TrendingUp, Wrench, AlertTriangle, Clock, ShieldAlert, CheckCircle, Bell,
@@ -124,6 +125,9 @@ function MiniProgressCircle({ percent, color = '#2365AB' }) {
 export default function Dashboard() {
   const { clients, products, invoices, settings, remisiones = [], maintenances = [], gastosMantenimiento = [] } = useAppContext();
   const revenueChartRef = useRef(null);
+  const kpiTooltipCardRef = useRef(null);
+  const [kpiTooltipVisible, setKpiTooltipVisible] = useState(false);
+  const [kpiTooltipPos, setKpiTooltipPos] = useState({ top: 0, left: 0 });
   const [dataViewOpen, setDataViewOpen] = useState(false);
   const [startDateFilter, setStartDateFilter] = useState(() => format(subDays(new Date(), 6), 'yyyy-MM-dd'));
   const [endDateFilter, setEndDateFilter] = useState(() => format(new Date(), 'yyyy-MM-dd'));
@@ -810,7 +814,17 @@ export default function Dashboard() {
       {/* ── Mini KPI Items ─────────────────────────────────────────────────── */}
       <div className="mini-stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
         {/* En Calle / Total */}
-        <div className="mini-stat-dashboard orange" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1.35rem', padding: '1.5rem 1.75rem', textAlign: 'left', justifyContent: 'flex-start', overflow: 'visible', position: 'relative', zIndex: 1000 }}>
+        <div
+          ref={kpiTooltipCardRef}
+          className="mini-stat-dashboard orange"
+          style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1.35rem', padding: '1.5rem 1.75rem', textAlign: 'left', justifyContent: 'flex-start', overflow: 'visible', position: 'relative' }}
+          onMouseEnter={() => {
+            const rect = kpiTooltipCardRef.current?.getBoundingClientRect();
+            if (rect) setKpiTooltipPos({ top: rect.bottom + 8, left: rect.left + rect.width / 2 });
+            setKpiTooltipVisible(true);
+          }}
+          onMouseLeave={() => setKpiTooltipVisible(false)}
+        >
           <MiniProgressCircle percent={rentedPct} color="#f97316" />
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
@@ -823,9 +837,23 @@ export default function Dashboard() {
               {rentedUnits} <span style={{ fontSize: '1rem', opacity: 0.7 }}>/ {totalUnits}</span>
             </div>
           </div>
+        </div>
 
-          {/* Tooltip Popup on Hover */}
-          <div className="category-kpi-tooltip" style={{ textTransform: 'none', zIndex: 1000000 }}>
+        {/* Tooltip Popup on Hover — portaled to <body> so it always paints above every other card, regardless of stacking context */}
+        {createPortal(
+          <div
+            className="category-kpi-tooltip"
+            style={{
+              textTransform: 'none',
+              position: 'fixed',
+              top: kpiTooltipPos.top,
+              left: kpiTooltipPos.left,
+              transform: kpiTooltipVisible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(8px)',
+              opacity: kpiTooltipVisible ? 1 : 0,
+              visibility: kpiTooltipVisible ? 'visible' : 'hidden',
+              zIndex: 1000000
+            }}
+          >
             <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', textTransform: 'uppercase', color: '#f97316', fontWeight: 800 }}>
               Desglose por Categoría
             </h4>
@@ -847,8 +875,9 @@ export default function Dashboard() {
                 <span style={{ fontWeight: 700 }}>{otros.rented} / {otros.total}</span>
               </div>
             </div>
-          </div>
-        </div>
+          </div>,
+          document.body
+        )}
 
         {/* Total Clientes */}
         <div className="mini-stat-dashboard blue" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1.35rem', padding: '1.5rem 1.75rem', textAlign: 'left', justifyContent: 'flex-start' }}>
