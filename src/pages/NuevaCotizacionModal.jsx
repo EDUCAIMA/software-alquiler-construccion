@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { fmtCOP } from './CotizacionesHelpers';
 import { useAppContext } from '../context/AppContext';
+import Swal from 'sweetalert2';
 
 export default function NuevaCotizacionModal({ onClose, onSave, clients, products, initialData }) {
     const [step, setStep] = useState(1);
@@ -56,9 +57,28 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
         const existingIdx = items.findIndex(i => i.productId === prod.id);
         if (existingIdx >= 0) {
             const newItems = [...items];
-            newItems[existingIdx].cantidad += 1;
+            const nextQty = newItems[existingIdx].cantidad + 1;
+            if (!isServ && nextQty > prod.availableStock) {
+                Swal.fire({
+                    title: 'Stock Insuficiente',
+                    text: `No hay más stock disponible de este equipo en bodega (Máximo: ${prod.availableStock}).`,
+                    icon: 'warning',
+                    confirmButtonColor: '#2365AB'
+                });
+                return;
+            }
+            newItems[existingIdx].cantidad = nextQty;
             setItems(newItems);
         } else {
+            if (!isServ && prod.availableStock < 1) {
+                Swal.fire({
+                    title: 'Equipo Agotado',
+                    text: 'No hay stock disponible de este equipo en bodega.',
+                    icon: 'error',
+                    confirmButtonColor: '#ef4444'
+                });
+                return;
+            }
             setItems([...items, {
                 productId: prod.id,
                 nombre: prod.name,
@@ -73,14 +93,49 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
 
     const updateItemQty = (idx, delta) => {
         const newItems = [...items];
+        const prod = (products || []).find(p => p && p.id === newItems[idx].productId);
+        const isServ = (newItems[idx].tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (newItems[idx].category || '').toLowerCase().includes('servicio') ||
+                       (prod?.category || '').toLowerCase().includes('servicio') ||
+                       (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (prod?.esquemaCobro || '').toLowerCase().includes('única');
         const curr = Number(newItems[idx].cantidad) || 0;
-        newItems[idx].cantidad = Math.max(1, curr + delta);
+        const nextQty = curr + delta;
+        if (!isServ && prod && nextQty > prod.availableStock) {
+            Swal.fire({
+                title: 'Stock Insuficiente',
+                text: `No hay más stock disponible de este equipo en bodega (Máximo: ${prod.availableStock}).`,
+                icon: 'warning',
+                confirmButtonColor: '#2365AB'
+            });
+            return;
+        }
+        newItems[idx].cantidad = Math.max(1, nextQty);
         setItems(newItems);
     };
 
     const setItemQtyDirect = (idx, val) => {
         const newItems = [...items];
-        newItems[idx].cantidad = val === '' ? '' : Math.max(1, parseInt(val, 10) || 1);
+        const prod = (products || []).find(p => p && p.id === newItems[idx].productId);
+        const isServ = (newItems[idx].tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (newItems[idx].category || '').toLowerCase().includes('servicio') ||
+                       (prod?.category || '').toLowerCase().includes('servicio') ||
+                       (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (prod?.esquemaCobro || '').toLowerCase().includes('única');
+        
+        let newQty = val === '' ? '' : Math.max(1, parseInt(val, 10) || 1);
+        if (!isServ && prod && typeof newQty === 'number') {
+            if (newQty > prod.availableStock) {
+                newQty = prod.availableStock;
+                Swal.fire({
+                    title: 'Stock Excedido',
+                    text: `La cantidad máxima disponible en bodega para este equipo es de ${prod.availableStock} unidades.`,
+                    icon: 'warning',
+                    confirmButtonColor: '#2365AB'
+                });
+            }
+        }
+        newItems[idx].cantidad = newQty;
         setItems(newItems);
     };
 

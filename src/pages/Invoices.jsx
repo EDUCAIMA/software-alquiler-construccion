@@ -116,19 +116,23 @@ export default function Invoices({ hideHeader = false } = {}) {
     const handleAddToCart = () => {
         if (selectedProduct && selectedQuantity > 0 && selectedDays > 0) {
             const product = products.find(p => p.id === selectedProduct);
-            if (product && product.availableStock >= selectedQuantity) {
-                setCart([...cart, {
-                    productId: product.id,
-                    name: product.name,
-                    quantity: selectedQuantity,
-                    days: selectedDays,
-                    price: product.value
-                }]);
-                setSelectedProduct('');
-                setSelectedQuantity(1);
-                setSelectedDays(1);
-            } else {
-                alert(`Stock insuficiente. Solo hay ${product?.availableStock || 0} unidades disponibles.`);
+            if (product) {
+                const existingQty = cart.filter(c => c.productId === product.id).reduce((s, c) => s + c.quantity, 0);
+                const totalWanted = existingQty + selectedQuantity;
+                if (product.availableStock >= totalWanted) {
+                    setCart([...cart, {
+                        productId: product.id,
+                        name: product.name,
+                        quantity: selectedQuantity,
+                        days: selectedDays,
+                        price: product.value
+                    }]);
+                    setSelectedProduct('');
+                    setSelectedQuantity(1);
+                    setSelectedDays(1);
+                } else {
+                    alert(`Stock insuficiente. Solo hay ${product.availableStock} unidades disponibles en bodega (Ya tienes ${existingQty} en la orden).`);
+                }
             }
         }
     };

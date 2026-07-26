@@ -26,7 +26,31 @@ export default function EditRemisionModal({ remision, onClose, onSave, products 
 
     const handleItemChange = (idx, field, value) => {
         const copy = [...items];
-        copy[idx] = { ...copy[idx], [field]: value };
+        let valToSet = value;
+        if (field === 'cantidad') {
+            const it = copy[idx];
+            const prod = products.find(p => p.id === it.productId);
+            const isServ = (it.tipoCobro || '').toLowerCase().includes('servicio') || 
+                           (it.tipoCobro || '').toLowerCase().includes('única') ||
+                           (it.category || '').toLowerCase().includes('servicio') ||
+                           (prod?.category || '').toLowerCase().includes('servicio');
+            
+            if (!isServ && prod) {
+                const currentInRem = (remision?.items || []).find(x => x.productId === it.productId)?.cantidad || 0;
+                const maxAvailable = prod.availableStock + currentInRem;
+                const intVal = parseInt(value, 10) || 1;
+                if (intVal > maxAvailable) {
+                    valToSet = maxAvailable;
+                    Swal.fire({
+                        title: 'Stock Insuficiente',
+                        text: `No hay suficiente stock en bodega. El stock disponible máximo para este cambio es ${maxAvailable} (Bodega: ${prod.availableStock} + Remisión actual: ${currentInRem}).`,
+                        icon: 'warning',
+                        confirmButtonColor: '#2365AB'
+                    });
+                }
+            }
+        }
+        copy[idx] = { ...copy[idx], [field]: valToSet };
         setItems(copy);
     };
 
@@ -34,6 +58,20 @@ export default function EditRemisionModal({ remision, onClose, onSave, products 
         if (!selectedAddProduct) return;
         const prod = products.find(p => p.id === selectedAddProduct);
         if (!prod) return;
+
+        const isServ = (prod.category || '').toLowerCase().includes('servicio') ||
+                       (prod.tipoCobro || '').toLowerCase().includes('servicio') ||
+                       (prod.esquemaCobro || '').toLowerCase().includes('única');
+
+        if (!isServ && prod.availableStock < 1) {
+            Swal.fire({
+                title: 'Stock Insuficiente',
+                text: `El equipo "${prod.name}" no tiene stock disponible en bodega.`,
+                icon: 'error',
+                confirmButtonColor: '#ef4444'
+            });
+            return;
+        }
 
         setItems(prev => [
             ...prev,

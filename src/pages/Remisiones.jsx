@@ -70,14 +70,19 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
             return;
         }
         if (selCant > prod.availableStock) {
-            setBlockError(`Stock insuficiente. Disponible: ${prod.availableStock}`);
+            setBlockError(`Stock insuficiente. Disponible en bodega: ${prod.availableStock}`);
             return;
         }
         setBlockError('');
         const existing = items.findIndex(i => i.productId === selProd);
         if (existing >= 0) {
             const updated = [...items];
-            updated[existing].cantidad += selCant;
+            const totalWanted = updated[existing].cantidad + selCant;
+            if (totalWanted > prod.availableStock) {
+                setBlockError(`Stock insuficiente. Ya tienes ${updated[existing].cantidad} agregados y el disponible en bodega total es ${prod.availableStock}.`);
+                return;
+            }
+            updated[existing].cantidad = totalWanted;
             setItems(updated);
         } else {
             setItems(prev => [...prev, { productId: selProd, nombre: prod.name, cantidad: selCant, tarifaDia: prod.value }]);
