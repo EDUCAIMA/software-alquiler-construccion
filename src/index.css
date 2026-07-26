@@ -850,6 +850,7 @@ h3 {
 .mini-stat-dashboard:hover {
   transform: translateY(-3px);
   box-shadow: 12px 14px 28px rgba(0, 0, 0, 0.09), 3px 3px 10px rgba(0, 0, 0, 0.05);
+  z-index: 999;
 }
 
 .mini-stat-dashboard::before {
