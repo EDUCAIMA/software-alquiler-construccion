@@ -273,6 +273,8 @@ body {
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
   margin-bottom: 2rem;
+  position: relative;
+  z-index: 1 !important;
 }
 
 .grid-2-span {
@@ -811,7 +813,7 @@ h3 {
   gap: 1rem;
   margin-bottom: 2rem;
   position: relative;
-  z-index: 9999 !important;
+  z-index: 99999 !important;
 }
 
 @media (max-width: 1200px) {
@@ -1155,9 +1157,9 @@ h3 {
 
 .category-kpi-tooltip {
   position: absolute;
-  bottom: calc(100% + 12px);
+  top: 100%;
   left: 50%;
-  transform: translateX(-50%) translateY(-8px);
+  transform: translateX(-50%) translateY(8px);
   background: var(--surface-card);
   border: 1px solid var(--surface-border);
   box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.15);
@@ -1172,25 +1174,25 @@ h3 {
   text-align: left;
 }
 
-/* Arrow indicator for tooltip (pointing DOWN to card) */
+/* Arrow indicator for tooltip (pointing UP to card) */
 .category-kpi-tooltip::before {
   content: '';
   position: absolute;
-  top: 100%;
+  bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
   border-width: 7px;
   border-style: solid;
-  border-color: var(--surface-border) transparent transparent transparent;
+  border-color: transparent transparent var(--surface-border) transparent;
 }
 
 .category-kpi-tooltip::after {
   content: '';
   position: absolute;
-  top: calc(100% - 1px);
+  bottom: calc(100% - 1px);
   left: 50%;
   transform: translateX(-50%);
   border-width: 6px;
   border-style: solid;
-  border-color: var(--surface-card) transparent transparent transparent;
+  border-color: transparent transparent var(--surface-card) transparent;
 }
