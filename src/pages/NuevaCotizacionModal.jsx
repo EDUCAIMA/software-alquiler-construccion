@@ -17,17 +17,21 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
     const [notas, setNotas] = useState(initialData?.notas || '');
     const [items, setItems] = useState(initialData?.items ? [...initialData.items] : []);
     const [searchTerm, setSearchTerm] = useState('');
+    const [filterPropiedad, setFilterPropiedad] = useState('Todos'); // 'Todos' | 'Propio' | 'Terceros'
     const [defaultDays, setDefaultDays] = useState(1);
 
     const selectedClient = clients.find(c => c.id === clientId);
     const obras = selectedClient?.obras || [];
 
     const filteredProducts = useMemo(() => {
-        return (products || []).filter(p => 
-            p.estado !== 'Dado de baja' && 
-            (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.id.toLowerCase().includes(searchTerm.toLowerCase()))
-        );
-    }, [products, searchTerm]);
+        return (products || []).filter(p => {
+            const isBaja = p.estado === 'Dado de baja';
+            const matchesQuery = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.id.toLowerCase().includes(searchTerm.toLowerCase());
+            const isTerceros = p.tipoPropiedad === 'Terceros';
+            const matchesPropiedad = filterPropiedad === 'Todos' ? true : (filterPropiedad === 'Propio' ? !isTerceros : isTerceros);
+            return !isBaja && matchesQuery && matchesPropiedad;
+        });
+    }, [products, searchTerm, filterPropiedad]);
 
     const subtotal = items.reduce((s, i) => {
         const prod = (products || []).find(p => p && p.id === i.productId);
@@ -163,21 +167,75 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
 
                         {/* Product Grid Area */}
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                            <div style={{ padding: '1rem 2.5rem', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: '1rem', borderBottom: '1px solid #e2e8f0' }}>
-                                <div style={{ position: 'relative', flex: 1 }}>
+                            <div style={{ padding: '1rem 2.5rem', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: '1rem', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+                                <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
                                     <Search size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                                     <input 
                                         value={searchTerm} 
                                         onChange={e => setSearchTerm(e.target.value)}
-                                        placeholder="Buscar equipos o herramientas por nombre o código..." 
+                                        placeholder="Buscar por nombre o código..." 
                                         style={{ ...IS, paddingLeft: '2.8rem', background: 'white' }} 
                                     />
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.3rem', background: '#e2e8f0', padding: '3px', borderRadius: 10 }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterPropiedad('Todos')}
+                                        style={{
+                                            padding: '0.35rem 0.65rem',
+                                            borderRadius: 8,
+                                            border: 'none',
+                                            background: filterPropiedad === 'Todos' ? 'white' : 'transparent',
+                                            color: filterPropiedad === 'Todos' ? '#1e293b' : '#64748b',
+                                            fontWeight: 700,
+                                            fontSize: '0.75rem',
+                                            cursor: 'pointer',
+                                            boxShadow: filterPropiedad === 'Todos' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                                        }}
+                                    >
+                                        Todos
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterPropiedad('Propio')}
+                                        style={{
+                                            padding: '0.35rem 0.65rem',
+                                            borderRadius: 8,
+                                            border: 'none',
+                                            background: filterPropiedad === 'Propio' ? '#2365AB' : 'transparent',
+                                            color: filterPropiedad === 'Propio' ? 'white' : '#64748b',
+                                            fontWeight: 700,
+                                            fontSize: '0.75rem',
+                                            cursor: 'pointer',
+                                            boxShadow: filterPropiedad === 'Propio' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                                        }}
+                                    >
+                                        Propio
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterPropiedad('Terceros')}
+                                        style={{
+                                            padding: '0.35rem 0.65rem',
+                                            borderRadius: 8,
+                                            border: 'none',
+                                            background: filterPropiedad === 'Terceros' ? '#d97706' : 'transparent',
+                                            color: filterPropiedad === 'Terceros' ? 'white' : '#64748b',
+                                            fontWeight: 700,
+                                            fontSize: '0.75rem',
+                                            cursor: 'pointer',
+                                            boxShadow: filterPropiedad === 'Terceros' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                                        }}
+                                    >
+                                        Terceros
+                                    </button>
                                 </div>
                             </div>
 
                             <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem 2.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem', alignContent: 'start' }}>
                                 {filteredProducts.map(p => {
                                     const inList = items.find(i => i.productId === p.id);
+                                    const isTerceros = p.tipoPropiedad === 'Terceros';
                                     return (
                                         <div 
                                             key={p.id} 
@@ -200,13 +258,22 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                             <div style={{ 
                                                 width: '100%', height: '85px', background: '#f8fafc', borderRadius: 8, 
                                                 overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                border: '1px solid #f1f5f9'
+                                                border: '1px solid #f1f5f9', position: 'relative'
                                             }}>
                                                 {p.image ? (
                                                     <img src={p.image} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                                                 ) : (
                                                     <Package size={28} color="#cbd5e1" strokeWidth={1.5} />
                                                 )}
+                                                <span style={{
+                                                    position: 'absolute', top: 4, right: 4, fontSize: '0.6rem', fontWeight: 800,
+                                                    padding: '2px 5px', borderRadius: 4,
+                                                    background: isTerceros ? '#fef3c7' : '#e0f2fe',
+                                                    color: isTerceros ? '#b45309' : '#0369a1',
+                                                    border: isTerceros ? '1px solid #fde68a' : '1px solid #bae6fd'
+                                                }}>
+                                                    {isTerceros ? 'Terceros' : 'Propio'}
+                                                </span>
                                             </div>
                                             <div>
                                                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', lineHeight: 1.1, marginBottom: '0.2rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
@@ -251,13 +318,22 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                                        (prod?.category || '').toLowerCase().includes('servicio') ||
                                                        (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
                                                        (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                                        const isTerceros = prod?.tipoPropiedad === 'Terceros';
                                         const lineTotal = item.cantidad * (isServ ? 1 : item.dias) * item.tarifaDia;
 
                                         return (
                                             <div key={idx} style={{ background: 'white', padding: '1rem', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', alignItems: 'center' }}>
-                                                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                        {item.nombre}
+                                                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                        <span>{item.nombre}</span>
+                                                        <span style={{
+                                                            fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px', borderRadius: 6,
+                                                            background: isTerceros ? '#fef3c7' : '#e0f2fe',
+                                                            color: isTerceros ? '#b45309' : '#0369a1',
+                                                            border: isTerceros ? '1px solid #fde68a' : '1px solid #bae6fd'
+                                                        }}>
+                                                            {isTerceros ? `Terceros${prod?.proveedor ? ` (${prod.proveedor})` : ''}` : 'Propio'}
+                                                        </span>
                                                         {isServ && (
                                                             <span style={{ fontSize: '0.65rem', background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 6, fontWeight: 700 }}>
                                                                 Cobro Único

@@ -155,15 +155,48 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
     };
 
     const combinedList = useMemo(() => {
-        return cotizaciones.map(c => ({ ...c, type: 'cot' }));
-    }, [cotizaciones]);
+        const list = cotizaciones.map(c => ({ ...c, type: 'cot' }));
+        invoices.forEach(inv => {
+            // Solo incluimos facturas que NO vienen de una cotización (para no duplicar)
+            if (!inv.cotizacionId) {
+                list.push({
+                    ...inv,
+                    type: 'inv',
+                    fecha: inv.date,
+                    estado: inv.status === 'Paid' ? 'Facturada' : 'Aprobada',
+                    items: (inv.items || []).map(i => ({ ...i, cantidad: i.quantity, dias: i.days, tarifaDia: i.price })),
+                    isDirectInvoice: true
+                });
+            }
+        });
+        return list;
+    }, [cotizaciones, invoices]);
 
     const sortedCotizaciones = useMemo(() => {
         const filtered = combinedList.filter(c => {
             const cl = clients.find(x => x.id === c.clientId);
+            const o = cl?.obras?.find(x => x.id === c.obraId);
+            
+            // Obtener el estado tal como se muestra en pantalla para buscar por él
+            let displayEstado = c.estado;
+            if (c.isDirectInvoice) {
+                displayEstado = c.status === 'Paid' ? 'Pagada' : 'Pend. Pago';
+            } else if (c.estado === 'Facturada') {
+                const inv = invoices.find(i => i.id === c.facturaId);
+                if (inv?.status === 'Paid') displayEstado = 'Pagada';
+                else if (inv?.status === 'Partial') displayEstado = 'Abonada';
+                else if (inv?.status === 'Credito') displayEstado = 'Credito';
+                else displayEstado = 'Pend. Pago';
+            }
+
             const q = search.toLowerCase();
-            return (c.id.toLowerCase().includes(q) || cl?.name?.toLowerCase()?.includes(q)) &&
-                (filterE === 'Todos' || c.estado === filterE);
+            const matchSearch = 
+                c.id.toLowerCase().includes(q) || 
+                cl?.name?.toLowerCase()?.includes(q) || 
+                o?.nombre?.toLowerCase()?.includes(q) ||
+                displayEstado?.toLowerCase()?.includes(q);
+
+            return matchSearch && (filterE === 'Todos' || c.estado === filterE);
         });
 
         if (sortConfig.key) {
@@ -586,7 +619,10 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     client={getClient(approvingCot.clientId)}
                     obra={getObra(approvingCot)}
                     onClose={() => setApproving(null)}
-                    onApprove={(extra) => createInvoiceFromCotizacion(approving, extra)}
+                    onApprove={(extra) => {
+                        actualizarEstadoCotizacion(approving, 'Aprobada', extra);
+                        setApproving(null);
+                    }}
                 />
             )}
 
@@ -677,7 +713,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                 </div>
                                 <div>
                                     <div style={{ fontWeight: 800, color: 'white', fontSize: '1.1rem' }}>Registrar Pago</div>
-                                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', marginTop: 2, fontWeight: 500 }}>Factura {payingInvoice.id.replace('INV-', 'F-').replace('INC-', 'F-')}</div>
+                                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.8)', marginTop: 2, fontWeight: 500 }}>Remisión de Cobro {payingInvoice.id.replace('INV-', 'F-').replace('INC-', 'F-')}</div>
                                 </div>
                             </div>
                             <button onClick={() => setPayingInvoice(null)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 32, height: 32, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
@@ -759,9 +795,9 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '0.85rem', marginBottom: '1.5rem', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.5, display: 'flex', gap: 10 }}>
                                 <Clock size={16} style={{ flexShrink: 0, marginTop: 2 }} />
                                 <span>
-                                    {paymentOption === 'Contado' && 'Al confirmar, la factura se marcará como PAGADA totalmente.'}
-                                    {paymentOption === 'Abono' && `Se registrará un abono de $${Number(abonoAmount).toLocaleString()} y la factura quedará como ABONADA.`}
-                                    {paymentOption === 'Credito' && 'La factura quedará pendiente de pago pero habilitada para despacho.'}
+                                    {paymentOption === 'Contado' && 'Al confirmar, la remisión de cobro se marcará como PAGADA totalmente.'}
+                                    {paymentOption === 'Abono' && `Se registrará un abono de $${Number(abonoAmount).toLocaleString()} y la remisión de cobro quedará como ABONADA.`}
+                                    {paymentOption === 'Credito' && 'La remisión de cobro quedará pendiente de pago pero habilitada para despacho.'}
                                 </span>
                             </div>
 

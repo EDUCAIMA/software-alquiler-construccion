@@ -18,6 +18,15 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
             .filter(r => r.clientId === selClientId && r.obraId === selObraId && (r.estado === 'Activa' || r.estado === 'Parcial'))
             .forEach(r => {
                 r.items.forEach(item => {
+                    const prod = products.find(p => p.id === item.productId);
+                    const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                   (item.tipoCobro || '').toLowerCase().includes('única') ||
+                                   (item.category || '').toLowerCase().includes('servicio') ||
+                                   (prod?.category || '').toLowerCase().includes('servicio') ||
+                                   (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                   (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                    if (isServ) return;
+
                     const pend = item.cantidad - item.cantidadDevuelta;
                     if (pend > 0) map[item.productId] = (map[item.productId] || 0) + pend;
                 });

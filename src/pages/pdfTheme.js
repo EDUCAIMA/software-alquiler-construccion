@@ -10,29 +10,37 @@ export const applyStandardLayout = (doc, title, settings, number = '') => {
     const margin = 10;
 
     // --- ENCABEZADO PROFESIONAL ---
-    let y = 10;
+    let y = 14;
     
-    // Logo
+    // Logo o Nombre Corto
     if (settings?.logo) {
         try {
-            doc.addImage(settings.logo, 'PNG', margin, y, 35, 18);
+            doc.addImage(settings.logo, 'PNG', margin, y, 35, 15);
+            y += 18;
         } catch (e) {
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(14);
-            doc.text(settings?.shortName || 'CIELO', margin, y + 10);
+            doc.setTextColor(35, 101, 171);
+            doc.text(settings?.shortName || 'CIELO', margin, y + 8);
+            y += 12;
         }
     } else {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(14);
-        doc.text(settings?.shortName || 'CIELO', margin, y + 10);
+        doc.setTextColor(35, 101, 171);
+        doc.text(settings?.shortName || 'CIELO', margin, y + 8);
+        y += 12;
     }
 
-    // Información de la Empresa (Izquierda/Abajo del Logo)
-    doc.setFontSize(7.5);
+    // Información de la Empresa (Izquierda/Abajo del Logo o Nombre Corto)
+    doc.setFontSize(8);
     doc.setTextColor(30, 41, 59);
     doc.setFont('helvetica', 'bold');
-    doc.text(settings?.companyName?.toUpperCase() || 'CIELO COLOMBIA S.A.S.', margin, y + 24);
+    doc.text(settings?.companyName?.toUpperCase() || 'CIELO COLOMBIA S.A.S.', margin, y);
+    y += 4;
+
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
     
     const infoLines = [
         `NIT. ${settings?.nit || '900.000.000-0'}`,
@@ -40,32 +48,42 @@ export const applyStandardLayout = (doc, title, settings, number = '') => {
         `Tel: ${settings?.phone || '—'}  |  ${settings?.email || '—'}`
     ];
     
-    infoLines.forEach((line, idx) => {
-        doc.text(line, margin, y + 28 + (idx * 4));
+    infoLines.forEach((line) => {
+        doc.text(line, margin, y);
+        y += 3.5;
     });
 
     // Recuadro Derecha: Tipo documento y número
-    doc.setDrawColor(0);
+    const boxW = 75;
+    const boxH = number ? 22 : 16;
+    const boxX = W - margin - boxW;
+    const boxY = 14;
+
+    doc.setDrawColor(35, 101, 171);
     doc.setLineWidth(0.5);
-    doc.rect(W - margin - 65, y, 65, 20);
-    doc.setFontSize(10);
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(boxX, boxY, boxW, boxH, 3, 3, 'FD');
+
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text(title.toUpperCase(), W - margin - 32.5, y + 8, { align: 'center' });
+    doc.setTextColor(35, 101, 171);
+    doc.text(title.toUpperCase(), boxX + (boxW / 2), boxY + 10, { align: 'center' });
     
     if (number) {
-        doc.setFontSize(11);
-        doc.text(`Nro - ${number.replace('--', '-')}`, W - margin - 32.5, y + 15, { align: 'center' });
+        doc.setFontSize(9.5);
+        doc.setTextColor(30, 41, 59);
+        doc.text(`Nro - ${number.replace('--', '-')}`, boxX + (boxW / 2), boxY + 18, { align: 'center' });
     }
 
     // --- PIE DE PÁGINA ---
-    doc.setFontSize(6);
+    doc.setFontSize(6.5);
     doc.setTextColor(100, 116, 139);
     doc.setFont('helvetica', 'normal');
     
     const generationInfo = `Página 1 de 1  |  Generado por Sistema de Gestión ${settings?.shortName || ''} el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
-    doc.text(generationInfo, W / 2, H - 10, { align: 'center' });
+    doc.text(generationInfo, W / 2, H - 8, { align: 'center' });
     
-    return y + 42; // Retorna la posición Y donde debe continuar el contenido
+    return Math.max(y + 4, 45); // Retorna la posición Y donde debe continuar el contenido
 };
 
 /**

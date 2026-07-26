@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
     ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Search, Plus, 
-    Printer, Trash2, Edit3, X, Mail, Phone, MapPin, Download, User, Building2, Receipt, Percent, FileText, Truck, Eye, CheckCircle, Clock, AlertTriangle, ShieldAlert, Package
+    Printer, Trash2, Edit3, X, Mail, Phone, MapPin, Download, User, Building2, Receipt, Percent, FileText, Truck, Eye, CheckCircle, Clock, AlertTriangle, ShieldAlert, Package, PackageOpen, UploadCloud
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { exportClientPDF, generateRemisionPDF } from './CotizacionesHelpers';
@@ -12,6 +12,7 @@ import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { applyStandardLayout } from './pdfTheme';
 import { WebcamCapture } from './CotizacionesHelpers';
+import Swal from 'sweetalert2';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const OBRA_ESTADO = {
@@ -284,7 +285,770 @@ function DeleteClientModal({ client, onClose, onConfirm }) {
     );
 }
 
+const EMPTY_PROVIDER = {
+    name: '', nit: '', email: '', phone: '', direccion: '', ciudad: '', contactoPrincipal: ''
+};
+
+function ProviderModal({ initial, onSave, onClose, isEdit }) {
+    const [form, setForm] = useState(initial || EMPTY_PROVIDER);
+    const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+    return (
+        <div 
+            onClick={onClose}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(255, 255, 255, 0.3)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '2rem 1rem' }}
+        >
+            <div 
+                onClick={e => e.stopPropagation()}
+                style={{ background: '#ffffff', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: 700, maxHeight: '85vh', display: 'flex', flexDirection: 'column', border: '1px solid #e2e8f0' }}
+            >
+                <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#104166', fontSize: '1.2rem' }}>
+                        <div style={{ background: 'rgba(35, 101, 171,0.1)', padding: '0.5rem', borderRadius: '10px', display: 'flex' }}>
+                            <User size={20} style={{ color: '#2365AB' }} />
+                        </div>
+                        {isEdit ? 'Editar Información del Proveedor' : 'Registrar Nuevo Proveedor'}
+                    </h3>
+                    <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.2s' }}><X size={18} /></button>
+                </div>
+
+                <div style={{ padding: '1.25rem 2rem', overflowY: 'auto' }}>
+                    <form onSubmit={e => { e.preventDefault(); onSave(form); }} id="provider-form" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        <InputField label="Razón Social / Nombre Completo *" value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ej. Alquileres de Maquinaria SAS" required />
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                            <InputField label="NIT / Cédula" value={form.nit} onChange={e => set('nit', e.target.value.replace(/[^0-9]/g, ''))} placeholder="900123456" />
+                            <InputField label="Contacto Principal" value={form.contactoPrincipal} onChange={e => set('contactoPrincipal', e.target.value)} placeholder="Nombre del responsable" />
+                        </div>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                            <InputField label="Correo Electrónico" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="contacto@empresa.com" />
+                            <InputField label="Teléfono" value={form.phone} onChange={e => set('phone', e.target.value.replace(/[^0-9]/g, ''))} placeholder="3001234567" />
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.25rem' }}>
+                            <InputField label="Dirección" value={form.direccion} onChange={e => set('direccion', e.target.value)} placeholder="Calle 10 # 5-50" />
+                            <InputField label="Ciudad" value={form.ciudad} onChange={e => set('ciudad', e.target.value)} placeholder="Bogotá" />
+                        </div>
+                    </form>
+                </div>
+
+                <div style={{ padding: '1.25rem 2rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', background: '#f8fafc', borderBottomLeftRadius: '24px', borderBottomRightRadius: '24px' }}>
+                    <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
+                    <button type="submit" form="provider-form" className="btn btn-primary">Guardar Proveedor</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function DeleteProviderModal({ provider, onClose, onConfirm }) {
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    
+    return (
+        <div className="modal-overlay" style={{ zIndex: 2000 }}>
+            <div 
+                className="modal-content fadeIn" 
+                onClick={e => e.stopPropagation()}
+                style={{ maxWidth: 420, padding: 0, overflow: 'hidden' }}
+            >
+                <div style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', padding: '1.5rem 2rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Trash2 size={22} color="white" />
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: 800, color: 'white', fontSize: '1.1rem' }}>Eliminar Proveedor</div>
+                            <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>{provider.name}</div>
+                        </div>
+                    </div>
+                </div>
+                <div style={{ padding: '1.5rem 2rem' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '0.85rem', marginBottom: '1.25rem' }}>
+                        <ShieldAlert size={20} style={{ color: '#ef4444', flexShrink: 0 }} />
+                        <p style={{ fontSize: '0.8rem', color: '#b91c1c', margin: 0, fontWeight: 500, lineHeight: 1.4 }}>
+                            Esta acción eliminará de forma permanente los registros del proveedor. Para continuar, ingrese su contraseña de administrador.
+                        </p>
+                    </div>
+                    
+                    <div className="input-group">
+                        <label className="input-label" style={{ fontSize: '0.7rem' }}>CONFIRMAR CON CONTRASEÑA</label>
+                        <input 
+                            type="password" 
+                            className="input-base" 
+                            value={password} 
+                            onChange={e => { setPassword(e.target.value); setError(''); }}
+                            placeholder="Ingrese su contraseña..."
+                            autoFocus
+                            onKeyDown={e => e.key === 'Enter' && onConfirm(password, setError)}
+                        />
+                        {error && <p style={{ color: '#ef4444', fontSize: '0.72rem', marginTop: '0.4rem', fontWeight: 600 }}>{error}</p>}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+                        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+                        <button
+                            onClick={() => onConfirm(password, setError)}
+                            style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: 8, padding: '0.6rem 1.75rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)' }}>
+                            <Trash2 size={16} /> Eliminar Permanente
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ProviderInventoryModal({ provider, products, addProduct, editProduct, deleteProduct, onClose }) {
+    const { addProductBatch, editProductBatch, deleteProductBatch } = useAppContext();
+    const [view, setView] = useState('list'); // 'list' | 'add' | 'edit'
+    const [selectedProd, setSelectedProd] = useState(null);
+    const [expandedProdIds, setExpandedProdIds] = useState({});
+    const [batchModal, setBatchModal] = useState(null); // null | { mode: 'add'|'edit', product: obj, batch?: obj }
+
+    const toggleExpand = (prodId) => {
+        setExpandedProdIds(prev => ({
+            ...prev,
+            [prodId]: !prev[prodId]
+        }));
+    };
+
+    // Filter products belonging to this provider
+    const providerProducts = useMemo(() => {
+        return (products || []).filter(p => p.tipoPropiedad === 'Terceros' && p.proveedor === provider.name);
+    }, [products, provider.name]);
+
+    return (
+        <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1100 }}>
+            <div 
+                className="modal-content fadeIn" 
+                onClick={e => e.stopPropagation()}
+                style={{ maxWidth: 1100, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0 }}
+            >
+                {/* Header */}
+                <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#104166', fontSize: '1.2rem' }}>
+                        <div style={{ background: 'rgba(35, 101, 171,0.1)', padding: '0.5rem', borderRadius: '10px', display: 'flex' }}>
+                            <Building2 size={20} style={{ color: '#2365AB' }} />
+                        </div>
+                        Inventario de Terceros: {provider.name}
+                    </h3>
+                    <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
+                </div>
+
+                {view === 'list' ? (
+                    <>
+                        {/* Toolbar */}
+                        <div style={{ padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
+                                {providerProducts.length} {providerProducts.length === 1 ? 'equipo registrado' : 'equipos registrados'}
+                            </span>
+                            <button 
+                                className="btn btn-primary btn-sm"
+                                onClick={() => setView('add')}
+                                style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700 }}
+                            >
+                                <Plus size={16} /> Registrar Nuevo Equipo
+                            </button>
+                        </div>
+
+                        {/* List */}
+                        <div style={{ padding: '1.5rem 2rem', overflowY: 'auto', flex: 1 }}>
+                            {providerProducts.length === 0 ? (
+                                <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>
+                                    <PackageOpen size={48} style={{ strokeWidth: 1, color: '#94a3b8', marginBottom: '1rem' }} />
+                                    <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>No hay equipos registrados de este proveedor</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Haz clic en "Registrar Nuevo Equipo" para registrar el primer artículo de este tercero.</div>
+                                </div>
+                            ) : (
+                                <table className="glass-table" style={{ width: '100%' }}>
+                                    <thead>
+                                        <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                                            <th style={{ width: '40px', padding: '0.5rem' }}></th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Nombre</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Categoría</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Stock Total</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Disponible</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'right', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Tarifa Alquiler Cliente ($)</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Cobro / Esquema (Cliente)</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Desglose Lotes</th>
+                                            <th style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {providerProducts.map(p => {
+                                            const isExpanded = !!expandedProdIds[p.id];
+                                            const numBatches = p.batches?.length || 0;
+                                            return (
+                                                <React.Fragment key={p.id}>
+                                                    <tr style={{ borderBottom: '1px solid var(--surface-border)', cursor: 'pointer' }} onClick={() => toggleExpand(p.id)}>
+                                                        <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center' }}>
+                                                            {isExpanded ? <ChevronUp size={16} style={{ color: '#2365AB' }} /> : <ChevronDown size={16} style={{ color: '#64748b' }} />}
+                                                        </td>
+                                                        <td style={{ padding: '0.6rem 0.5rem', fontWeight: 700, fontSize: '0.85rem' }}>{p.name}</td>
+                                                        <td style={{ padding: '0.6rem 0.5rem', fontSize: '0.8rem', color: '#475569' }}>
+                                                            {p.category === 'Heavy Machinery' ? 'Maquinaria Pesada' :
+                                                             p.category === 'Power Tools' ? 'Herramientas Eléctricas' :
+                                                             p.category === 'Structures' ? 'Estructuras y Andamios' :
+                                                             p.category === 'Servicio' ? 'Servicio' : p.category || 'Otro'}
+                                                        </td>
+                                                        <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center', fontWeight: 600, fontSize: '0.85rem' }}>{p.totalStock}</td>
+                                                        <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center', fontWeight: 600, fontSize: '0.85rem', color: p.availableStock > 0 ? '#10b981' : '#ef4444' }}>{p.availableStock}</td>
+                                                        <td style={{ padding: '0.6rem 0.5rem', textAlign: 'right', fontWeight: 700, fontSize: '0.85rem' }}>${Number(p.value || 0).toLocaleString()}</td>
+                                                        <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center', fontSize: '0.75rem' }}>
+                                                            <span style={{ background: '#f1f5f9', padding: '0.2rem 0.4rem', borderRadius: 4, marginRight: 4 }}>{p.tipoCobro || 'Día'}</span>
+                                                            <span style={{ color: '#64748b' }}>{p.esquemaCobro || 'Calendario'}</span>
+                                                        </td>
+                                                        <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center', fontSize: '0.8rem', color: '#2365AB', fontWeight: 600 }}>
+                                                            {numBatches === 1 ? '1 lote' : `${numBatches} lotes`}
+                                                        </td>
+                                                        <td style={{ padding: '0.6rem 0.5rem', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                                                            <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center' }}>
+                                                                <button 
+                                                                    className="btn btn-secondary btn-sm" 
+                                                                    onClick={() => setBatchModal({ mode: 'add', product: p })}
+                                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', color: '#10b981', borderColor: 'rgba(16,185,129,0.2)' }}
+                                                                >
+                                                                    + Lote
+                                                                </button>
+                                                                <button 
+                                                                    className="btn btn-secondary btn-sm" 
+                                                                    onClick={() => { setSelectedProd(p); setView('edit'); }}
+                                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }}
+                                                                >
+                                                                    Editar
+                                                                </button>
+                                                                <button 
+                                                                    className="btn btn-secondary btn-sm" 
+                                                                    onClick={() => {
+                                                                        if(confirm('¿Está seguro de eliminar este equipo de forma permanente? Se eliminarán también todos sus lotes asociados.')) {
+                                                                            deleteProduct(p.id);
+                                                                        }
+                                                                    }}
+                                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)' }}
+                                                                >
+                                                                    Borrar
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    {isExpanded && (
+                                                        <tr style={{ background: '#f8fafc' }}>
+                                                            <td colSpan={9} style={{ padding: '0.75rem 1rem 1rem 3rem', borderLeft: '4px solid #2365AB' }}>
+                                                                <div style={{ background: 'white', borderRadius: 8, padding: '1rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                                                        <h5 style={{ margin: 0, color: '#1e293b', fontWeight: 700, fontSize: '0.85rem' }}>Desglose de Lotes del Equipo: {p.name}</h5>
+                                                                        <button 
+                                                                            className="btn btn-primary btn-sm"
+                                                                            onClick={() => setBatchModal({ mode: 'add', product: p })}
+                                                                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', fontWeight: 600 }}
+                                                                        >
+                                                                            + Registrar Nueva Unidad / Lote
+                                                                        </button>
+                                                                    </div>
+                                                                    {(!p.batches || p.batches.length === 0) ? (
+                                                                        <div style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center', padding: '1rem' }}>No hay lotes registrados para este equipo.</div>
+                                                                    ) : (
+                                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                                                            <thead>
+                                                                                <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
+                                                                                    <th style={{ padding: '0.4rem', color: '#64748b', fontWeight: 600 }}># Lote</th>
+                                                                                    <th style={{ padding: '0.4rem', color: '#64748b', fontWeight: 600 }}>Fecha de Ingreso</th>
+                                                                                    <th style={{ padding: '0.4rem', color: '#64748b', fontWeight: 600, textAlign: 'center' }}>Cantidad (Total)</th>
+                                                                                    <th style={{ padding: '0.4rem', color: '#64748b', fontWeight: 600, textAlign: 'center' }}>Disponible</th>
+                                                                                    <th style={{ padding: '0.4rem', color: '#64748b', fontWeight: 600, textAlign: 'right' }}>Costo Adquisición ($)</th>
+                                                                                    <th style={{ padding: '0.4rem', color: '#64748b', fontWeight: 600, textAlign: 'center' }}>Cobro / Esquema (Costo)</th>
+                                                                                    <th style={{ padding: '0.4rem', color: '#64748b', fontWeight: 600, textAlign: 'center' }}>Acciones</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {p.batches.map((b, idx) => (
+                                                                                    <tr key={b.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                                                        <td style={{ padding: '0.4rem', fontWeight: 600 }}>Lote #{idx + 1}</td>
+                                                                                        <td style={{ padding: '0.4rem' }}>{b.fechaCompra ? format(new Date(b.fechaCompra + 'T00:00:00'), 'dd/MM/yyyy') : '—'}</td>
+                                                                                        <td style={{ padding: '0.4rem', textAlign: 'center', fontWeight: 600 }}>{b.stock}</td>
+                                                                                        <td style={{ padding: '0.4rem', textAlign: 'center', fontWeight: 600, color: b.availableStock > 0 ? '#10b981' : '#ef4444' }}>{b.availableStock}</td>
+                                                                                        <td style={{ padding: '0.4rem', textAlign: 'right', fontWeight: 700, color: '#b45309' }}>${Number(b.costoAdquisicion || 0).toLocaleString()}</td>
+                                                                                        <td style={{ padding: '0.4rem', textAlign: 'center' }}>
+                                                                                            <span style={{ background: '#fffbeb', padding: '0.1rem 0.35rem', borderRadius: 4, marginRight: 4, color: '#b45309', border: '1px solid #fef3c7', fontSize: '0.7rem' }}>{b.tipoCobroCosto || 'Día'}</span>
+                                                                                            <span style={{ color: '#b45309', fontSize: '0.75rem' }}>{b.esquemaCobroCosto || 'Calendario'}</span>
+                                                                                        </td>
+                                                                                        <td style={{ padding: '0.4rem', textAlign: 'center' }}>
+                                                                                            <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'center' }}>
+                                                                                                <button 
+                                                                                                    className="btn btn-secondary btn-sm" 
+                                                                                                    onClick={() => setBatchModal({ mode: 'edit', product: p, batch: b })}
+                                                                                                    style={{ padding: '0.15rem 0.35rem', fontSize: '0.7rem' }}
+                                                                                                >
+                                                                                                    Editar Lote
+                                                                                                </button>
+                                                                                                <button 
+                                                                                                    className="btn btn-secondary btn-sm" 
+                                                                                                    onClick={() => {
+                                                                                                        if (confirm('¿Está seguro de eliminar este lote? El stock total del producto se descontará.')) {
+                                                                                                            deleteProductBatch(p.id, b.id);
+                                                                                                        }
+                                                                                                    }}
+                                                                                                    style={{ padding: '0.15rem 0.35rem', fontSize: '0.7rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.1)' }}
+                                                                                                >
+                                                                                                    Borrar Lote
+                                                                                                </button>
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <AddEditThirdPartyProductForm 
+                        mode={view}
+                        providerName={provider.name}
+                        initialProduct={selectedProd}
+                        onSave={(form) => {
+                            if (view === 'add') {
+                                addProduct(form);
+                            } else {
+                                editProduct(selectedProd.id, form);
+                            }
+                            setView('list');
+                            setSelectedProd(null);
+                        }}
+                        onCancel={() => {
+                            setView('list');
+                            setSelectedProd(null);
+                        }}
+                    />
+                )}
+            </div>
+
+            {/* Modal para Agregar/Editar Lotes */}
+            {batchModal && (
+                <AddEditBatchModal 
+                    mode={batchModal.mode}
+                    product={batchModal.product}
+                    batch={batchModal.batch}
+                    onSave={async (batchForm) => {
+                        if (batchModal.mode === 'add') {
+                            await addProductBatch(batchModal.product.id, batchForm);
+                        } else {
+                            await editProductBatch(batchModal.product.id, batchModal.batch.id, batchForm);
+                        }
+                        setBatchModal(null);
+                    }}
+                    onClose={() => setBatchModal(null)}
+                />
+            )}
+        </div>
+    );
+}
+
+function AddEditBatchModal({ mode, product, batch, onSave, onClose }) {
+    const [stock, setStock] = useState(batch?.stock || 1);
+    const [fechaCompra, setFechaCompra] = useState(batch?.fechaCompra || '');
+    const [costoAdquisicion, setCostoAdquisicion] = useState(batch?.costoAdquisicion || '');
+    const [tipoCobroCosto, setTipoCobroCosto] = useState(batch?.tipoCobroCosto || 'Día');
+    const [esquemaCobroCosto, setEsquemaCobroCosto] = useState(batch?.esquemaCobroCosto || 'Calendario');
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSave({
+            stock: parseInt(stock) || 1,
+            fechaCompra: fechaCompra || null,
+            costoAdquisicion: parseFloat(costoAdquisicion) || 0,
+            tipoCobroCosto,
+            esquemaCobroCosto
+        });
+    };
+
+    return (
+        <div className="modal-overlay" style={{ zIndex: 1200 }}>
+            <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, width: '100%', borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, color: '#104166', fontSize: '1.15rem', fontWeight: 700 }}>
+                        {mode === 'add' ? `Agregar Lote a: ${product.name}` : `Editar Lote de: ${product.name}`}
+                    </h3>
+                    <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
+                </div>
+                <form onSubmit={handleSubmit}>
+                    <div style={{ padding: '1.5rem 2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        <InputField 
+                            label="Cantidad / Unidades *" 
+                            type="number" 
+                            min="1" 
+                            value={stock} 
+                            onChange={e => setStock(e.target.value)} 
+                            required 
+                        />
+                        <InputField 
+                            label="Fecha de Ingreso *" 
+                            type="date"
+                            value={fechaCompra} 
+                            onChange={e => setFechaCompra(e.target.value)} 
+                            required
+                        />
+                        <div className="input-group" style={{ margin: 0 }}>
+                            <label className="input-label">Costo Adquisición ($) *</label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <input 
+                                    type="number" 
+                                    className="input-base" 
+                                    value={costoAdquisicion} 
+                                    onChange={e => setCostoAdquisicion(e.target.value)} 
+                                    placeholder="Ej. 18000" 
+                                    style={{ flex: 1 }} 
+                                    required 
+                                />
+                                <select 
+                                    className="input-base" 
+                                    style={{ width: 120, padding: '0.6rem' }} 
+                                    value={tipoCobroCosto} 
+                                    onChange={e => {
+                                        const tc = e.target.value;
+                                        setTipoCobroCosto(tc);
+                                        if (tc === 'Servicio') {
+                                            setEsquemaCobroCosto('Única Vez');
+                                        }
+                                    }}
+                                >
+                                    <option value="Día">Día</option>
+                                    <option value="Hora">Hora</option>
+                                    <option value="Servicio">Servicio</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="input-group" style={{ margin: 0 }}>
+                            <label className="input-label">Esquema de Cobro (Costo)</label>
+                            {(() => {
+                                const isServ = product.category === 'Servicio' || tipoCobroCosto === 'Servicio';
+                                return (
+                                    <select 
+                                        className="input-base" 
+                                        disabled={isServ}
+                                        value={isServ ? 'Única Vez' : esquemaCobroCosto}
+                                        onChange={e => setEsquemaCobroCosto(e.target.value)}
+                                        style={{ 
+                                            opacity: isServ ? 0.75 : 1, 
+                                            cursor: isServ ? 'not-allowed' : 'default', 
+                                            background: isServ ? '#f1f5f9' : 'white' 
+                                        }}
+                                    >
+                                        <option value="Calendario">Días Calendario (Todos)</option>
+                                        <option value="Lunes-Sábado">Lunes a Sábado</option>
+                                        <option value="Lunes-Viernes">Lunes a Viernes</option>
+                                        <option value="Única Vez">Única Vez (Cobro Único)</option>
+                                    </select>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                    <div style={{ padding: '1.25rem 2rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', background: '#f8fafc' }}>
+                        <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
+                        <button type="submit" className="btn btn-primary">{mode === 'add' ? 'Agregar Lote' : 'Guardar Cambios'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+function handleLocalImageUpload(file, callback) {
+    if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX = 400;
+                let { width, height } = img;
+                if (width > height) { if (width > MAX) { height *= MAX / width; width = MAX; } }
+                else { if (height > MAX) { width *= MAX / height; height = MAX; } }
+                canvas.width = width; canvas.height = height;
+                canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                callback(canvas.toDataURL('image/jpeg', 0.7));
+            };
+            img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+function AddEditThirdPartyProductForm({ mode, providerName, initialProduct, onSave, onCancel }) {
+    const [name, setName] = useState(initialProduct?.name || '');
+    const [category, setCategory] = useState(initialProduct?.category || 'Heavy Machinery');
+    const [totalStock, setTotalStock] = useState(mode === 'edit' ? (initialProduct?.totalStock || 1) : 1);
+    const [value, setValue] = useState(initialProduct?.value || '');
+    const [tipoCobro, setTipoCobro] = useState(initialProduct?.tipoCobro || 'Día');
+    const [esquemaCobro, setEsquemaCobro] = useState(initialProduct?.esquemaCobro || 'Calendario');
+    const [image, setImage] = useState(initialProduct?.image || null);
+    const [fechaCompra, setFechaCompra] = useState(mode === 'edit' ? (initialProduct?.fechaCompra || '') : '');
+    const [costoAdquisicion, setCostoAdquisicion] = useState(mode === 'edit' ? (initialProduct?.costoAdquisicion || '') : '');
+    const [tipoCobroCosto, setTipoCobroCosto] = useState(initialProduct?.tipoCobroCosto || 'Día');
+    const [esquemaCobroCosto, setEsquemaCobroCosto] = useState(initialProduct?.esquemaCobroCosto || 'Calendario');
+
+    const fileInputRef = useRef(null);
+    const [isDragging, setIsDragging] = useState(false);
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!name.trim()) return alert('El nombre del equipo es obligatorio');
+        onSave({
+            name,
+            category,
+            totalStock: parseInt(totalStock) || 1,
+            value: parseFloat(value) || 0,
+            tipoCobro,
+            esquemaCobro,
+            tipoPropiedad: 'Terceros',
+            proveedor: providerName,
+            image,
+            fechaCompra: fechaCompra || null,
+            costoAdquisicion: parseFloat(costoAdquisicion) || 0,
+            tipoCobroCosto,
+            esquemaCobroCosto
+        });
+    };
+
+    return (
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+            <div style={{ padding: '1.5rem 2rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                <h4 style={{ margin: 0, color: '#104166', fontWeight: 700 }}>
+                    {mode === 'add' ? (initialProduct ? `Registrar Unidad Adicional: ${initialProduct.name}` : 'Registrar Nuevo Equipo de Tercero') : `Editar Equipo: ${initialProduct.name}`}
+                </h4>
+
+                <InputField 
+                    label="Nombre del Equipo *" 
+                    value={name} 
+                    onChange={e => setName(e.target.value)} 
+                    placeholder="Ej. Mezcladora de Concreto 2 sacos" 
+                    required 
+                />
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                    <div className="input-group" style={{ margin: 0 }}>
+                        <label className="input-label">Categoría</label>
+                        <select className="input-base" value={category} onChange={e => {
+                            const cat = e.target.value;
+                            setCategory(cat);
+                            if (cat === 'Servicio') {
+                                setTipoCobro('Servicio');
+                                setEsquemaCobro('Única Vez');
+                                setTipoCobroCosto('Servicio');
+                                setEsquemaCobroCosto('Única Vez');
+                            }
+                        }}>
+                            <option value="Heavy Machinery">Maquinaria Pesada</option>
+                            <option value="Power Tools">Herramientas Eléctricas</option>
+                            <option value="Structures">Estructuras y Andamios</option>
+                            <option value="Servicio">Servicio (Cobro Único)</option>
+                            <option value="Other">Otro</option>
+                        </select>
+                    </div>
+                    <InputField 
+                        label="Stock Total *" 
+                        type="number" 
+                        min="1" 
+                        value={totalStock} 
+                        onChange={e => setTotalStock(e.target.value)} 
+                        required 
+                    />
+                </div>
+
+                {/* Tarifas de Alquiler al Cliente */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                    <div className="input-group" style={{ margin: 0 }}>
+                        <label className="input-label">Tarifa Alquiler / Servicio ($) *</label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <input 
+                                type="number" 
+                                className="input-base" 
+                                value={value} 
+                                onChange={e => setValue(e.target.value)} 
+                                placeholder="Ej. 25000" 
+                                style={{ flex: 1 }} 
+                                required 
+                            />
+                            <select 
+                                className="input-base" 
+                                style={{ width: 120, padding: '0.6rem' }} 
+                                value={tipoCobro} 
+                                onChange={e => {
+                                    const tc = e.target.value;
+                                    setTipoCobro(tc);
+                                    if (tc === 'Servicio') {
+                                        setEsquemaCobro('Única Vez');
+                                    }
+                                }}
+                            >
+                                <option value="Día">Día</option>
+                                <option value="Hora">Hora</option>
+                                <option value="Servicio">Servicio</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="input-group" style={{ margin: 0 }}>
+                        <label className="input-label">Esquema de Cobro (Cliente)</label>
+                        {(() => {
+                            const isServ = category === 'Servicio' || tipoCobro === 'Servicio';
+                            return (
+                                <select 
+                                    className="input-base" 
+                                    disabled={isServ}
+                                    value={isServ ? 'Única Vez' : esquemaCobro}
+                                    onChange={e => setEsquemaCobro(e.target.value)}
+                                    style={{ 
+                                        opacity: isServ ? 0.75 : 1, 
+                                        cursor: isServ ? 'not-allowed' : 'default', 
+                                        background: isServ ? '#f1f5f9' : 'white' 
+                                    }}
+                                >
+                                    <option value="Calendario">Días Calendario (Todos)</option>
+                                    <option value="Lunes-Sábado">Lunes a Sábado</option>
+                                    <option value="Lunes-Viernes">Lunes a Viernes</option>
+                                    <option value="Única Vez">Única Vez (Cobro Único)</option>
+                                </select>
+                            );
+                        })()}
+                    </div>
+                </div>
+
+                {/* Costo de Adquisición (Tarifa y Esquema para el Proveedor) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                    <div className="input-group" style={{ margin: 0 }}>
+                        <label className="input-label">Costo Adquisición ($) *</label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <input 
+                                type="number" 
+                                className="input-base" 
+                                value={costoAdquisicion} 
+                                onChange={e => setCostoAdquisicion(e.target.value)} 
+                                placeholder="Ej. 18000" 
+                                style={{ flex: 1 }} 
+                                required 
+                            />
+                            <select 
+                                className="input-base" 
+                                style={{ width: 120, padding: '0.6rem' }} 
+                                value={tipoCobroCosto} 
+                                onChange={e => {
+                                    const tc = e.target.value;
+                                    setTipoCobroCosto(tc);
+                                    if (tc === 'Servicio') {
+                                        setEsquemaCobroCosto('Única Vez');
+                                    }
+                                }}
+                            >
+                                <option value="Día">Día</option>
+                                <option value="Hora">Hora</option>
+                                <option value="Servicio">Servicio</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="input-group" style={{ margin: 0 }}>
+                        <label className="input-label">Esquema de Cobro (Costo)</label>
+                        {(() => {
+                            const isServ = category === 'Servicio' || tipoCobroCosto === 'Servicio';
+                            return (
+                                <select 
+                                    className="input-base" 
+                                    disabled={isServ}
+                                    value={isServ ? 'Única Vez' : esquemaCobroCosto}
+                                    onChange={e => setEsquemaCobroCosto(e.target.value)}
+                                    style={{ 
+                                        opacity: isServ ? 0.75 : 1, 
+                                        cursor: isServ ? 'not-allowed' : 'default', 
+                                        background: isServ ? '#f1f5f9' : 'white' 
+                                    }}
+                                >
+                                    <option value="Calendario">Días Calendario (Todos)</option>
+                                    <option value="Lunes-Sábado">Lunes a Sábado</option>
+                                    <option value="Lunes-Viernes">Lunes a Viernes</option>
+                                    <option value="Única Vez">Única Vez (Cobro Único)</option>
+                                </select>
+                            );
+                        })()}
+                    </div>
+                </div>
+
+                {/* Imagen del Equipo */}
+                <div className="input-group" style={{ margin: 0 }}>
+                    <label className="input-label" style={{ marginBottom: '0.4rem' }}>Imagen del Equipo</label>
+                    <div
+                        onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                        onDragLeave={e => { e.preventDefault(); setIsDragging(false); }}
+                        onDrop={e => {
+                            e.preventDefault(); setIsDragging(false);
+                            const file = e.dataTransfer.files[0];
+                            if (file && file.type.startsWith('image/')) handleLocalImageUpload(file, setImage);
+                        }}
+                        onClick={() => fileInputRef.current?.click()}
+                        style={{
+                            border: `2px dashed ${isDragging ? '#2365AB' : 'var(--surface-border)'}`,
+                            borderRadius: 12, padding: '1.25rem', textAlign: 'center',
+                            backgroundColor: isDragging ? 'rgba(35, 101, 171, 0.05)' : '#fafafa',
+                            cursor: 'pointer', transition: 'all 0.3s ease',
+                            display: 'flex', flexDirection: 'column', alignItems: 'center',
+                            justifyContent: 'center', gap: '0.5rem', minHeight: 110
+                        }}>
+                        <input type="file" accept="image/*" ref={fileInputRef}
+                            onChange={e => {
+                                const file = e.target.files[0];
+                                if (file) handleLocalImageUpload(file, setImage);
+                            }}
+                            style={{ display: 'none' }} />
+                        {image ? (
+                            <div>
+                                <img src={image} alt="Preview" style={{ maxWidth: '100%', maxHeight: 80, objectFit: 'contain', borderRadius: 8 }} />
+                                <div style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: '#2365AB', fontWeight: 600 }}>Haga clic para cambiar imagen</div>
+                            </div>
+                        ) : (
+                            <>
+                                <div style={{ padding: '0.5rem', background: 'rgba(35, 101, 171,0.1)', borderRadius: '50%', color: '#2365AB', display: 'flex' }}><UploadCloud size={22} /></div>
+                                <p style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.8rem', margin: 0 }}>Arrastre una imagen aquí o haga clic para seleccionar</p>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {/* Fecha y Datos de Origen */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: '1.25rem' }}>
+                    <InputField 
+                        label="Fecha de Compra / Ingreso" 
+                        type="date"
+                        value={fechaCompra} 
+                        onChange={e => setFechaCompra(e.target.value)} 
+                    />
+                    <InputField label="Origen (Propiedad)" value="Terceros" disabled />
+                    <InputField label="Proveedor Aliado" value={providerName} disabled />
+                </div>
+            </div>
+
+            <div style={{ padding: '1.25rem 2rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', background: '#f8fafc' }}>
+                <button type="button" onClick={onCancel} className="btn btn-secondary">Cancelar</button>
+                <button type="submit" className="btn btn-primary">{mode === 'add' ? 'Registrar Equipo' : 'Guardar Cambios'}</button>
+            </div>
+        </form>
+    );
+}
+
 function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, onDelete, remisiones, addRemision, editRemision, maintenances, settings }) {
+    const { deleteRemision } = useAppContext();
     const [tab, setTab] = useState('datos');
     const [showObraModal, setShowObraModal] = useState(false);
     const [showRemisionModal, setShowRemisionModal] = useState(false);
@@ -569,6 +1333,54 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
                                                             >
                                                                 <Printer size={14} /> Imprimir
                                                             </button>
+
+                                                            <button 
+                                                                onClick={async (e) => {
+                                                                    e.stopPropagation();
+                                                                    const result = await Swal.fire({
+                                                                        title: '¿Eliminar Remisión?',
+                                                                        text: `¿Está seguro de eliminar la remisión ${rem.id}? Esto devolverá todos sus equipos al inventario disponible.`,
+                                                                        icon: 'warning',
+                                                                        showCancelButton: true,
+                                                                        confirmButtonColor: '#ef4444',
+                                                                        cancelButtonColor: '#64748b',
+                                                                        confirmButtonText: 'Sí, eliminar',
+                                                                        cancelButtonText: 'Cancelar'
+                                                                    });
+                                                                    if (result.isConfirmed) {
+                                                                        try {
+                                                                            await deleteRemision(rem.id);
+                                                                            Swal.fire({
+                                                                                title: 'Remisión Eliminada',
+                                                                                text: `La remisión ${rem.id} fue eliminada y los equipos han vuelto al inventario.`,
+                                                                                icon: 'success',
+                                                                                confirmButtonColor: '#2365AB'
+                                                                            });
+                                                                        } catch (err) {
+                                                                            Swal.fire({
+                                                                                title: 'Error al eliminar',
+                                                                                text: err.message || 'No se pudo eliminar la remisión.',
+                                                                                icon: 'error',
+                                                                                confirmButtonColor: '#ef4444'
+                                                                            });
+                                                                        }
+                                                                    }
+                                                                }}
+                                                                className="btn btn-outline btn-sm" 
+                                                                style={{
+                                                                    padding: '0.3rem 0.65rem',
+                                                                    fontSize: '0.75rem',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.35rem',
+                                                                    background: 'rgba(239, 68, 68, 0.1)',
+                                                                    borderColor: 'rgba(239, 68, 68, 0.3)',
+                                                                    color: '#ef4444'
+                                                                }}
+                                                                title="Eliminar Remisión (Retornar al inventario)"
+                                                            >
+                                                                <Trash2 size={14} /> Eliminar
+                                                            </button>
                                                         </div>
                                                     </div>
 
@@ -748,9 +1560,11 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
 export default function Clients() {
     const { 
         clients, addClient, editClient, deleteClient, addObra, 
-        invoices, products, remisiones, addRemision, editRemision, maintenances, settings, checkPassword 
+        invoices, products, addProduct, editProduct, deleteProduct, remisiones, addRemision, editRemision, maintenances, settings, checkPassword,
+        providers, addProvider, editProvider, deleteProvider
     } = useAppContext();
 
+    const [activeTab, setActiveTab] = useState('clientes'); // 'clientes' | 'proveedores'
     const [search, setSearch] = useState('');
     const [filterDeuda, setFilterDeuda] = useState('Todos');
     const [filterRegimen, setFilterRegimen] = useState('Todos');
@@ -759,11 +1573,26 @@ export default function Clients() {
     const [selectedClient, setSelectedClient] = useState(null);
     const [deletingClient, setDeletingClient] = useState(null);
 
+    // Proveedores States
+    const [showProviderModal, setShowProviderModal] = useState(false);
+    const [editingProvider, setEditingProvider] = useState(null);
+    const [deletingProvider, setDeletingProvider] = useState(null);
+    const [providerForInventory, setProviderForInventory] = useState(null);
+    const [providerSortConfig, setProviderSortConfig] = useState({ key: 'id', direction: 'desc' });
+    const [providerCurrentPage, setProviderCurrentPage] = useState(1);
+    const [providerItemsPerPage, setProviderItemsPerPage] = useState(10);
+
     useEffect(() => {
         const h1 = () => setShowModal(true);
+        const h2 = () => setShowProviderModal(true);
         window.addEventListener('trigger-new-client', h1);
-        return () => window.removeEventListener('trigger-new-client', h1);
+        window.addEventListener('trigger-new-provider', h2);
+        return () => {
+            window.removeEventListener('trigger-new-client', h1);
+            window.removeEventListener('trigger-new-provider', h2);
+        };
     }, []);
+
     const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
 
     const handleSort = (key) => {
@@ -772,7 +1601,13 @@ export default function Clients() {
         setSortConfig({ key, direction });
     };
 
-    // Search + filter + Sort
+    const handleProviderSort = (key) => {
+        let direction = 'asc';
+        if (providerSortConfig.key === key && providerSortConfig.direction === 'asc') direction = 'desc';
+        setProviderSortConfig({ key, direction });
+    };
+
+    // Search + filter + Sort (Clients)
     const sorted = useMemo(() => {
         const filtered = clients.filter(c => {
             const q = search.toLowerCase();
@@ -800,7 +1635,32 @@ export default function Clients() {
         return filtered;
     }, [clients, search, filterDeuda, filterRegimen, sortConfig]);
 
-    // Pagination
+    // Search + filter + Sort (Providers)
+    const sortedProviders = useMemo(() => {
+        const filtered = (providers || []).filter(p => {
+            const q = search.toLowerCase();
+            return (p.name || '').toLowerCase().includes(q) || 
+                   (p.nit || '').toLowerCase().includes(q) || 
+                   (p.ciudad || '').toLowerCase().includes(q);
+        });
+
+        if (providerSortConfig.key) {
+            filtered.sort((a, b) => {
+                let aVal = a[providerSortConfig.key] || '';
+                let bVal = b[providerSortConfig.key] || '';
+                
+                if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+                if (aVal < bVal) return providerSortConfig.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return providerSortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return filtered;
+    }, [providers, search, providerSortConfig]);
+
+    // Pagination (Clients)
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -811,7 +1671,15 @@ export default function Clients() {
 
     const totalPages = Math.ceil(sorted.length / itemsPerPage);
 
-    // KPIs
+    // Pagination (Providers)
+    const paginatedProviders = useMemo(() => {
+        const start = (providerCurrentPage - 1) * providerItemsPerPage;
+        return sortedProviders.slice(start, start + providerItemsPerPage);
+    }, [sortedProviders, providerCurrentPage, providerItemsPerPage]);
+
+    const providerTotalPages = Math.ceil(sortedProviders.length / providerItemsPerPage);
+
+    // KPIs (Clients)
     const totalDeuda = clients.reduce((s, c) => s + c.debt, 0);
     const totalObras = clients.reduce((s, c) => s + (c.obras?.length || 0), 0);
     const conDeuda = clients.filter(c => c.debt > 0).length;
@@ -843,24 +1711,80 @@ export default function Clients() {
         }
     };
 
-    const inputStyle = {
-        padding: '0.55rem 0.75rem', background: 'rgba(255,255,255,0.05)',
-        border: '1px solid var(--surface-border)', borderRadius: 8,
-        color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none',
+    // Proveedores Handlers
+    const handleProviderSaveNew = (form) => {
+        addProvider(form);
+        setShowProviderModal(false);
+    };
+
+    const handleProviderSaveEdit = (form) => {
+        editProvider(editingProvider.id, form);
+        setEditingProvider(null);
+    };
+
+    const handleProviderDelete = async (password, setError) => {
+        const isValid = await checkPassword(password);
+        if (isValid) {
+            deleteProvider(deletingProvider.id);
+            setDeletingProvider(null);
+        } else {
+            setError('La contraseña es incorrecta. Por favor verifique.');
+        }
     };
 
     return (
         <>
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 120px)' }}>
-                {/* Filters Section */}
-                
+                {/* Pestañas de Selección */}
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--surface-border)', paddingBottom: '0.75rem' }}>
+                    <button
+                        onClick={() => { setActiveTab('clientes'); setSearch(''); }}
+                        style={{
+                            padding: '0.5rem 1rem',
+                            borderRadius: 8,
+                            border: 'none',
+                            background: activeTab === 'clientes' ? '#2365AB' : 'transparent',
+                            color: activeTab === 'clientes' ? '#ffffff' : '#64748b',
+                            fontWeight: 700,
+                            fontSize: '0.875rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                        }}
+                    >
+                        👥 Clientes ({clients.length})
+                    </button>
+
+                    <button
+                        onClick={() => { setActiveTab('proveedores'); setSearch(''); }}
+                        style={{
+                            padding: '0.5rem 1rem',
+                            borderRadius: 8,
+                            border: 'none',
+                            background: activeTab === 'proveedores' ? '#2365AB' : 'transparent',
+                            color: activeTab === 'proveedores' ? '#ffffff' : '#64748b',
+                            fontWeight: 700,
+                            fontSize: '0.875rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                        }}
+                    >
+                        🤝 Proveedores (Terceros) ({providers.length})
+                    </button>
+                </div>
+
                 {/* Filters Section */}
                 <div className="glass-panel p-4 mb-6">
                     <div style={{ position: 'relative', width: '100%' }}>
                         <Search size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input 
                             type="text" 
-                            placeholder="Buscar por nombre, NIT o ciudad..." 
+                            placeholder={activeTab === 'clientes' ? "Buscar por nombre, NIT o ciudad..." : "Buscar proveedor por nombre, NIT o ciudad..."} 
                             className="input-base"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
@@ -872,85 +1796,172 @@ export default function Clients() {
                 {/* Table Container */}
                 <div className="glass-panel p-0" style={{ overflow: 'hidden' }}>
                     <div style={{ overflowX: 'auto' }}>
-                        <table className="glass-table" style={{ width: '100%' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                    {[
-                                        { label: 'Cliente', key: 'name', w: '180px' },
-                                        { label: 'IVA', key: 'porcIVA', w: '60px' },
-                                        { label: 'Ret', key: 'porcRetencion', w: '60px' },
-                                        { label: 'Obras', key: null, w: '90px' },
-                                        { label: 'Cartera', key: 'debt', w: '100px' },
-                                        { label: 'Acciones', key: null, w: '130px' }
-                                    ].map(({ label, key, w }) => (
-                                        <th 
-                                            key={label} 
-                                            onClick={() => key && handleSort(key)}
-                                            style={{ 
-                                                width: w,
-                                                padding: '0.4rem 0.75rem', textAlign: 'left', 
-                                                fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, 
-                                                textTransform: 'uppercase', letterSpacing: '0.05em', 
-                                                cursor: key ? 'pointer' : 'default', userSelect: 'none'
-                                            }}
-                                        >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: '100%' }}>
-                                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-                                                <div style={{ width: 14, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-                                                    {key && sortConfig.key === key ? (
-                                                        sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
-                                                    ) : (
-                                                        key ? <div style={{ width: 12 }} /> : null
-                                                    )}
+                        {activeTab === 'clientes' ? (
+                            <table className="glass-table" style={{ width: '100%' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                                        {[
+                                            { label: 'Cliente', key: 'name', w: '180px' },
+                                            { label: 'IVA', key: 'porcIVA', w: '60px' },
+                                            { label: 'Ret', key: 'porcRetencion', w: '60px' },
+                                            { label: 'Obras', key: null, w: '90px' },
+                                            { label: 'Cartera', key: 'debt', w: '100px' },
+                                            { label: 'Acciones', key: null, w: '130px' }
+                                        ].map(({ label, key, w }) => (
+                                            <th 
+                                                key={label} 
+                                                onClick={() => key && handleSort(key)}
+                                                style={{ 
+                                                    width: w,
+                                                    padding: '0.4rem 0.75rem', textAlign: 'left', 
+                                                    fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, 
+                                                    textTransform: 'uppercase', letterSpacing: '0.05em', 
+                                                    cursor: key ? 'pointer' : 'default', userSelect: 'none'
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: '100%' }}>
+                                                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                                                    <div style={{ width: 14, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                                                        {key && sortConfig.key === key ? (
+                                                            sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                                                        ) : (
+                                                            key ? <div style={{ width: 12 }} /> : null
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {paginatedClients.map(client => {
-                                    const obrasActivas = (client.obras || []).filter(o => o.estado === 'Activa').length;
-                                    return (
-                                        <tr key={client.id}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {paginatedClients.map(client => {
+                                        const obrasActivas = (client.obras || []).filter(o => o.estado === 'Activa').length;
+                                        return (
+                                            <tr key={client.id}
+                                                className="table-row-hover"
+                                                style={{ borderBottom: '1px solid var(--surface-border)', cursor: 'pointer', transition: 'background 0.15s' }}
+                                                onClick={() => setSelectedClient(client)}
+                                            >
+                                                <td>
+                                                    <div style={{ fontWeight: 700, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{client.name}</div>
+                                                </td>
+                                                <td>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{client.porcIVA || 0}%</div>
+                                                </td>
+                                                <td>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{client.porcRetencion || 0}%</div>
+                                                </td>
+                                                <td>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                        <Building2 size={14} color="#64748b" />
+                                                        <span style={{ fontWeight: 600 }}>{(client.obras || []).length}</span>
+                                                        {obrasActivas > 0 && <span style={{ fontSize: '0.7rem', color: '#10b981' }}>({obrasActivas} activas)</span>}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span style={{ fontWeight: 700, color: client.debt > 0 ? '#ef4444' : '#10b981' }}>
+                                                        {client.debt > 0 ? `$${client.debt.toLocaleString()}` : '✓ Al Día'}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div style={{ display: 'flex', gap: '0.4rem' }} onClick={e => e.stopPropagation()}>
+                                                        <button className="btn btn-secondary btn-sm" onClick={() => setSelectedClient(client)}
+                                                            style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                            <FileText size={13} /> Ficha
+                                                        </button>
+                                                        <button className="btn btn-secondary btn-sm" onClick={() => exportClientPDF(client, invoices, products, settings)}
+                                                            style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                            <Printer size={13} /> PDF
+                                                        </button>
+                                                        <button 
+                                                            className="btn btn-secondary btn-sm" 
+                                                            onClick={() => setDeletingClient(client)}
+                                                            style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)' }}
+                                                        >
+                                                            <Trash2 size={13} /> Borrar
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {sorted.length === 0 && (
+                                        <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron clientes</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <table className="glass-table" style={{ width: '100%' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                                        {[
+                                            { label: 'Proveedor / Razón Social', key: 'name', w: '200px' },
+                                            { label: 'NIT', key: 'nit', w: '100px' },
+                                            { label: 'Contacto Principal', key: 'contactoPrincipal', w: '150px' },
+                                            { label: 'Teléfono', key: 'phone', w: '100px' },
+                                            { label: 'Correo', key: 'email', w: '180px' },
+                                            { label: 'Ciudad', key: 'ciudad', w: '100px' },
+                                            { label: 'Acciones', key: null, w: '130px' }
+                                        ].map(({ label, key, w }) => (
+                                            <th 
+                                                key={label} 
+                                                onClick={() => key && handleProviderSort(key)}
+                                                style={{ 
+                                                    width: w,
+                                                    padding: '0.4rem 0.75rem', textAlign: 'left', 
+                                                    fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, 
+                                                    textTransform: 'uppercase', letterSpacing: '0.05em', 
+                                                    cursor: key ? 'pointer' : 'default', userSelect: 'none'
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: '100%' }}>
+                                                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                                                    <div style={{ width: 14, flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                                                        {key && providerSortConfig.key === key ? (
+                                                            providerSortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                                                        ) : (
+                                                            key ? <div style={{ width: 12 }} /> : null
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {paginatedProviders.map(provider => (
+                                        <tr key={provider.id}
                                             className="table-row-hover"
                                             style={{ borderBottom: '1px solid var(--surface-border)', cursor: 'pointer', transition: 'background 0.15s' }}
-                                            onClick={() => setSelectedClient(client)}
+                                            onClick={() => setProviderForInventory(provider)}
                                         >
                                             <td>
-                                                <div style={{ fontWeight: 700, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{client.name}</div>
+                                                <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{provider.name}</div>
                                             </td>
                                             <td>
-                                                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{client.porcIVA || 0}%</div>
+                                                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{provider.nit || '—'}</div>
                                             </td>
                                             <td>
-                                                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{client.porcRetencion || 0}%</div>
+                                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{provider.contactoPrincipal || '—'}</div>
                                             </td>
                                             <td>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                    <Building2 size={14} color="#64748b" />
-                                                    <span style={{ fontWeight: 600 }}>{(client.obras || []).length}</span>
-                                                    {obrasActivas > 0 && <span style={{ fontSize: '0.7rem', color: '#10b981' }}>({obrasActivas} activas)</span>}
-                                                </div>
+                                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{provider.phone || '—'}</div>
                                             </td>
                                             <td>
-                                                <span style={{ fontWeight: 700, color: client.debt > 0 ? '#ef4444' : '#10b981' }}>
-                                                    {client.debt > 0 ? `$${client.debt.toLocaleString()}` : '✓ Al Día'}
-                                                </span>
+                                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{provider.email || '—'}</div>
+                                            </td>
+                                            <td>
+                                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{provider.ciudad || '—'}</div>
                                             </td>
                                             <td>
                                                 <div style={{ display: 'flex', gap: '0.4rem' }} onClick={e => e.stopPropagation()}>
-                                                    <button className="btn btn-secondary btn-sm" onClick={() => setSelectedClient(client)}
+                                                    <button className="btn btn-secondary btn-sm" onClick={() => setEditingProvider(provider)}
                                                         style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                        <FileText size={13} /> Ficha
-                                                    </button>
-                                                    <button className="btn btn-secondary btn-sm" onClick={() => exportClientPDF(client, invoices, products, settings)}
-                                                        style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                                        <Printer size={13} /> PDF
+                                                        <Edit3 size={13} /> Editar
                                                     </button>
                                                     <button 
                                                         className="btn btn-secondary btn-sm" 
-                                                        onClick={() => setDeletingClient(client)}
+                                                        onClick={() => setDeletingProvider(provider)}
                                                         style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)' }}
                                                     >
                                                         <Trash2 size={13} /> Borrar
@@ -958,13 +1969,13 @@ export default function Clients() {
                                                 </div>
                                             </td>
                                         </tr>
-                                    );
-                                })}
-                                {sorted.length === 0 && (
-                                    <tr><td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron clientes</td></tr>
-                                )}
-                            </tbody>
-                        </table>
+                                    ))}
+                                    {sortedProviders.length === 0 && (
+                                        <tr><td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No se encontraron proveedores</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        )}
                     </div>
                 </div>
 
@@ -982,8 +1993,16 @@ export default function Clients() {
                             <span>Mostrar:</span>
                             <div className="relative">
                                 <select 
-                                    value={itemsPerPage} 
-                                    onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                                    value={activeTab === 'clientes' ? itemsPerPage : providerItemsPerPage} 
+                                    onChange={e => { 
+                                        if (activeTab === 'clientes') {
+                                            setItemsPerPage(Number(e.target.value)); 
+                                            setCurrentPage(1); 
+                                        } else {
+                                            setProviderItemsPerPage(Number(e.target.value));
+                                            setProviderCurrentPage(1);
+                                        }
+                                    }}
                                     className="input-base cursor-pointer"
                                     style={{ 
                                         appearance: 'none', 
@@ -1004,46 +2023,52 @@ export default function Clients() {
                         <div style={{ width: '1px', height: '16px', background: '#e2e8f0', margin: '0 0.5rem' }}></div>
                         
                         <div>
-                            Mostrando {sorted.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a {Math.min(currentPage * itemsPerPage, sorted.length)} de {sorted.length} registros
+                            {activeTab === 'clientes' ? (
+                                `Mostrando ${sorted.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} a ${Math.min(currentPage * itemsPerPage, sorted.length)} de ${sorted.length} registros`
+                            ) : (
+                                `Mostrando ${sortedProviders.length > 0 ? (providerCurrentPage - 1) * providerItemsPerPage + 1 : 0} a ${Math.min(providerCurrentPage * providerItemsPerPage, sortedProviders.length)} de ${sortedProviders.length} registros`
+                            )}
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                         <button 
                             className="btn btn-secondary btn-sm p-2" 
-                            disabled={currentPage === 1}
-                            onClick={() => setCurrentPage(1)}
+                            disabled={activeTab === 'clientes' ? currentPage === 1 : providerCurrentPage === 1}
+                            onClick={() => activeTab === 'clientes' ? setCurrentPage(1) : setProviderCurrentPage(1)}
                             title="Primera página"
                         >
                             <ChevronsLeft size={16} />
                         </button>
                         <button 
                             className="btn btn-secondary btn-sm p-2" 
-                            disabled={currentPage === 1}
-                            onClick={() => setCurrentPage(prev => prev - 1)}
+                            disabled={activeTab === 'clientes' ? currentPage === 1 : providerCurrentPage === 1}
+                            onClick={() => activeTab === 'clientes' ? setCurrentPage(prev => prev - 1) : setProviderCurrentPage(prev => prev - 1)}
                             title="Página anterior"
                         >
                             <ChevronLeft size={16} />
                         </button>
                         
                         <div className="flex items-center gap-1">
-                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            {Array.from({ length: Math.min(5, activeTab === 'clientes' ? totalPages : providerTotalPages) }, (_, i) => {
+                                const currentT = activeTab === 'clientes' ? totalPages : providerTotalPages;
+                                const currentP = activeTab === 'clientes' ? currentPage : providerCurrentPage;
                                 let pageNum;
-                                if (totalPages <= 5) pageNum = i + 1;
-                                else if (currentPage <= 3) pageNum = i + 1;
-                                else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                                else pageNum = currentPage - 2 + i;
+                                if (currentT <= 5) pageNum = i + 1;
+                                else if (currentP <= 3) pageNum = i + 1;
+                                else if (currentP >= currentT - 2) pageNum = currentT - 4 + i;
+                                else pageNum = currentP - 2 + i;
                                 
                                 return (
                                     <button 
                                         key={pageNum}
-                                        onClick={() => setCurrentPage(pageNum)}
-                                        className={`btn btn-sm ${currentPage === pageNum ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => activeTab === 'clientes' ? setCurrentPage(pageNum) : setProviderCurrentPage(pageNum)}
+                                        className={`btn btn-sm ${(activeTab === 'clientes' ? currentPage : providerCurrentPage) === pageNum ? 'btn-primary' : 'btn-secondary'}`}
                                         style={{ 
                                             minWidth: '32px', 
                                             height: '32px', 
                                             padding: 0,
-                                            boxShadow: currentPage === pageNum ? '0 4px 12px rgba(35, 101, 171, 0.3)' : 'none'
+                                            boxShadow: (activeTab === 'clientes' ? currentPage : providerCurrentPage) === pageNum ? '0 4px 12px rgba(35, 101, 171, 0.3)' : 'none'
                                         }}
                                     >
                                         {pageNum}
@@ -1054,16 +2079,16 @@ export default function Clients() {
 
                         <button 
                             className="btn btn-secondary btn-sm p-2" 
-                            disabled={currentPage === totalPages || totalPages === 0}
-                            onClick={() => setCurrentPage(prev => prev + 1)}
+                            disabled={activeTab === 'clientes' ? (currentPage === totalPages || totalPages === 0) : (providerCurrentPage === providerTotalPages || providerTotalPages === 0)}
+                            onClick={() => activeTab === 'clientes' ? setCurrentPage(prev => prev + 1) : setProviderCurrentPage(prev => prev + 1)}
                             title="Siguiente página"
                         >
                             <ChevronRight size={16} />
                         </button>
                         <button 
                             className="btn btn-secondary btn-sm p-2" 
-                            disabled={currentPage === totalPages || totalPages === 0}
-                            onClick={() => setCurrentPage(totalPages)}
+                            disabled={activeTab === 'clientes' ? (currentPage === totalPages || totalPages === 0) : (providerCurrentPage === providerTotalPages || providerTotalPages === 0)}
+                            onClick={() => activeTab === 'clientes' ? setCurrentPage(totalPages) : setProviderCurrentPage(providerTotalPages)}
                             title="Última página"
                         >
                             <ChevronsRight size={16} />
@@ -1076,6 +2101,21 @@ export default function Clients() {
             {showModal && <ClientModal onSave={handleSaveNew} onClose={() => setShowModal(false)} />}
             {editingClient && <ClientModal initial={editingClient} isEdit onSave={handleSaveEdit} onClose={() => setEditingClient(null)} />}
             {deletingClient && <DeleteClientModal client={deletingClient} onClose={() => setDeletingClient(null)} onConfirm={handleDelete} />}
+
+            {/* Provider Modals */}
+            {showProviderModal && <ProviderModal onSave={handleProviderSaveNew} onClose={() => setShowProviderModal(false)} />}
+            {editingProvider && <ProviderModal initial={editingProvider} isEdit onSave={handleProviderSaveEdit} onClose={() => setEditingProvider(null)} />}
+            {deletingProvider && <DeleteProviderModal provider={deletingProvider} onClose={() => setDeletingProvider(null)} onConfirm={handleProviderDelete} />}
+            {providerForInventory && (
+                <ProviderInventoryModal 
+                    provider={providerForInventory}
+                    products={products}
+                    addProduct={addProduct}
+                    editProduct={editProduct}
+                    deleteProduct={deleteProduct}
+                    onClose={() => setProviderForInventory(null)}
+                />
+            )}
 
             {/* Ficha lateral */}
             {selectedClient && (

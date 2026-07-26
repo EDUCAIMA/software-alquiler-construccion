@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
     X, FileText, DollarSign, Truck, Download, Edit2, CheckCircle, Package, Shield, 
     Activity, RotateCcw, Plus, Printer, Check, CreditCard, Clock, AlertTriangle, Ban,
-    Users
+    Users, Trash2
 } from 'lucide-react';
 import { differenceInDays, format } from 'date-fns';
 import Swal from 'sweetalert2';
@@ -44,7 +44,7 @@ export default function CotDetailPanel({
     onCorteObra, onCorteAction, onTriggerPay, canCreateRem, linkedRems = [], activeRems = [],
     getClient, getObra, onUpdateCot
 }) {
-    const { users, editRemision, products = [], clients = [] } = useAppContext();
+    const { users, editRemision, deleteRemision, products = [], clients = [] } = useAppContext();
     const [activeTab, setActiveTab] = useState('cotizacion');
     const [editingRemisionTarget, setEditingRemisionTarget] = useState(null);
     const handleEditMetodoPago = async () => {
@@ -556,7 +556,34 @@ export default function CotDetailPanel({
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                                     <span style={{ fontSize: '0.68rem', fontWeight: 900, color: remCfg.color, background: remCfg.bg, padding: '4px 10px', borderRadius: 8 }}>{rem.estado}</span>
                                                     <button onClick={() => setEditingRemisionTarget(rem)} title="Editar Remisión" style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: 10, padding: '6px', cursor: 'pointer' }}><Edit2 size={16} /></button>
-                                                    <button onClick={() => onPrintRemision(rem)} style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: 10, padding: '6px', cursor: 'pointer' }}><Printer size={16} /></button>
+                                                    <button onClick={() => onPrintRemision(rem)} title="Imprimir Remisión" style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: 10, padding: '6px', cursor: 'pointer' }}><Printer size={16} /></button>
+                                                    <button 
+                                                        onClick={async () => {
+                                                            const result = await Swal.fire({
+                                                                title: '¿Eliminar Remisión?',
+                                                                text: `¿Está seguro de eliminar la remisión ${rem.id}? Esto devolverá todos sus equipos al inventario disponible.`,
+                                                                icon: 'warning',
+                                                                showCancelButton: true,
+                                                                confirmButtonColor: '#ef4444',
+                                                                cancelButtonColor: '#64748b',
+                                                                confirmButtonText: 'Sí, eliminar',
+                                                                cancelButtonText: 'Cancelar'
+                                                            });
+                                                            if (result.isConfirmed) {
+                                                                await deleteRemision(rem.id);
+                                                                Swal.fire({
+                                                                    title: 'Remisión Eliminada',
+                                                                    text: `La remisión ${rem.id} fue eliminada y los equipos han vuelto al inventario.`,
+                                                                    icon: 'success',
+                                                                    confirmButtonColor: '#2365AB'
+                                                                });
+                                                            }
+                                                        }} 
+                                                        title="Eliminar Remisión (Retornar al inventario)" 
+                                                        style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
                                                 </div>
                                             </div>
 

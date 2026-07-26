@@ -85,6 +85,7 @@ export const AppProvider = ({ children }) => {
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [logs, setLogs] = useState([]);
   const [users, setUsers] = useState([]);
+  const [providers, setProviders] = useState([]);
   const [globalPreload, setGlobalPreload] = useState(null);
   const [settings, setSettings] = useState({ 
     companyName: '', shortName: '', nameComplement: '', nit: '', phone: '', email: '', logo: '', address: '', headerExtra: '' 
@@ -106,7 +107,7 @@ export const AppProvider = ({ children }) => {
     try {
       const fetchSafe = (url, fallback) => api.get(url).catch(e => { console.error(`Error fetching ${url}:`, e); return fallback; });
       
-      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs] = await Promise.all([
+      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs, provs] = await Promise.all([
         fetchSafe('/api/products', []),
         fetchSafe('/api/clients', []),
         fetchSafe('/api/invoices', []),
@@ -120,6 +121,7 @@ export const AppProvider = ({ children }) => {
         fetchSafe('/api/gastos-mantenimiento', []),
         fetchSafe('/api/logs', []),
         fetchSafe('/api/users', []),
+        fetchSafe('/api/providers', []),
       ]);
       
       console.log('API Data loaded:', { products: p.length, clients: c.length, settings: s });
@@ -136,6 +138,7 @@ export const AppProvider = ({ children }) => {
       setGastosMantenimiento(Array.isArray(gm) ? gm : []);
       setLogs(Array.isArray(lgs) ? lgs : []);
       setUsers(Array.isArray(usrs) ? usrs : []);
+      setProviders(Array.isArray(provs) ? provs : []);
       if (s && !s.error) setSettings(s);
     } catch (err) {
       console.error('Error crítico en reloadAll:', err);
@@ -200,6 +203,30 @@ export const AppProvider = ({ children }) => {
     logAction('Cliente Eliminado', clientId, '', 'system');
   };
 
+  // ─── PROVIDERS CRUD ───────────────────────────────────────────────────────
+  const addProvider = async (provider) => {
+    const id = nextId(providers, 'P');
+    const newProvider = { ...provider, id, joined: format(new Date(), 'yyyy-MM-dd') };
+    await api.post('/api/providers', newProvider);
+    await reloadAll();
+    logAction('Proveedor Creado', id, newProvider.name, 'system');
+  };
+
+  const editProvider = async (providerId, updatedData) => {
+    const current = providers.find(p => p.id === providerId);
+    if (!current) return;
+    const updated = { ...current, ...updatedData };
+    await api.put(`/api/providers/${providerId}`, updated);
+    await reloadAll();
+    logAction('Proveedor Editado', providerId, updated.name, 'system');
+  };
+
+  const deleteProvider = async (providerId) => {
+    await api.del(`/api/providers/${providerId}`);
+    await reloadAll();
+    logAction('Proveedor Eliminado', providerId, '', 'system');
+  };
+
   // ── Obra CRUD (embebida en client.obras como JSONB) ─────────────────────
   const addObra = async (clientId, obra) => {
     const current = clients.find(c => c.id === clientId);
@@ -245,6 +272,24 @@ export const AppProvider = ({ children }) => {
     await api.del(`/api/products/${productId}`);
     await reloadAll();
     logAction('Product Deleted', productId, 'System Admin', 'system');
+  };
+
+  const addProductBatch = async (productId, batchData) => {
+    await api.post(`/api/products/${productId}/batches`, batchData);
+    await reloadAll();
+    logAction('Lote de Producto Creado', `ID: ${productId}`, 'System Admin', 'system');
+  };
+
+  const editProductBatch = async (productId, batchId, batchData) => {
+    await api.put(`/api/products/${productId}/batches/${batchId}`, batchData);
+    await reloadAll();
+    logAction('Lote de Producto Editado', `ID: ${productId}, Lote: ${batchId}`, 'System Admin', 'system');
+  };
+
+  const deleteProductBatch = async (productId, batchId) => {
+    await api.del(`/api/products/${productId}/batches/${batchId}`);
+    await reloadAll();
+    logAction('Lote de Producto Eliminado', `ID: ${productId}, Lote: ${batchId}`, 'System Admin', 'system');
   };
 
   const darDeBajaProduct = async (productId, motivo) => {
@@ -619,6 +664,48 @@ export const AppProvider = ({ children }) => {
   const editRemision = async (remId, data) => {
     const current = remisiones.find(r => r.id === remId);
     if (!current) return;
+
+    // Si se modifican o eliminan ítems de la remisión, ajustar el inventario por la diferencia
+    if (data.items && Array.isArray(data.items)) {
+      const oldPendingMap = {};
+      (current.items || []).forEach(item => {
+        if (item.productId) {
+          const pendiente = Math.max(0, (Number(item.cantidad) || 0) - (Number(item.cantidadDevuelta) || 0));
+          oldPendingMap[item.productId] = (oldPendingMap[item.productId] || 0) + pendiente;
+        }
+      });
+
+      const newPendingMap = {};
+      data.items.forEach(item => {
+        if (item.productId) {
+          const pendiente = Math.max(0, (Number(item.cantidad) || 0) - (Number(item.cantidadDevuelta) || 0));
+          newPendingMap[item.productId] = (newPendingMap[item.productId] || 0) + pendiente;
+        }
+      });
+
+      const affectedProdIds = new Set([...Object.keys(oldPendingMap), ...Object.keys(newPendingMap)]);
+
+      for (const prodId of affectedProdIds) {
+        const oldPending = oldPendingMap[prodId] || 0;
+        const newPending = newPendingMap[prodId] || 0;
+        const delta = oldPending - newPending; // Positivo: ítems eliminados/reducidos -> retornar a inventario. Negativo: ítems añadidos -> reservar stock.
+
+        if (delta !== 0) {
+          const prod = products.find(p => p.id === prodId);
+          if (prod) {
+            const currentAvailable = Number(prod.availableStock) || 0;
+            const total = Number(prod.totalStock) || (currentAvailable + Math.max(0, delta));
+            const newAvailable = Math.max(0, Math.min(total, currentAvailable + delta));
+
+            await api.put(`/api/products/${prod.id}`, {
+              ...prod,
+              availableStock: newAvailable
+            });
+          }
+        }
+      }
+    }
+
     await api.put(`/api/remisiones/${remId}`, { ...current, ...data });
     await reloadAll();
   };
@@ -706,32 +793,22 @@ export const AppProvider = ({ children }) => {
   };
 
   const deleteRemision = async (remId) => {
-    const rem = remisiones.find(r => r.id === remId);
-    if (!rem) return;
+    try {
+      const rem = remisiones.find(r => String(r.id).trim().toUpperCase() === String(remId).trim().toUpperCase());
+      const clientId = rem?.clientId;
 
-    // 1. Reintegrar stock de lo que NO se ha devuelto aún
-    for (const item of rem.items) {
-      const prod = products.find(p => p.id === item.productId);
-      const pendiente = item.cantidad - (item.cantidadDevuelta || 0);
-      if (prod && pendiente > 0) {
-        await api.put(`/api/products/${prod.id}`, { 
-          ...prod, 
-          availableStock: Math.min(prod.totalStock, prod.availableStock + pendiente) 
-        });
-      }
+      // 1. Eliminar la remisión del backend (el servidor realiza el reintegro de inventario en PostgreSQL)
+      await api.del(`/api/remisiones/${remId}`);
+
+      // 2. Recargar los datos actualizados del servidor
+      await reloadAll();
+
+      const client = clients.find(c => String(c.id) === String(clientId));
+      logAction('Remisión Eliminada', `${remId} — Reintegrados equipos al inventario`, client?.name || 'N/A', 'system');
+    } catch (error) {
+      console.error('Error en deleteRemision:', error);
+      throw error;
     }
-
-    // 2. Si venía de una factura, intentar desmarcarla
-    const potentialInvId = rem.invoiceId || (typeof rem.id === 'string' ? rem.id.replace('REM-', 'INV-') : null);
-    const inv = invoices.find(i => i.id === potentialInvId);
-    if (inv) {
-      await api.put(`/api/invoices/${inv.id}`, { ...inv, remisionCreada: false });
-    }
-
-    // 3. Eliminar
-    await api.del(`/api/remisiones/${remId}`);
-    await reloadAll();
-    logAction('Remisión Eliminada', remId, '', 'system');
   };
 
   const cancelRemision = async (remId) => {
@@ -739,22 +816,27 @@ export const AppProvider = ({ children }) => {
     if (!rem || rem.estado === 'Cancelada') return;
 
     // 1. Reintegrar stock de lo pendiente
-    for (const item of rem.items) {
+    for (const item of (rem.items || [])) {
       const prod = products.find(p => p.id === item.productId);
-      const pendiente = item.cantidad - (item.cantidadDevuelta || 0);
+      const pendiente = Math.max(0, (Number(item.cantidad) || 0) - (Number(item.cantidadDevuelta) || 0));
       if (prod && pendiente > 0) {
+        const currentAvailable = Number(prod.availableStock) || 0;
+        const total = Number(prod.totalStock) || (currentAvailable + pendiente);
         await api.put(`/api/products/${prod.id}`, { 
           ...prod, 
-          availableStock: Math.min(prod.totalStock, prod.availableStock + pendiente) 
+          availableStock: Math.min(total, currentAvailable + pendiente) 
         });
       }
     }
 
     // 2. Desvincular de la factura (permitir re-remisionar)
-    const potentialInvId = rem.invoiceId || (typeof rem.id === 'string' ? rem.id.replace('REM-', 'F-') : null);
-    const inv = invoices.find(i => i.id === potentialInvId);
-    if (inv) {
-      await api.put(`/api/invoices/${inv.id}`, { ...inv, remisionCreada: false });
+    const linkedInv = invoices.find(i => 
+      i.id === rem.facturaId || 
+      i.manualRemisionId === remId || 
+      i.id === (typeof rem.id === 'string' ? rem.id.replace('REM-', 'F-') : '')
+    );
+    if (linkedInv) {
+      await api.put(`/api/invoices/${linkedInv.id}`, { ...linkedInv, remisionCreada: false });
     }
 
     // 3. Marcar como Cancelada
@@ -914,8 +996,10 @@ export const AppProvider = ({ children }) => {
       currentUser, login, logout, canViewDashboard, isAdmin, isGerente,
       // Clients
       clients, setClients, addClient, editClient, deleteClient, addObra, editObra,
+      // Providers
+      providers, setProviders, addProvider, editProvider, deleteProvider,
       // Products
-      products, setProducts, addProduct, editProduct, returnProduct, deleteProduct, darDeBajaProduct,
+      products, setProducts, addProduct, editProduct, returnProduct, deleteProduct, darDeBajaProduct, addProductBatch, editProductBatch, deleteProductBatch,
       // Invoices
       invoices, setInvoices, createInvoice, payInvoice, addCorteObra, updateCorteStatus, createInvoiceFromCotizacion, marcarRemisionCreada, deleteInvoice,
       // Other

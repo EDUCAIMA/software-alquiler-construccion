@@ -7,6 +7,11 @@ import {
     User, MapPin
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { format } from 'date-fns';
+import { applyStandardLayout } from './pdfTheme';
+import * as echarts from 'echarts';
 
 
 // ─── DropZone – definido FUERA del componente para evitar re-montaje ─────────
@@ -53,16 +58,43 @@ function DropZone({ state, setter, fileInputRef }) {
 
 // ─── LifeFields – definido FUERA del componente para evitar re-montaje ────────
 function LifeFields({ state, setter }) {
+    const isTerceros = state.tipoPropiedad === 'Terceros';
     return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+            <div className="input-group" style={{ margin: 0, gridColumn: 'span 2' }}>
+                <label className="input-label" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Origen / Propiedad del Equipo *</label>
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.3rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: !isTerceros ? '#38bdf8' : 'var(--text-muted)', background: !isTerceros ? 'rgba(35, 101, 171, 0.15)' : 'rgba(255,255,255,0.03)', padding: '0.5rem 0.85rem', borderRadius: 8, border: !isTerceros ? '1px solid #2365AB' : '1px solid var(--surface-border)' }}>
+                        <input 
+                            type="radio" 
+                            name="tipoPropiedad" 
+                            value="Propio" 
+                            checked={!isTerceros} 
+                            onChange={() => setter(prev => ({ ...prev, tipoPropiedad: 'Propio' }))} 
+                        />
+                        Propio (Bodega)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, color: isTerceros ? '#fbbf24' : 'var(--text-muted)', background: isTerceros ? 'rgba(217, 119, 6, 0.15)' : 'rgba(255,255,255,0.03)', padding: '0.5rem 0.85rem', borderRadius: 8, border: isTerceros ? '1px solid #d97706' : '1px solid var(--surface-border)' }}>
+                        <input 
+                            type="radio" 
+                            name="tipoPropiedad" 
+                            value="Terceros" 
+                            checked={isTerceros} 
+                            onChange={() => setter(prev => ({ ...prev, tipoPropiedad: 'Terceros' }))} 
+                        />
+                        Terceros (Subalquilado / Prestado)
+                    </label>
+                </div>
+            </div>
+
             <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Proveedor</label>
+                <label className="input-label">{isTerceros ? 'Proveedor / Empresa Aliada *' : 'Proveedor'}</label>
                 <input type="text" className="input-base" value={state.proveedor || ''}
                     onChange={e => setter(prev => ({ ...prev, proveedor: e.target.value }))}
-                    placeholder="Ej. Ferrasa S.A." />
+                    placeholder={isTerceros ? 'Ej. Alquileres & Equipos SAS' : 'Ej. Ferrasa S.A.'} />
             </div>
             <div className="input-group" style={{ margin: 0 }}>
-                <label className="input-label">Fecha de Compra</label>
+                <label className="input-label">Fecha de Compra / Ingreso</label>
                 <input type="date" className="input-base" value={state.fechaCompra || ''}
                     onChange={e => setter(prev => ({ ...prev, fechaCompra: e.target.value }))} />
             </div>
@@ -351,6 +383,7 @@ function DeleteModal({ product, onClose, onConfirm }) {
 
 // ─── Modal: Equipos en Campo (Informe de Préstamo) ───────────────────────────
 function FieldInventoryModal({ onClose, products, remisiones, clients }) {
+    const { settings } = useAppContext();
     const [q, setQ] = useState('');
 
     const equipmentInField = useMemo(() => {
@@ -365,11 +398,23 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
                     const pend = item.cantidad - (item.cantidadDevuelta || 0);
                     if (pend > 0) {
                         const prod = products.find(p => p.id === item.productId);
+                        
+                        // Excluir ítems clasificados como servicio o cobro único (no generan devolución)
+                        const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                       (item.tipoCobro || '').toLowerCase().includes('única') ||
+                                       (item.category || '').toLowerCase().includes('servicio') ||
+                                       (prod?.category || '').toLowerCase().includes('servicio') ||
+                                       (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                       (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                        if (isServ) return;
+
                         report.push({
                             id: r.id,
                             fecha: r.fecha,
                             productId: item.productId,
                             productName: prod?.name || item.productId,
+                            tipoPropiedad: prod?.tipoPropiedad || 'Propio',
+                            proveedor: prod?.proveedor || '',
                             clientId: r.clientId,
                             clientName: client?.name || 'N/A',
                             obraName: obra?.nombre || 'N/A',
@@ -384,15 +429,207 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
         return report.filter(r => 
             r.productName.toLowerCase().includes(lowQ) || 
             r.clientName.toLowerCase().includes(lowQ) || 
-            r.obraName.toLowerCase().includes(lowQ)
+            r.obraName.toLowerCase().includes(lowQ) ||
+            r.tipoPropiedad.toLowerCase().includes(lowQ) ||
+            (r.proveedor || '').toLowerCase().includes(lowQ)
         );
     }, [remisiones, products, clients, q]);
 
+    const handleExportPDF = () => {
+        // --- 1. Calcular Datos del Gráfico por Categoría ---
+        const categoriesList = ['Maquinaria', 'Herramientas', 'Estructuras', 'Otros'];
+        
+        const getStatsForCategory = (catName) => {
+            let cats = [];
+            if (catName === 'Maquinaria') {
+                cats = ['heavy machinery', 'machinery', 'maquinaria pesada'];
+            } else if (catName === 'Herramientas') {
+                cats = ['power tools', 'herramientas electricas', 'herramientas eléctricas'];
+            } else if (catName === 'Estructuras') {
+                cats = ['structures', 'estructuras y andamios'];
+            }
+
+            const total = products
+                .filter(p => {
+                    const pCat = (p.category || '').toLowerCase();
+                    if (catName === 'Otros') {
+                        return !['heavy machinery', 'machinery', 'maquinaria pesada', 'power tools', 'herramientas electricas', 'herramientas eléctricas', 'structures', 'estructuras y andamios'].includes(pCat);
+                    }
+                    return cats.includes(pCat);
+                })
+                .reduce((sum, p) => sum + (p.totalStock || 0), 0);
+
+            const inField = equipmentInField
+                .filter(item => {
+                    const prod = products.find(p => p.id === item.productId);
+                    const pCat = (prod?.category || '').toLowerCase();
+                    if (catName === 'Otros') {
+                        return !['heavy machinery', 'machinery', 'maquinaria pesada', 'power tools', 'herramientas electricas', 'herramientas eléctricas', 'structures', 'estructuras y andamios'].includes(pCat);
+                    }
+                    return cats.includes(pCat);
+                })
+                .reduce((sum, item) => sum + (item.cantidad || 0), 0);
+
+            return { total, inField };
+        };
+
+        const stats = categoriesList.map(cat => ({
+            name: cat,
+            ...getStatsForCategory(cat)
+        }));
+
+        // --- 2. Renderizar Gráfico de ECharts en un contenedor temporal ---
+        const chartDiv = document.createElement('div');
+        chartDiv.style.width = '800px';
+        chartDiv.style.height = '420px';
+        chartDiv.style.position = 'absolute';
+        chartDiv.style.left = '-9999px';
+        document.body.appendChild(chartDiv);
+
+        const chart = echarts.init(chartDiv);
+        const chartOption = {
+            animation: false,
+            title: {
+                text: 'Equipos en Campo vs. Inventario Total',
+                subtext: 'Distribución por Categorías principales',
+                textStyle: { fontSize: 15, fontWeight: 'bold', color: '#1e293b' },
+                subtextStyle: { fontSize: 10, color: '#64748b' }
+            },
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow' }
+            },
+            legend: {
+                data: ['Inventario Total', 'Equipos en Campo'],
+                left: 'center',
+                bottom: 5,
+                textStyle: { fontSize: 10, color: '#475569', fontWeight: 600 }
+            },
+            grid: {
+                top: '22%',
+                left: '3%',
+                right: '4%',
+                bottom: '15%',
+                containLabel: true
+            },
+            xAxis: [
+                {
+                    type: 'value',
+                    name: 'Inventario Total',
+                    nameTextStyle: { fontSize: 8, color: '#64748b', fontWeight: 600 },
+                    position: 'bottom',
+                    axisLabel: { fontSize: 9, color: '#475569' },
+                    splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } }
+                },
+                {
+                    type: 'value',
+                    name: 'Equipos en Campo',
+                    nameTextStyle: { fontSize: 8, color: '#64748b', fontWeight: 600 },
+                    position: 'top',
+                    axisLabel: { fontSize: 9, color: '#475569' },
+                    splitLine: { show: false }
+                }
+            ],
+            yAxis: {
+                type: 'category',
+                data: ['Otros', 'Estructuras', 'Herramientas', 'Maquinaria'],
+                axisLabel: { fontSize: 10, fontWeight: 'bold', color: '#1e293b' },
+                axisLine: { lineStyle: { color: '#cbd5e1' } }
+            },
+            series: [
+                {
+                    name: 'Inventario Total',
+                    type: 'bar',
+                    xAxisIndex: 0,
+                    itemStyle: { color: '#B6D634', borderRadius: [0, 3, 3, 0] },
+                    data: [stats[3].total, stats[2].total, stats[1].total, stats[0].total]
+                },
+                {
+                    name: 'Equipos en Campo',
+                    type: 'bar',
+                    xAxisIndex: 1,
+                    itemStyle: { color: '#5070DD', borderRadius: [0, 3, 3, 0] },
+                    data: [stats[3].inField, stats[2].inField, stats[1].inField, stats[0].inField]
+                }
+            ]
+        };
+        chart.setOption(chartOption);
+
+        const chartImage = chart.getDataURL({
+            type: 'png',
+            pixelRatio: 2,
+            backgroundColor: '#ffffff'
+        });
+
+        chart.dispose();
+        document.body.removeChild(chartDiv);
+
+        // --- 3. Generar Documento PDF ---
+        const doc = new jsPDF({ orientation: 'landscape', format: 'letter', unit: 'mm' });
+        const W = doc.internal.pageSize.getWidth();
+        const H = doc.internal.pageSize.getHeight();
+        const margin = 10;
+
+        let y = applyStandardLayout(doc, 'Reporte de Equipos en Campo', settings);
+
+        const tableData = equipmentInField.map(row => [
+            row.productName,
+            row.clientName,
+            row.obraName,
+            row.tipoPropiedad === 'Terceros' ? `Terceros${row.proveedor ? ` (${row.proveedor})` : ''}` : 'Propio',
+            row.cantidad.toString(),
+            row.fecha,
+            row.id
+        ]);
+
+        const totalCant = equipmentInField.reduce((acc, r) => acc + (Number(r.cantidad) || 0), 0);
+
+        autoTable(doc, {
+            startY: y + 2,
+            margin: { left: margin, right: margin },
+            headStyles: { fillColor: [35, 101, 171], textColor: 255, fontStyle: 'bold', fontSize: 8.5 },
+            head: [['Equipo', 'Cliente', 'Obra', 'Propiedad', 'Cant.', 'F. Despacho', 'Remisión']],
+            body: tableData,
+            bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            columnStyles: {
+                0: { cellWidth: 60 },
+                1: { cellWidth: 50 },
+                2: { cellWidth: 45 },
+                3: { cellWidth: 45 },
+                4: { cellWidth: 20, halign: 'center' },
+                5: { cellWidth: 20 },
+                6: { cellWidth: 19.4 }
+            },
+            foot: [['', '', '', 'TOTAL EQUIPOS', totalCant.toString(), '', '']],
+            footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 8.5 }
+        });
+
+        // --- 4. Agregar Nueva Página con Gráfico Resumen ---
+        doc.addPage();
+        let chartPageY = applyStandardLayout(doc, 'Resumen Gráfico: Equipos en Campo', settings);
+        doc.addImage(chartImage, 'PNG', 20, chartPageY + 12, 239.4, 110);
+
+        // --- 5. Pie de Página Profesional en todas las páginas ---
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            doc.setFontSize(7.5);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'normal');
+            const footerText = `Página ${i} de ${pageCount}  |  Generado por Sistema de Gestión ${settings?.shortName || 'CIELO'} el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
+            doc.text(footerText, W / 2, H - 8, { align: 'center' });
+        }
+
+        const fechaActual = format(new Date(), 'dd/MM/yyyy');
+        doc.save(`Equipos_en_Campo_${settings?.shortName || 'CIELO'}_${fechaActual.replace(/\//g, '-')}.pdf`);
+    };
+
     return (
         <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: '95%', width: 1100, padding: 0, overflow: 'hidden', height: '90vh', display: 'flex', flexDirection: 'column', borderRadius: 16 }}>
+            <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: '98%', width: 1400, padding: 0, overflow: 'hidden', height: '90vh', display: 'flex', flexDirection: 'column', borderRadius: 16 }}>
                 {/* Header */}
-                <div style={{ background: 'linear-gradient(135deg, #2365AB, #154272)', padding: '1.5rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ background: 'linear-gradient(135deg, #104166, #2365AB)', padding: '1.5rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         <h3 style={{ margin: 0, color: 'white', fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <ArrowDownCircle size={22} /> Equipos en Campo
@@ -401,7 +638,29 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
                             Vista detallada de qué equipos tienen los clientes actualmente
                         </p>
                     </div>
-                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <button 
+                            onClick={handleExportPDF} 
+                            style={{ 
+                                background: 'rgba(255,255,255,0.15)', 
+                                color: 'white', 
+                                border: '1px solid rgba(255,255,255,0.3)', 
+                                padding: '0.45rem 0.9rem', 
+                                borderRadius: 8, 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '0.4rem', 
+                                fontWeight: 700, 
+                                fontSize: '0.8rem', 
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                            title="Descargar reporte en PDF"
+                        >
+                            <Download size={16} /> Descargar PDF
+                        </button>
+                        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
+                    </div>
                 </div>
 
                 {/* Filters */}
@@ -411,7 +670,7 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
                         <input 
                             value={q} 
                             onChange={e => setQ(e.target.value)} 
-                            placeholder="Buscar por equipo, cliente u obra..."
+                            placeholder="Buscar por equipo, propiedad, proveedor, cliente u obra..."
                             style={{ width: '100%', padding: '0.65rem 1rem 0.65rem 2.5rem', borderRadius: 10, border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.9rem' }}
                         />
                     </div>
@@ -427,40 +686,38 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
                     ) : (
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
-                                <tr style={{ borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
-                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Equipo</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Cliente</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Obra</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', textAlign: 'center' }}>Cant.</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>F. Despacho</th>
-                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase' }}>Remisión</th>
+                                <tr style={{ background: '#2365AB', textAlign: 'left' }}>
+                                    <th style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700, borderTopLeftRadius: '8px', borderBottomLeftRadius: '8px' }}>Equipo</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700 }}>Cliente</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700 }}>Obra</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700 }}>Propiedad</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700, textAlign: 'center' }}>Cant.</th>
+                                    <th style={{ padding: '0.75rem 0.5rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700 }}>F. Despacho</th>
+                                    <th style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700, borderTopRightRadius: '8px', borderBottomRightRadius: '8px' }}>Remisión</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {equipmentInField.map((row, idx) => (
                                     <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                        <td style={{ padding: '1rem 0.5rem' }}>
-                                            <div style={{ fontWeight: 700, color: '#104166', fontSize: '0.9rem' }}>{row.productName}</div>
+                                        <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#334155' }}>
+                                            {row.productName}
                                         </td>
-                                        <td style={{ padding: '1rem 0.5rem' }}>
-                                            <div style={{ fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
-                                                <User size={12} color="#2365AB" /> {row.clientName}
-                                            </div>
+                                        <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#334155' }}>
+                                            {row.clientName}
                                         </td>
-                                        <td style={{ padding: '1rem 0.5rem' }}>
-                                            <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                {row.obraName}
-                                            </div>
+                                        <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#334155' }}>
+                                            {row.obraName}
                                         </td>
-                                        <td style={{ padding: '1rem 0.5rem', textAlign: 'center' }}>
-                                            <span style={{ color: '#104166', fontWeight: 800, fontSize: '0.9rem' }}>
-                                                {row.cantidad}
-                                            </span>
+                                        <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#334155' }}>
+                                            {row.tipoPropiedad === 'Terceros' ? `Terceros${row.proveedor ? ` (${row.proveedor})` : ''}` : 'Propio'}
                                         </td>
-                                        <td style={{ padding: '1rem 0.5rem', fontSize: '0.85rem', color: '#64748b' }}>
+                                        <td style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontSize: '0.85rem', color: '#334155' }}>
+                                            {row.cantidad}
+                                        </td>
+                                        <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#334155' }}>
                                             {row.fecha}
                                         </td>
-                                        <td style={{ padding: '1rem 0.5rem', fontFamily: 'monospace', fontWeight: 600, color: '#2365AB', fontSize: '0.85rem' }}>
+                                        <td style={{ padding: '0.75rem 0.5rem', fontSize: '0.85rem', color: '#334155' }}>
                                             {row.id}
                                         </td>
                                     </tr>
@@ -506,6 +763,7 @@ export default function Products() {
         };
     }, []);
 
+    const [activeTab, setActiveTab] = useState('Todos'); // 'Todos' | 'Propio' | 'Terceros'
     const [search, setSearch] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
 
@@ -522,7 +780,10 @@ export default function Products() {
     const sorted = useMemo(() => {
         const filtered = products.filter(p => {
             const q = search.toLowerCase();
-            return (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q);
+            const matchesQuery = (p.name || '').toLowerCase().includes(q) || (p.category || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q) || (p.proveedor || '').toLowerCase().includes(q);
+            const isTerceros = p.tipoPropiedad === 'Terceros';
+            const matchesTab = activeTab === 'Todos' ? true : (activeTab === 'Propio' ? !isTerceros : isTerceros);
+            return matchesQuery && matchesTab;
         });
 
         if (sortConfig.key) {
@@ -551,7 +812,7 @@ export default function Products() {
             });
         }
         return filtered;
-    }, [products, search, sortConfig]);
+    }, [products, search, sortConfig, activeTab]);
 
     const paginatedProducts = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
@@ -567,7 +828,7 @@ export default function Products() {
         if (newProduct.name) {
             addProduct({ ...newProduct, value: Number(newProduct.value), totalStock: Number(newProduct.totalStock), image: newProduct.image || 'https://placehold.co/150x150/e2e8f0/475569?text=Equipo' });
             setShowAddModal(false);
-            setNewProduct({ name: '', category: '', value: '', tipoCobro: 'Día', esquemaCobro: 'Calendario', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '' });
+            setNewProduct({ name: '', category: '', value: '', tipoCobro: 'Día', esquemaCobro: 'Calendario', image: '', totalStock: 1, proveedor: '', fechaCompra: '', costoAdquisicion: '', proximoMantenimiento: '', tipoPropiedad: 'Propio' });
         }
     };
 
@@ -580,7 +841,68 @@ export default function Products() {
 
     return (
         <>
-            {/* Filters */}
+            {/* Submenú de Clasificación de Inventario */}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                <button
+                    onClick={() => { setActiveTab('Todos'); setCurrentPage(1); }}
+                    style={{
+                        padding: '0.45rem 0.9rem',
+                        borderRadius: 8,
+                        border: activeTab === 'Todos' ? '1px solid #2365AB' : '1px solid #cbd5e1',
+                        background: activeTab === 'Todos' ? '#2365AB' : 'white',
+                        color: activeTab === 'Todos' ? '#ffffff' : '#475569',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}
+                >
+                    Todos ({products.length})
+                </button>
+
+                <button
+                    onClick={() => { setActiveTab('Propio'); setCurrentPage(1); }}
+                    style={{
+                        padding: '0.45rem 0.9rem',
+                        borderRadius: 8,
+                        border: activeTab === 'Propio' ? '1px solid #2365AB' : '1px solid #cbd5e1',
+                        background: activeTab === 'Propio' ? 'rgba(35, 101, 171, 0.12)' : 'white',
+                        color: activeTab === 'Propio' ? '#2365AB' : '#475569',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}
+                >
+                    Inventario Propio ({products.filter(p => p.tipoPropiedad !== 'Terceros').length})
+                </button>
+
+                <button
+                    onClick={() => { setActiveTab('Terceros'); setCurrentPage(1); }}
+                    style={{
+                        padding: '0.45rem 0.9rem',
+                        borderRadius: 8,
+                        border: activeTab === 'Terceros' ? '1px solid #d97706' : '1px solid #cbd5e1',
+                        background: activeTab === 'Terceros' ? 'rgba(217, 119, 6, 0.12)' : 'white',
+                        color: activeTab === 'Terceros' ? '#b45309' : '#475569',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}
+                >
+                    Inventario de Terceros ({products.filter(p => p.tipoPropiedad === 'Terceros').length})
+                </button>
+            </div>
 
             {/* Filters */}
             <div className="glass-panel py-4 px-6 mb-6" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
@@ -589,7 +911,7 @@ export default function Products() {
                     <input 
                         value={search} 
                         onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} 
-                        placeholder="Buscar por nombre, categoría o ID…" 
+                        placeholder="Buscar por nombre, categoría, proveedor o ID…" 
                         style={{ padding: '0.55rem 0.75rem', paddingLeft: '2rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', width: '100%', boxSizing: 'border-box' }} 
                     />
                 </div>
@@ -605,6 +927,7 @@ export default function Products() {
                                     { label: 'Cod.', key: 'id', w: '60px' },
                                     { label: 'Imagen', key: null, w: '70px' },
                                     { label: 'Nombre', key: 'name', w: 'auto' },
+                                    { label: 'Propiedad', key: 'tipoPropiedad', w: '140px' },
                                     { label: 'Stock', key: 'totalStock', w: '90px' },
                                     { label: 'Valor', key: 'value', w: '130px' },
                                     { label: 'Días calendario facturables', key: 'esquemaCobro', w: '200px' },
@@ -647,11 +970,11 @@ export default function Products() {
                                         </td>
                                         <td><img src={p.image} alt={p.name} style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--surface-border)' }} /></td>
                                         <td 
-                                            style={{ fontWeight: 600, cursor: 'pointer' }}
+                                            style={{ fontWeight: 600, cursor: 'pointer', color: 'var(--text-primary)' }}
                                             onClick={() => setHojaProduct(p)}
                                             className="hover:text-primary transition-colors"
                                         >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>
                                                 {p.name}
                                             </div>
                                             {blocked && (
@@ -664,6 +987,11 @@ export default function Products() {
                                                     <ArrowDownCircle size={9} /> BAJA
                                                 </span>
                                             )}
+                                        </td>
+                                        <td>
+                                            <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                                                {p.tipoPropiedad === 'Terceros' ? `Terceros${p.proveedor ? ` (${p.proveedor})` : ''}` : 'Propio'}
+                                            </div>
                                         </td>
                                         <td>
                                             <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>

@@ -21,6 +21,121 @@ const calculateBillableDays = (start, end, scheme) => {
     } catch (e) { return 1; }
 };
 
+const getEasterSunday = (year) => {
+    const a = year % 19;
+    const b = Math.floor(year / 100);
+    const c = year % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31);
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(year, month - 1, day);
+};
+
+const getColombianHolidaysMap = (year) => {
+    const holidays = new Set();
+    
+    const formatDate = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+
+    const addHoliday = (d) => {
+        holidays.add(formatDate(d));
+    };
+
+    const moveToMonday = (d) => {
+        const day = d.getDay();
+        if (day === 1) return d;
+        const result = new Date(d);
+        result.setDate(d.getDate() + (day === 0 ? 1 : 8 - day));
+        return result;
+    };
+
+    // Fixed holidays
+    addHoliday(new Date(year, 0, 1));   // Jan 1
+    addHoliday(new Date(year, 4, 1));   // May 1
+    addHoliday(new Date(year, 6, 20));  // Jul 20
+    addHoliday(new Date(year, 7, 7));   // Aug 7
+    addHoliday(new Date(year, 11, 8));  // Dec 8
+    addHoliday(new Date(year, 11, 25)); // Dec 25
+
+    // Emiliani holidays
+    addHoliday(moveToMonday(new Date(year, 0, 6)));   // Jan 6
+    addHoliday(moveToMonday(new Date(year, 2, 19)));  // Mar 19
+    addHoliday(moveToMonday(new Date(year, 5, 29)));  // Jun 29
+    addHoliday(moveToMonday(new Date(year, 7, 15)));  // Aug 15
+    addHoliday(moveToMonday(new Date(year, 9, 12)));  // Oct 12
+    addHoliday(moveToMonday(new Date(year, 10, 1)));  // Nov 1
+    addHoliday(moveToMonday(new Date(year, 10, 11))); // Nov 11
+
+    // Easter holidays
+    const easter = getEasterSunday(year);
+    
+    const juevesSanto = new Date(easter);
+    juevesSanto.setDate(easter.getDate() - 3);
+    addHoliday(juevesSanto);
+    
+    const viernesSanto = new Date(easter);
+    viernesSanto.setDate(easter.getDate() - 2);
+    addHoliday(viernesSanto);
+    
+    const ascension = new Date(easter);
+    ascension.setDate(easter.getDate() + 43);
+    addHoliday(ascension);
+    
+    const corpus = new Date(easter);
+    corpus.setDate(easter.getDate() + 64);
+    addHoliday(corpus);
+    
+    const corazon = new Date(easter);
+    corazon.setDate(easter.getDate() + 71);
+    addHoliday(corazon);
+
+    return holidays;
+};
+
+const countColombianHolidays = (start, end, scheme) => {
+    try {
+        const days = eachDayOfInterval({ start, end });
+        let count = 0;
+        const holidaysCache = {};
+        const getHolidaysForYear = (y) => {
+            if (!holidaysCache[y]) {
+                holidaysCache[y] = getColombianHolidaysMap(y);
+            }
+            return holidaysCache[y];
+        };
+
+        days.forEach(d => {
+            let isBilled = true;
+            if (isSunday(d)) isBilled = false;
+            else if (scheme === 'Lunes-Viernes' && isSaturday(d)) isBilled = false;
+            
+            if (isBilled) {
+                const year = d.getFullYear();
+                const holidays = getHolidaysForYear(year);
+                const dateStr = format(d, 'yyyy-MM-dd');
+                if (holidays.has(dateStr)) {
+                    count++;
+                }
+            }
+        });
+        return count;
+    } catch (e) {
+        return 0;
+    }
+};
+
 function generateCortePDF(resultado, client, obra, settings) {
     const doc = new jsPDF();
     const pageW = doc.internal.pageSize.getWidth();
@@ -171,6 +286,10 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     const [generado, setGenerado] = useState(false);
     const [saved, setSaved] = useState(false);
     const [selectedRemIds, setSelectedRemIds] = useState([]);
+    
+    const [customDays, setCustomDays] = useState({}); // key -> number
+    const [customDates, setCustomDates] = useState({}); // key -> string YYYY-MM-DD
+    const [customFestivos, setCustomFestivos] = useState({}); // key -> number
 
     const selectedClient = clients.find(c => c.id === clientId);
     const obrasDisp = selectedClient?.obras || [];
@@ -185,6 +304,13 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             r.estado !== 'Cancelada'
         ).sort((a, b) => b.fecha.localeCompare(a.fecha));
     }, [clientId, obraId, remisiones]);
+
+    // Reset when base client/obra/dates change
+    React.useEffect(() => {
+        setCustomDays({});
+        setCustomDates({});
+        setCustomFestivos({});
+    }, [clientId, obraId, fechaInicio, fechaCorte]);
 
     // Update selection when filters change
     React.useEffect(() => {
@@ -225,7 +351,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                 if (item.cantidad > 0) {
                     const equipStart = rDate; 
                     const scheme = prod?.esquemaCobro || 'Calendario';
-                    const tarifa = prod?.value || 0;
+                    const tarifa = Number((item.tarifaDia !== undefined && item.tarifaDia !== null) ? item.tarifaDia : ((item.price !== undefined && item.price !== null) ? item.price : (prod?.value || 0)));
 
                     const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') || 
                                    (item.tipoCobro || '').toLowerCase().includes('única') ||
@@ -243,74 +369,138 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         });
 
                         Object.entries(devMap).forEach(([fecha, cantidad]) => {
-                            const dDate = parseUTCDate(fecha);
+                            const lineKey = `${rem.id}-${item.productId}-dev-${fecha}`;
+                            const effectiveDevFecha = customDates[lineKey] || fecha;
+                            const dDate = parseUTCDate(effectiveDevFecha);
                             const effectiveStart = equipStart > fStart ? equipStart : fStart;
                             const effectiveEnd = dDate < fEnd ? dDate : fEnd;
 
+                            let dDays = 0;
                             if (effectiveStart <= effectiveEnd) {
-                                const dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme);
-                                const sub = cantidad * dDays * tarifa;
-                                subtotalTotal += sub;
-                                lineas.push({
-                                    remId: rem.id,
-                                    remFecha: rem.fecha,
-                                    equipo: `${prod?.name || item.productId} (Dev: ${fecha})`,
-                                    cantidad: cantidad,
-                                    dias: dDays,
-                                    tarifaDia: tarifa,
-                                    subtotal: sub,
-                                    estado: rem.estado,
-                                    esquema: isServ ? 'Cobro Único' : scheme,
-                                });
+                                dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme);
                             }
+
+                            const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
+                            const clampedDays = Math.min(dDays, Math.max(0, finalDays));
+                            
+                            const autoFestivos = isServ ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme);
+                            const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
+                            const clampedFestivos = Math.min(clampedDays, Math.max(0, festivos));
+                            const netDays = clampedDays - clampedFestivos;
+
+                            const sub = cantidad * netDays * tarifa;
+                            subtotalTotal += sub;
+                            lineas.push({
+                                key: lineKey,
+                                productId: item.productId,
+                                type: 'dev',
+                                devFecha: effectiveDevFecha,
+                                defaultDevFecha: fecha,
+                                remId: rem.id,
+                                remFecha: rem.fecha,
+                                equipo: `${prod?.name || item.productId} (Dev: ${effectiveDevFecha})`,
+                                cantidad: cantidad,
+                                diasBase: clampedDays,
+                                festivos: clampedFestivos,
+                                dias: netDays,
+                                maxDays: dDays,
+                                tarifaDia: tarifa,
+                                subtotal: sub,
+                                estado: rem.estado,
+                                esquema: isServ ? 'Cobro Único' : scheme,
+                            });
                             accountedQty += cantidad;
                         });
                     }
 
                     const orphanReturns = (item.cantidadDevuelta || 0) - accountedQty;
                     if (orphanReturns > 0) {
+                        const lineKey = `${rem.id}-${item.productId}-orphan`;
+                        const defaultOrphanDate = rem.fecha;
+                        const effectiveDevFecha = customDates[lineKey] || defaultOrphanDate;
+                        const dDate = parseUTCDate(effectiveDevFecha);
                         const effectiveStart = equipStart > fStart ? equipStart : fStart;
-                        const effectiveEnd = equipStart < fEnd ? equipStart : fEnd; 
+                        const effectiveEnd = dDate < fEnd ? dDate : fEnd;
+
+                        let dDays = 0;
                         if (effectiveStart <= effectiveEnd) {
-                            const dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme);
-                            const sub = orphanReturns * dDays * tarifa;
-                            subtotalTotal += sub;
-                            lineas.push({
-                                remId: rem.id,
-                                remFecha: rem.fecha,
-                                equipo: `${prod?.name || item.productId} (Dev. previa)`,
-                                cantidad: orphanReturns,
-                                dias: dDays,
-                                tarifaDia: tarifa,
-                                subtotal: sub,
-                                estado: rem.estado,
-                                esquema: isServ ? 'Cobro Único' : scheme,
-                            });
+                            dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme);
                         }
+
+                        const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
+                        const clampedDays = Math.min(dDays, Math.max(0, finalDays));
+
+                        const autoFestivos = isServ ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme);
+                        const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
+                        const clampedFestivos = Math.min(clampedDays, Math.max(0, festivos));
+                        const netDays = clampedDays - clampedFestivos;
+
+                        const sub = orphanReturns * netDays * tarifa;
+                        subtotalTotal += sub;
+                        lineas.push({
+                            key: lineKey,
+                            productId: item.productId,
+                            type: 'orphan',
+                            devFecha: effectiveDevFecha,
+                            defaultDevFecha: defaultOrphanDate,
+                            remId: rem.id,
+                            remFecha: rem.fecha,
+                            equipo: `${prod?.name || item.productId} (Dev. previa: ${effectiveDevFecha})`,
+                            cantidad: orphanReturns,
+                            diasBase: clampedDays,
+                            festivos: clampedFestivos,
+                            dias: netDays,
+                            maxDays: dDays,
+                            tarifaDia: tarifa,
+                            subtotal: sub,
+                            estado: rem.estado,
+                            esquema: isServ ? 'Cobro Único' : scheme,
+                        });
                         accountedQty += orphanReturns;
                     }
 
                     const remainingQty = item.cantidad - accountedQty;
                     if (remainingQty > 0) {
+                        const lineKey = `${rem.id}-${item.productId}-remaining`;
+                        const effectiveDevFecha = customDates[lineKey] || fechaCorte;
+                        const dDate = parseUTCDate(effectiveDevFecha);
                         const effectiveStart = equipStart > fStart ? equipStart : fStart;
-                        const effectiveEnd = fEnd; 
+                        const effectiveEnd = dDate; 
 
+                        let dDays = 0;
                         if (effectiveStart <= effectiveEnd) {
-                            const dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme);
-                            const sub = remainingQty * dDays * tarifa;
-                            subtotalTotal += sub;
-                            lineas.push({
-                                remId: rem.id,
-                                remFecha: rem.fecha,
-                                equipo: prod?.name || item.productId,
-                                cantidad: remainingQty,
-                                dias: dDays,
-                                tarifaDia: tarifa,
-                                subtotal: sub,
-                                estado: rem.estado,
-                                esquema: isServ ? 'Cobro Único' : scheme,
-                            });
+                            dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme);
                         }
+
+                        const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
+                        const clampedDays = Math.min(dDays, Math.max(0, finalDays));
+
+                        const autoFestivos = isServ ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme);
+                        const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
+                        const clampedFestivos = Math.min(clampedDays, Math.max(0, festivos));
+                        const netDays = clampedDays - clampedFestivos;
+
+                        const sub = remainingQty * netDays * tarifa;
+                        subtotalTotal += sub;
+                        lineas.push({
+                            key: lineKey,
+                            productId: item.productId,
+                            type: 'remaining',
+                            devFecha: effectiveDevFecha,
+                            defaultDevFecha: fechaCorte,
+                            remId: rem.id,
+                            remFecha: rem.fecha,
+                            equipo: effectiveDevFecha !== fechaCorte ? `${prod?.name || item.productId} (Corte: ${effectiveDevFecha})` : (prod?.name || item.productId),
+                            cantidad: remainingQty,
+                            diasBase: clampedDays,
+                            festivos: clampedFestivos,
+                            dias: netDays,
+                            maxDays: dDays,
+                            tarifaDia: tarifa,
+                            subtotal: sub,
+                            estado: rem.estado,
+                            esquema: isServ ? 'Cobro Único' : scheme,
+                        });
                     }
                 }
             });
@@ -352,7 +542,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             porcIVA, 
             porcRet 
         };
-    }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient]);
+    }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient, customDays, customDates, customFestivos]);
 
     const handleGenerate = () => { if (resultado) setGenerado(true); };
     const handleSaveInvoice = async () => {
@@ -596,11 +786,13 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', tableLayout: 'fixed', filter: isSelected ? 'none' : 'grayscale(1) opacity(0.5)' }}>
                                                             <thead>
                                                                 <tr style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
-                                                                    <th style={{ width: '40%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Equipo / Descripción</th>
-                                                                    <th style={{ width: '12%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cant.</th>
-                                                                    <th style={{ width: '12%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Días</th>
-                                                                    <th style={{ width: '18%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tarifa</th>
-                                                                    <th style={{ width: '18%', padding: '0.85rem 1.5rem', textAlign: 'right', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subtotal</th>
+                                                                    <th style={{ width: '30%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Equipo / Descripción</th>
+                                                                    <th style={{ width: '8%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cant.</th>
+                                                                    <th style={{ width: '20%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>F. Devolución / Corte</th>
+                                                                    <th style={{ width: '10%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Días</th>
+                                                                    <th style={{ width: '10%', padding: '0.85rem 1.5rem', textAlign: 'center', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Festivos</th>
+                                                                    <th style={{ width: '11%', padding: '0.85rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tarifa</th>
+                                                                    <th style={{ width: '11%', padding: '0.85rem 1.5rem', textAlign: 'right', color: '#64748b', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subtotal</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
@@ -608,7 +800,84 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                                     <tr key={idx} style={{ borderBottom: idx === lines.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
                                                                         <td style={{ padding: '0.85rem 1.5rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.equipo}</td>
                                                                         <td style={{ padding: '0.85rem 1.5rem', textAlign: 'center' }}>{l.cantidad}</td>
-                                                                        <td style={{ padding: '0.85rem 1.5rem', fontWeight: 700, color: '#f97316', textAlign: 'center' }}>{l.dias}d</td>
+                                                                        <td style={{ padding: '0.4rem 1.5rem', textAlign: 'center' }}>
+                                                                            <input 
+                                                                                type="date" 
+                                                                                value={l.devFecha || ''} 
+                                                                                onChange={e => {
+                                                                                    const newDate = e.target.value;
+                                                                                    setCustomDates(prev => ({ ...prev, [l.key]: newDate }));
+                                                                                }}
+                                                                                style={{ 
+                                                                                    padding: '0.35rem 0.5rem', 
+                                                                                    fontSize: '0.8rem', 
+                                                                                    border: '1px solid #cbd5e1', 
+                                                                                    borderRadius: '6px', 
+                                                                                    color: '#1e293b', 
+                                                                                    width: '100%',
+                                                                                    maxWidth: '140px',
+                                                                                    boxSizing: 'border-box',
+                                                                                    outline: 'none',
+                                                                                    background: 'white'
+                                                                                }}
+                                                                            />
+                                                                        </td>
+                                                                        <td style={{ padding: '0.4rem 1.5rem', textAlign: 'center' }}>
+                                                                            <input 
+                                                                                type="number" 
+                                                                                min="0"
+                                                                                max={l.maxDays}
+                                                                                value={l.diasBase} 
+                                                                                onChange={e => {
+                                                                                    const val = e.target.value;
+                                                                                    const numeric = val === '' ? 0 : parseInt(val);
+                                                                                    const clamped = Math.min(l.maxDays, Math.max(0, isNaN(numeric) ? 0 : numeric));
+                                                                                    setCustomDays(prev => ({ ...prev, [l.key]: clamped }));
+                                                                                }}
+                                                                                style={{ 
+                                                                                    padding: '0.35rem 0.5rem', 
+                                                                                    fontSize: '0.8rem', 
+                                                                                    border: '1px solid #cbd5e1', 
+                                                                                    borderRadius: '6px', 
+                                                                                    color: '#1e293b', 
+                                                                                    width: '100%',
+                                                                                    maxWidth: '75px', 
+                                                                                    textAlign: 'center',
+                                                                                    fontWeight: 'bold',
+                                                                                    boxSizing: 'border-box',
+                                                                                    outline: 'none',
+                                                                                    background: 'white'
+                                                                                }}
+                                                                            />
+                                                                        </td>
+                                                                        <td style={{ padding: '0.4rem 1.5rem', textAlign: 'center' }}>
+                                                                            <input 
+                                                                                type="number" 
+                                                                                min="0"
+                                                                                max={l.diasBase}
+                                                                                value={l.festivos} 
+                                                                                onChange={e => {
+                                                                                    const val = e.target.value;
+                                                                                    const numeric = val === '' ? 0 : parseInt(val);
+                                                                                    const clamped = Math.min(l.diasBase, Math.max(0, isNaN(numeric) ? 0 : numeric));
+                                                                                    setCustomFestivos(prev => ({ ...prev, [l.key]: clamped }));
+                                                                                }}
+                                                                                style={{ 
+                                                                                    padding: '0.35rem 0.5rem', 
+                                                                                    fontSize: '0.8rem', 
+                                                                                    border: '1px solid #cbd5e1', 
+                                                                                    borderRadius: '6px', 
+                                                                                    color: '#f97316', 
+                                                                                    width: '100%',
+                                                                                    maxWidth: '75px', 
+                                                                                    textAlign: 'center',
+                                                                                    fontWeight: 'bold',
+                                                                                    boxSizing: 'border-box',
+                                                                                    outline: 'none',
+                                                                                    background: 'white'
+                                                                                }}
+                                                                            />
+                                                                        </td>
                                                                         <td style={{ padding: '0.85rem 1.5rem', color: '#64748b' }}>{fmtCOP(l.tarifaDia)}</td>
                                                                         <td style={{ padding: '0.85rem 1.5rem', fontWeight: 800, textAlign: 'right', color: '#1e293b' }}>{fmtCOP(l.subtotal)}</td>
                                                                     </tr>
@@ -616,7 +885,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                             </tbody>
                                                             <tfoot>
                                                                 <tr style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
-                                                                    <td colSpan="4" style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: '0.8rem' }}>Subtotal Remisión:</td>
+                                                                    <td colSpan="6" style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 700, color: '#64748b', fontSize: '0.8rem' }}>Subtotal Remisión:</td>
                                                                     <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', fontWeight: 800, color: '#2365AB' }}>
                                                                         {fmtCOP(lines.reduce((s, ln) => s + ln.subtotal, 0))}
                                                                     </td>

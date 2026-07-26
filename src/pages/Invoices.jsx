@@ -190,11 +190,10 @@ export default function Invoices({ hideHeader = false } = {}) {
     };
 
     const handleGenerateReport = () => {
-        const doc = new jsPDF('p', 'pt', 'letter');
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 40;
+        const doc = new jsPDF();
+        const margin = 10;
 
-        let y = applyStandardLayout(doc, 'Reporte de Facturación', settings);
+        let y = applyStandardLayout(doc, 'Reporte de Cobros / Liquidaciones', settings);
 
         const tableData = filteredInvoices.map(inv => {
             const client = clients.find(c => c.id === inv.clientId);
@@ -204,18 +203,18 @@ export default function Invoices({ hideHeader = false } = {}) {
         const totalAmount = filteredInvoices.reduce((acc, inv) => acc + inv.amount, 0);
 
         autoTable(doc, {
-            startY: 90,
+            startY: y + 2,
             margin: { left: margin, right: margin },
             headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
-            head: [['Factura', 'Fecha', 'Cliente', 'Obra', 'Estado', 'Monto']],
+            head: [['Cobro / Remisión', 'Fecha', 'Cliente', 'Obra', 'Estado', 'Monto']],
             body: tableData,
-            bodyStyles: { fontSize: 10, textColor: [30, 41, 59] },
+            bodyStyles: { fontSize: 9, textColor: [30, 41, 59] },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             foot: [['', '', '', '', 'TOTAL', `$${totalAmount.toLocaleString()}`]],
             footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold' }
         });
 
-        doc.save(`Reporte_Facturacion_${settings?.shortName || 'CIELO'}.pdf`);
+        doc.save(`Reporte_Cobros_${settings?.shortName || 'CIELO'}.pdf`);
     };
 
     return (
@@ -227,7 +226,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                         <Download size={20} /> Reporte
                     </button>
                     <button className="btn btn-primary" onClick={handleOpenNew}>
-                        <Plus size={20} /> Crear Factura
+                        <Plus size={20} /> Crear Remisión / Cobro
                     </button>
                 </div>
             )}
@@ -238,7 +237,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                         <Download size={18} /> Reporte PDF
                     </button>
                     <button className="btn btn-primary" onClick={handleOpenNew}>
-                        <Plus size={18} /> Crear Factura
+                        <Plus size={18} /> Crear Remisión / Cobro
                     </button>
                 </div>
             )}
@@ -273,7 +272,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                         <thead>
                             <tr>
                                 {[
-                                    { label: 'No. Factura', key: 'id' },
+                                    { label: 'No. Remisión / Cobro', key: 'id' },
                                     { label: 'Cliente', key: 'client' },
                                     { label: 'Obra/Proyecto', key: 'obra' },
                                     { label: 'Monto Total', key: 'amount' },
@@ -307,14 +306,6 @@ export default function Invoices({ hideHeader = false } = {}) {
                                     <tr key={invoice.id}>
                                         <td style={{ padding: '0.85rem' }}>
                                             <div style={{ fontWeight: 800, fontFamily: 'monospace', color: 'var(--primary)', fontSize: '0.85rem' }}>{invoice.id.split('-').pop()}</div>
-                                            <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                                                {invoice.cotizacionId && <span title={`Cotización: ${invoice.cotizacionId}`} style={{ fontSize: '0.6rem', padding: '1px 5px', borderRadius: 4, background: 'rgba(99,102,241,0.08)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.2)', fontWeight: 700 }}>📋 {invoice.cotizacionId.split('-').pop()}</span>}
-                                                {remisiones.some(r => r.facturaId === invoice.id) && (
-                                                    <span title="Remisión vinculada" style={{ fontSize: '0.6rem', padding: '1px 5px', borderRadius: 4, background: 'rgba(35,101,171,0.08)', color: '#2365AB', border: '1px solid rgba(35,101,171,0.2)', fontWeight: 700 }}>
-                                                        🚚 {remisiones.find(r => r.facturaId === invoice.id)?.id.split('-').pop()}
-                                                    </span>
-                                                )}
-                                            </div>
                                         </td>
                                         <td style={{ fontWeight: 600 }}>{client?.name || 'N/A'}</td>
                                         <td className="text-muted">
@@ -325,15 +316,30 @@ export default function Invoices({ hideHeader = false } = {}) {
                                             {invoice.date ? format(parseISO(invoice.date), 'dd/MM/yy') : '—'}
                                         </td>
                                         <td>
-                                                <span className={`badge ${invoice.status === 'Paid' ? 'badge-success' : (invoice.status === 'Partial' ? 'badge-primary' : (invoice.status === 'Fiado' ? 'badge-info' : 'badge-warning'))}`}
-                                                    style={invoice.status === 'Pending' ? { background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)' } : 
-                                                           invoice.status === 'Fiado' ? { background: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.3)' } : {}}>
-                                                    {invoice.status === 'Paid' ? 'Pagada' : (invoice.status === 'Partial' ? 'Abonada' : (invoice.status === 'Fiado' ? 'Fiado' : 'Pendiente'))}
-                                                </span>
+                                            <span style={{ 
+                                                display: 'inline-flex', 
+                                                alignItems: 'center', 
+                                                justifyContent: 'center',
+                                                padding: '0.45rem 0.9rem', 
+                                                borderRadius: '10px', 
+                                                fontSize: '0.78rem', 
+                                                fontWeight: 800, 
+                                                textTransform: 'uppercase',
+                                                color: 'white',
+                                                boxShadow: '0 2px 4px rgba(0,0,0,0.06)',
+                                                background: invoice.status === 'Paid' ? '#10b981' : 
+                                                            invoice.status === 'Partial' ? '#2563eb' : 
+                                                            invoice.status === 'Fiado' ? '#0284c7' : '#f59e0b',
+                                                border: 'none',
+                                                minWidth: '95px',
+                                                textAlign: 'center'
+                                            }}>
+                                                {invoice.status === 'Paid' ? 'Pagada' : (invoice.status === 'Partial' ? 'Abonada' : (invoice.status === 'Fiado' ? 'Fiado' : 'Pendiente'))}
+                                            </span>
                                         </td>
                                         <td>
                                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', whiteSpace: 'nowrap' }}>
-                                                <button className="btn btn-secondary btn-sm" onClick={() => handleViewInvoice(invoice)} title="Ver Factura">
+                                                <button className="btn btn-secondary btn-sm" onClick={() => handleViewInvoice(invoice)} title="Ver Detalle">
                                                     <Eye size={15} /> Ver
                                                 </button>
                                                 <button className="btn btn-primary btn-sm" onClick={() => handleGeneratePDF(invoice)} title="Descargar PDF">
@@ -756,7 +762,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                                         className="btn btn-sm"
                                         style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer', padding: '0.6rem 1.25rem', fontSize: '0.95rem' }}
                                         onClick={() => {
-                                            if (window.confirm(`¿Estás seguro de que deseas eliminar la factura ${inv.id}? Esta acción no se puede deshacer.`)) {
+                                            if (window.confirm(`¿Estás seguro de que deseas eliminar la remisión de cobro ${inv.id}? Esta acción no se puede deshacer.`)) {
                                                 deleteInvoice(inv.id);
                                                 setShowViewModal(false);
                                             }
@@ -789,7 +795,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                                     </div>
                                     <div>
                                         <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white' }}>Registrar Pago</div>
-                                        <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>Factura {inv.id}</div>
+                                        <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>Remisión de Cobro {inv.id}</div>
                                     </div>
                                 </div>
                             </div>
@@ -886,9 +892,9 @@ export default function Invoices({ hideHeader = false } = {}) {
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 10, padding: '0.85rem 1rem', marginBottom: '0.5rem' }}>
                                     <AlertCircle size={16} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 1 }} />
                                     <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                                        {paymentOption === 'Contado' && `Al confirmar, la factura se marcará como Pagada y la deuda del cliente se reducirá en $${inv.amount.toLocaleString()}.`}
-                                        {paymentOption === 'Abono' && `Al confirmar, se registrará un abono de $${Number(abonoAmount).toLocaleString()} y la factura quedará como Abonada.`}
-                                        {paymentOption === 'Fiado' && `Al confirmar, la factura quedará como Fiada y los equipos serán liberados para despacho.`}
+                                        {paymentOption === 'Contado' && `Al confirmar, la remisión de cobro se marcará como Pagada y la deuda del cliente se reducirá en $${inv.amount.toLocaleString()}.`}
+                                        {paymentOption === 'Abono' && `Al confirmar, se registrará un abono de $${Number(abonoAmount).toLocaleString()} y la remisión de cobro quedará como Abonada.`}
+                                        {paymentOption === 'Fiado' && `Al confirmar, la remisión de cobro quedará como Fiada y los equipos serán liberados para despacho.`}
                                     </span>
                                 </div>
                             </div>

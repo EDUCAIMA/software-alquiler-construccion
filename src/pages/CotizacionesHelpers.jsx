@@ -696,7 +696,7 @@ function generateCortePDF(invoice, client, obra, settings, allInvoices, allRemis
             labelTopRight: 'Fecha de Corte',
             valMidLeft: obra?.nombre?.substring(0, 25) || invoice.obraId || '—',
             valMidRight: invoice.status?.toUpperCase(),
-            labelMidRight: 'Estado Factura',
+            labelMidRight: 'Estado Pago',
             obraDireccion: obra?.ubicacion || client?.direccion
         });
 
@@ -859,12 +859,12 @@ function exportClientPDF(client, invoices, products, settings) {
 
     currentY = doc.lastAutoTable.finalY + 12;
     doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-    doc.text('3. Historial de Facturación', margin, currentY);
+    doc.text('3. Historial de Cobros / Liquidaciones', margin, currentY);
 
     const clientInvoices = invoices.filter(inv => inv.clientId === client.id);
     autoTable(doc, {
         startY: currentY + 5,
-        head: [['Factura', 'Obra', 'Fecha', 'Equipos', 'Monto', 'Estado']],
+        head: [['Cobro / Remisión', 'Obra', 'Fecha', 'Equipos', 'Monto', 'Estado']],
         body: clientInvoices.length > 0
             ? clientInvoices.map(inv => {
                 const obraName = (client.obras || []).find(o => o.id === inv.obraId)?.nombre || '—';
@@ -874,7 +874,7 @@ function exportClientPDF(client, invoices, products, settings) {
                 }).join(', ');
                 return [inv.id, obraName, inv.date, itemsStr, `$${inv.amount.toLocaleString()}`, inv.status === 'Paid' ? 'PAGADA' : 'PENDIENTE'];
             })
-            : [['—', '—', '—', 'Sin facturas registradas', '—', '—']],
+            : [['—', '—', '—', 'Sin cobros registrados', '—', '—']],
         headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
         styles: { fontSize: 7.5, cellPadding: 3 },
         alternateRowStyles: { fillColor: [248, 250, 252] },
@@ -886,20 +886,86 @@ function exportClientPDF(client, invoices, products, settings) {
 
 // ─── PDF Factura / Cobro (Nuevo Formato Profesional) ──────────────────────────
 export function generateInvoicePDF(invoice, client, products, settings) {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
+    const doc = new jsPDF({ orientation: 'landscape', format: 'letter', unit: 'mm' });
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
     const margin = 10;
 
-    let y = applyStandardLayout(doc, 'FACTURA DE COBRO', settings, invoice.id);
+    let y = applyStandardLayout(doc, 'REMISIÓN DE COBRO', settings, invoice.id);
 
-    y = drawInfoGrid(doc, y, client, {
+    // Custom info grid in pure black, using unified font size 8.5
+    const drawCustomInfoGrid = (doc, gridY, cl, meta = {}) => {
+        const gridH = 26;
+
+        doc.setLineWidth(0.2);
+        doc.setDrawColor(0, 0, 0);
+        doc.setFillColor(255, 255, 255);
+        
+        // Contenedor principal
+        doc.rect(margin, gridY, W - (margin * 2), gridH);
+        
+        // Separador vertical: right panel is 100mm wide
+        const separatorX = W - margin - 100;
+        doc.line(separatorX, gridY, separatorX, gridY + gridH);
+        
+        doc.setTextColor(0, 0, 0);
+        const fontSize = 8.5;
+        doc.setFontSize(fontSize);
+        
+        // --- Lado Izquierdo: Cliente ---
+        doc.setFont('helvetica', 'bold');
+        doc.text('Señores:', margin + 3, gridY + 6);
+        doc.text('Nit:', margin + 3, gridY + 11);
+        doc.text('Dirección:', margin + 3, gridY + 16);
+        doc.text('Ciudad:', margin + 3, gridY + 21);
+        
+        doc.setFont('helvetica', 'normal');
+        doc.text(cl?.name?.toUpperCase() || '—', margin + 25, gridY + 6);
+        doc.text(cl?.nit || '—', margin + 25, gridY + 11);
+        doc.text(meta?.obraDireccion || cl?.direccion || '—', margin + 25, gridY + 16);
+        doc.text(cl?.ciudad || 'BOGOTÁ', margin + 25, gridY + 21);
+        
+        doc.setFont('helvetica', 'bold');
+        doc.text('Teléfonos:', margin + 110, gridY + 21);
+        doc.setFont('helvetica', 'normal');
+        doc.text(cl?.phone || '—', margin + 130, gridY + 21);
+        
+        // --- Lado Derecho: Metadatos ---
+        const rightW = 100;
+        doc.line(separatorX, gridY + 8.5, W - margin, gridY + 8.5);
+        doc.line(separatorX, gridY + 17, W - margin, gridY + 17);
+        doc.line(separatorX + (rightW / 2), gridY, separatorX + (rightW / 2), gridY + 17);
+        
+        doc.setFont('helvetica', 'bold');
+        doc.text(meta.labelTopLeft || 'Fecha Inicio', separatorX + (rightW / 4), gridY + 4, { align: 'center' });
+        doc.text(meta.labelTopRight || 'Fecha Fin', separatorX + (3 * rightW / 4), gridY + 4, { align: 'center' });
+        
+        doc.setFont('helvetica', 'normal');
+        doc.text(meta.valTopLeft || '—', separatorX + (rightW / 4), gridY + 7.5, { align: 'center' });
+        doc.text(meta.valTopRight || '—', separatorX + (3 * rightW / 4), gridY + 7.5, { align: 'center' });
+        
+        doc.setFont('helvetica', 'bold');
+        doc.text(meta.labelMidLeft || 'Obra / Proyecto', separatorX + (rightW / 4), gridY + 12.5, { align: 'center' });
+        doc.text(meta.labelMidRight || 'Forma de Pago', separatorX + (3 * rightW / 4), gridY + 12.5, { align: 'center' });
+        
+        doc.setFont('helvetica', 'normal');
+        doc.text(meta.valMidLeft || '—', separatorX + (rightW / 4), gridY + 15.8, { align: 'center' });
+        doc.text(meta.valMidRight || 'CONTADO', separatorX + (3 * rightW / 4), gridY + 15.8, { align: 'center' });
+        
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${meta.labelBottom || 'Transporte:'} ${meta.valBottom || 'CLIENTE'}`, separatorX + (rightW / 2), gridY + 22.5, { align: 'center' });
+        
+        return gridY + gridH + 10;
+    };
+
+    y = drawCustomInfoGrid(doc, y, client, {
         valTopLeft: invoice.date || format(new Date(), 'yyyy-MM-dd'),
         valTopRight: (invoice.status === 'Paid' || invoice.status === 'Pagada') ? 'PAGADA' : 'PENDIENTE',
         labelTopLeft: 'Fecha Emisión',
         labelTopRight: 'Estado Pago',
         valMidLeft: (client?.obras || []).find(o => o.id === invoice.obraId)?.nombre || '—',
         valMidRight: (invoice.paymentType || 'CONTADO').toUpperCase(),
-        valBottom: (Number(invoice.transporte) || 0) > 0 ? `$${Number(invoice.transporte).toLocaleString('es-CO')}` : '0',
+        valBottom: `$${(Number(invoice.transporte) || 0).toLocaleString('es-CO')}`,
         labelBottom: 'Valor Transporte:',
         obraDireccion: (client?.obras || []).find(o => o.id === invoice.obraId)?.ubicacion || client?.direccion
     });
@@ -915,15 +981,15 @@ export function generateInvoicePDF(invoice, client, products, settings) {
     Object.entries(grouped).forEach(([remId, groupItems], idx) => {
         // Add a sub-header for the group if it's a remission
         if (remId !== 'OTROS') {
-            doc.setFontSize(9);
+            doc.setFontSize(8.5);
             doc.setFont('helvetica', 'bold');
-            doc.setTextColor(30, 41, 59);
+            doc.setTextColor(0, 0, 0);
             const headerY = (idx === 0) ? y : doc.lastAutoTable.finalY + 10;
             
             // Check if we need a new page
-            if (headerY > doc.internal.pageSize.getHeight() - 40) {
+            if (headerY > H - 35) {
                 doc.addPage();
-                y = 20; // reset y for new page (approx)
+                y = 20;
             } else {
                 y = headerY;
             }
@@ -950,35 +1016,35 @@ export function generateInvoicePDF(invoice, client, products, settings) {
                     productName.toUpperCase(),
                     qty,
                     days,
-                    price.toLocaleString('es-CO'),
-                    (qty * days * price).toLocaleString('es-CO')
+                    `$${price.toLocaleString('es-CO')}`,
+                    `$${(qty * days * price).toLocaleString('es-CO')}`
                 ];
             }),
             theme: 'plain',
             headStyles: { 
-                fillColor: [241, 245, 249], 
-                textColor: [30, 41, 59], 
-                fontSize: 7.5, 
+                fillColor: [255, 255, 255], 
+                textColor: [0, 0, 0], 
+                fontSize: 8.5, 
                 fontStyle: 'bold', 
                 halign: 'center',
                 lineWidth: 0.1,
-                lineColor: [30, 41, 59]
+                lineColor: [0, 0, 0]
             },
             styles: { 
-                fontSize: 7.5, 
-                cellPadding: 2, 
-                textColor: [30, 41, 59], 
+                fontSize: 8.5, 
+                cellPadding: 2.5, 
+                textColor: [0, 0, 0], 
                 halign: 'center',
                 lineWidth: 0.1,
-                lineColor: [30, 41, 59]
+                lineColor: [0, 0, 0]
             },
             columnStyles: {
-                0: { cellWidth: 10 },
+                0: { cellWidth: 15 },
                 1: { halign: 'left', cellWidth: 'auto' },
-                2: { cellWidth: 15 },
-                3: { cellWidth: 15 },
-                4: { halign: 'right', cellWidth: 25 },
-                5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
+                2: { cellWidth: 20 },
+                3: { cellWidth: 20 },
+                4: { halign: 'right', cellWidth: 35 },
+                5: { halign: 'right', cellWidth: 40, fontStyle: 'bold' }
             }
         });
         
@@ -1000,63 +1066,87 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         const totalVal = subtotal + iva + ret + (Number(invoice.transporte) || 0);
 
         let ty = (doc.lastAutoTable?.finalY || y + 20) + 10;
-        const totW = 80;
-        const totX = pageWidth - margin - totW;
+        const totW = 90;
+        const totX = W - margin - totW;
         const totH = 7;
 
         const totals = [
-            ['SUB-TOTAL', subtotal.toLocaleString('es-CO')],
-            [`IVA (${porcIVA}%)`, iva.toLocaleString('es-CO')],
-            [`RETENCIÓN (${porcRet}%)`, ret.toLocaleString('es-CO')],
-            ['TRANSPORTE', (Number(invoice.transporte) || 0).toLocaleString('es-CO')]
+            ['SUB-TOTAL', `$${subtotal.toLocaleString('es-CO')}`],
+            [`IVA (${porcIVA}%)`, `$${iva.toLocaleString('es-CO')}`],
+            [`RETENCIÓN (${porcRet}%)`, `$${ret.toLocaleString('es-CO')}`],
+            ['TRANSPORTE', `$${(Number(invoice.transporte) || 0).toLocaleString('es-CO')}`]
         ];
 
         totals.forEach(([label, value]) => {
             doc.setLineWidth(0.1);
-            doc.setDrawColor(30, 41, 59);
-            doc.rect(totX, ty, 50, totH);
-            doc.rect(totX + 50, ty, 30, totH);
-            doc.setFontSize(7);
+            doc.setDrawColor(0, 0, 0);
+            doc.rect(totX, ty, 55, totH);
+            doc.rect(totX + 55, ty, 35, totH);
+            
+            // Label: Left-aligned, size 8.5
+            doc.setFontSize(8.5);
+            doc.setTextColor(0, 0, 0);
             doc.setFont('helvetica', 'bold');
-            doc.text(label, totX + 2, ty + 4.5);
+            doc.text(label, totX + 2, ty + 5);
+            
+            // Value: Centered, size 10.5
+            doc.setFontSize(10.5);
             doc.setFont('helvetica', 'normal');
-            doc.text(value, totX + 78, ty + 4.5, { align: 'right' });
+            doc.text(value, totX + 72.5, ty + 5, { align: 'center' });
             ty += totH;
         });
 
-        doc.setFillColor(241, 245, 249);
-        doc.rect(totX, ty, 50, 9, 'F');
-        doc.rect(totX, ty, 50, 9, 'S');
-        doc.rect(totX + 50, ty, 30, 9, 'S');
-        doc.setFontSize(9);
+        doc.setLineWidth(0.1);
+        doc.setDrawColor(0, 0, 0);
+        doc.rect(totX, ty, 55, 9);
+        doc.rect(totX + 55, ty, 35, 9);
+        
+        // Total Label: Left-aligned, size 8.5
+        doc.setFontSize(8.5);
+        doc.setTextColor(0, 0, 0);
         doc.setFont('helvetica', 'bold');
-        doc.text('TOTAL', totX + 2, ty + 6);
-        doc.text(`$${totalVal.toLocaleString('es-CO')}`, totX + 78, ty + 6, { align: 'right' });
+        doc.text('TOTAL', totX + 2, ty + 6.5);
+        
+        // Total Value: Centered, size 11.5, bold
+        doc.setFontSize(11.5);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`$${totalVal.toLocaleString('es-CO')}`, totX + 72.5, ty + 6.5, { align: 'center' });
         
         y = ty + 20;
     } catch (err) {
         console.error('Error in total calculation or summary:', err);
     }
 
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const signatureY = Math.max(pageHeight - 50, y + 30);
+    const signatureY = Math.max(H - 45, y + 25);
 
     if (invoice.status === 'Paid' || invoice.status === 'Pagada') {
         doc.setFontSize(22);
-        doc.setTextColor(16, 185, 129);
+        doc.setTextColor(0, 0, 0);
         doc.setFont(undefined, 'bold');
-        doc.setGState(new doc.GState({ opacity: 0.2 }));
+        doc.setGState(new doc.GState({ opacity: 0.15 }));
         doc.text('PAGADA', margin, y + 10);
         doc.setGState(new doc.GState({ opacity: 1 }));
     }
 
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
+    doc.setFontSize(8.5);
+    doc.setTextColor(0, 0, 0);
     doc.setFont(undefined, 'normal');
     doc.text('Firma Recibido:', margin, signatureY);
+    doc.setDrawColor(0, 0, 0);
     doc.line(margin, signatureY + 2, margin + 50, signatureY + 2);
 
-    doc.save(`Factura_${invoice.id}.pdf`);
+    // Centered professional footer page number across all pages
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7.5);
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+        const footerText = `Página ${i} de ${pageCount}  |  Generado por Sistema de Gestión ${settings?.shortName || 'CIELO'} el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
+        doc.text(footerText, W / 2, H - 8, { align: 'center' });
+    }
+
+    doc.save(`Remision_Cobro_${invoice.id}.pdf`);
 }
 
 export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, generateCortePDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP, exportClientPDF };

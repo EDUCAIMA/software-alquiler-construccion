@@ -950,8 +950,22 @@ export default function Remisiones() {
                                                             cancelButtonText: 'No, conservar'
                                                         });
                                                         if (result.isConfirmed) {
-                                                            deleteRemision(rem.id);
-                                                            Swal.fire('Eliminada', 'El registro ha sido borrado.', 'success');
+                                                            try {
+                                                                await deleteRemision(rem.id);
+                                                                Swal.fire({
+                                                                    title: 'Remisión Eliminada',
+                                                                    text: `La remisión ${rem.id} fue eliminada correctamente y sus equipos han vuelto al stock disponible del inventario.`,
+                                                                    icon: 'success',
+                                                                    confirmButtonColor: '#2365AB'
+                                                                });
+                                                            } catch (err) {
+                                                                Swal.fire({
+                                                                    title: 'Error al eliminar',
+                                                                    text: err.message || 'No se pudo eliminar la remisión.',
+                                                                    icon: 'error',
+                                                                    confirmButtonColor: '#ef4444'
+                                                                });
+                                                            }
                                                         }
                                                     }}
                                                     className="btn btn-sm"

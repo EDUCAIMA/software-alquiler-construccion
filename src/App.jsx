@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Package, Activity,
   Wrench, LogOut, ShieldAlert, Calculator, Briefcase, Settings,
-  Plus, RotateCcw, DollarSign, ArrowDownCircle, FileText
+  Plus, RotateCcw, DollarSign, ArrowDownCircle, FileText,
+  Sun, Moon, Monitor
 } from 'lucide-react';
 import { AppProvider, useAppContext } from './context/AppContext';
 
@@ -46,12 +47,58 @@ function Topbar() {
   const location = useLocation();
   const { currentUser, logout, canViewDashboard, settings } = useAppContext();
 
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system');
+  const themeOptionRefs = useRef({});
+  const [themeThumb, setThemeThumb] = useState(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const applyTheme = (t) => {
+      if (t === 'dark') {
+        root.setAttribute('data-theme', 'dark');
+      } else if (t === 'light') {
+        root.setAttribute('data-theme', 'light');
+      } else {
+        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        root.setAttribute('data-theme', systemTheme);
+      }
+    };
+
+    applyTheme(theme);
+    localStorage.setItem('theme', theme);
+
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleSystemThemeChange = (e) => {
+        root.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+      };
+      mediaQuery.addEventListener('change', handleSystemThemeChange);
+      return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
+    }
+  }, [theme]);
+
+  const themeOptions = [
+    { value: 'light', label: 'Claro', icon: Sun },
+    { value: 'dark', label: 'Oscuro', icon: Moon },
+    { value: 'system', label: 'Sistema', icon: Monitor },
+  ];
+
+  useLayoutEffect(() => {
+    const updateThemeThumb = () => {
+      const el = themeOptionRefs.current[theme];
+      if (el) setThemeThumb({ left: el.offsetLeft, width: el.offsetWidth });
+    };
+    updateThemeThumb();
+    window.addEventListener('resize', updateThemeThumb);
+    return () => window.removeEventListener('resize', updateThemeThumb);
+  }, [theme]);
+
   const menuItems = [
     { icon: LayoutDashboard, label: 'Panel de Control',      path: '/',            restricted: true  },
     { icon: Users,           label: 'Clientes',              path: '/clients',     restricted: false },
     { icon: Package,         label: 'Inventario / Equipos',  path: '/products',    restricted: false },
     { icon: Briefcase,       label: 'Comercial',             path: '/comercial',   restricted: false },
-    { icon: FileText,        label: 'Facturación',           path: '/invoices',    restricted: false },
+    { icon: FileText,        label: 'Remisión',              path: '/invoices',    restricted: false },
     { icon: Activity,        label: 'Trazabilidad',          path: '/trazability', restricted: false },
     { icon: Calculator,      label: 'Gastos y Costos Operativos', path: '/gastos-mantenimiento', restricted: false },
     { icon: Wrench,          label: 'Mantenimientos',        path: '/maintenance', restricted: false },
@@ -66,7 +113,7 @@ function Topbar() {
     fontSize: '1.15rem',
     letterSpacing: '-0.02em',
     whiteSpace: 'nowrap',
-    marginRight: '1rem',
+    marginRight: '0.75rem',
     borderLeft: '2px solid rgba(255,255,255,0.15)',
     paddingLeft: '1.25rem',
     display: 'flex',
@@ -144,7 +191,7 @@ function Topbar() {
             '/clients': 'Gestión de Clientes',
             '/products': 'Inventario & Alquiler',
             '/comercial': 'Módulo Comercial',
-            '/invoices': 'Facturación',
+            '/invoices': 'Remisión',
             '/trazability': 'Trazabilidad',
             '/maintenance': 'Mantenimientos',
             '/gastos-mantenimiento': 'Gastos y Costos Operativos',
@@ -153,6 +200,78 @@ function Topbar() {
           const title = titles[location.pathname];
           return title ? <div style={titleStyle} className="header-page-title">{title}</div> : null;
         })()}
+
+        {/* ── Theme Toggle (segmented, always visible, sliding thumb) ── */}
+        <div
+          role="group"
+          aria-label="Selector de tema"
+          style={{
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            padding: 3,
+            borderRadius: 10,
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.15)',
+          }}
+        >
+          {themeThumb && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 3,
+                bottom: 3,
+                left: themeThumb.left,
+                width: themeThumb.width,
+                borderRadius: 8,
+                background: 'rgba(255,255,255,0.22)',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+                transition: 'left 0.25s cubic-bezier(0.4,0,0.2,1), width 0.25s cubic-bezier(0.4,0,0.2,1)',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+          {themeOptions.map((opt) => {
+            const OptIcon = opt.icon;
+            const isSelected = theme === opt.value;
+            return (
+              <button
+                key={opt.value}
+                ref={el => { themeOptionRefs.current[opt.value] = el; }}
+                type="button"
+                title={opt.label}
+                aria-pressed={isSelected}
+                onClick={() => setTheme(opt.value)}
+                style={{
+                  position: 'relative',
+                  zIndex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '0.35rem 0.6rem',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: 'transparent',
+                  color: isSelected ? 'white' : '#a9c4dc',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'color 0.2s',
+                }}
+                onMouseEnter={e => {
+                  if (!isSelected) e.currentTarget.style.color = 'white';
+                }}
+                onMouseLeave={e => {
+                  if (!isSelected) e.currentTarget.style.color = '#a9c4dc';
+                }}
+              >
+                <OptIcon size={15} />
+                <span className="hide-on-mobile">{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── CENTER SECTION: Nav Icons (Stable) ── */}
@@ -236,6 +355,7 @@ function Topbar() {
 
           {location.pathname === '/clients' && [
             { label: 'Nuevo Cliente', icon: Plus, event: 'trigger-new-client', color: '#10b981' },
+            { label: 'Nuevo Proveedor', icon: Plus, event: 'trigger-new-provider', color: '#76B1E0' },
           ].map(renderActionBtn)}
         </div>
 

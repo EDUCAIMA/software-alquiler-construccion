@@ -51,9 +51,50 @@ async function initDB() {
         proximo_mantenimiento DATE
       )
     `);
-        // Migración: agregar columna tipo_cobro y esquema_cobro si no existen
+        // Migración: agregar columna tipo_cobro, esquema_cobro y tipo_propiedad si no existen
         await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS tipo_cobro VARCHAR(50) DEFAULT 'Día'`);
         await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS esquema_cobro VARCHAR(50) DEFAULT 'Calendario'`);
+        await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS tipo_propiedad VARCHAR(50) DEFAULT 'Propio'`);
+        await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS tipo_cobro_costo VARCHAR(50) DEFAULT 'Día'`);
+        await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS esquema_cobro_costo VARCHAR(50) DEFAULT 'Calendario'`);
+
+        // --- Lotes de Productos ---
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS product_batches (
+            id SERIAL PRIMARY KEY,
+            product_id VARCHAR(50) NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            stock INTEGER NOT NULL DEFAULT 1,
+            available_stock INTEGER NOT NULL DEFAULT 1,
+            fecha_compra DATE,
+            costo_adquisicion NUMERIC(12,2) NOT NULL DEFAULT 0,
+            tipo_cobro_costo VARCHAR(50) DEFAULT 'Día',
+            esquema_cobro_costo VARCHAR(50) DEFAULT 'Calendario'
+          )
+        `);
+
+        // Migración inicial para productos existentes que no tengan lotes creados
+        const { rows: existingThirdPartyProds } = await client.query(`
+          SELECT * FROM products
+        `);
+        for (const prod of existingThirdPartyProds) {
+            const { rows: existingBatches } = await client.query(`
+              SELECT COUNT(*) FROM product_batches WHERE product_id = $1
+            `, [prod.id]);
+            if (parseInt(existingBatches[0].count) === 0) {
+                await client.query(`
+                  INSERT INTO product_batches(product_id, stock, available_stock, fecha_compra, costo_adquisicion, tipo_cobro_costo, esquema_cobro_costo)
+                  VALUES($1, $2, $3, $4, $5, $6, $7)
+                `, [
+                    prod.id, 
+                    prod.total_stock, 
+                    prod.available_stock, 
+                    prod.fecha_compra, 
+                    prod.costo_adquisicion || 0, 
+                    prod.tipo_cobro_costo || 'Día', 
+                    prod.esquema_cobro_costo || 'Calendario'
+                ]);
+            }
+        }
 
         // --- Clientes (obras guardadas como JSONB para mantener la estructura actual) ---
         await client.query(`
@@ -85,6 +126,21 @@ async function initDB() {
         await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS foto TEXT`);
         await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS foto_cc TEXT`);
         await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS foto_cc_back TEXT`);
+
+        // --- Proveedores ---
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS providers(
+            id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            nit VARCHAR(50),
+            email VARCHAR(255),
+            phone VARCHAR(50),
+            direccion VARCHAR(255),
+            ciudad VARCHAR(100),
+            contacto_principal VARCHAR(255),
+            joined DATE DEFAULT CURRENT_DATE
+          )
+        `);
 
         // --- Facturas ---
         await client.query(`
@@ -343,6 +399,17 @@ async function initDB() {
 initDB();
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
+const mapBatch = r => ({
+    id: r.id,
+    productId: r.product_id,
+    stock: r.stock,
+    availableStock: r.available_stock,
+    fechaCompra: r.fecha_compra ? (typeof r.fecha_compra === 'string' ? r.fecha_compra : (r.fecha_compra instanceof Date ? r.fecha_compra.toISOString().split('T')[0] : r.fecha_compra)) : '',
+    costoAdquisicion: r.costo_adquisicion ? Number(r.costo_adquisicion) : 0,
+    tipoCobroCosto: r.tipo_cobro_costo || 'Día',
+    esquemaCobroCosto: r.esquema_cobro_costo || 'Calendario'
+});
+
 const mapProduct = r => ({
     id: r.id, name: r.name, category: r.category, value: Number(r.value),
     totalStock: r.total_stock, availableStock: r.available_stock, image: r.image,
@@ -351,7 +418,10 @@ const mapProduct = r => ({
     costoAdquisicion: r.costo_adquisicion ? Number(r.costo_adquisicion) : '',
     proximoMantenimiento: r.proximo_mantenimiento ? r.proximo_mantenimiento.toISOString().split('T')[0] : '',
     tipoCobro: r.tipo_cobro || 'Día',
-    esquemaCobro: r.esquema_cobro || 'Calendario'
+    esquemaCobro: r.esquema_cobro || 'Calendario',
+    tipoPropiedad: r.tipo_propiedad || 'Propio',
+    tipoCobroCosto: r.tipo_cobro_costo || 'Día',
+    esquemaCobroCosto: r.esquema_cobro_costo || 'Calendario'
 });
 
 const mapClient = r => ({
@@ -451,36 +521,81 @@ const mapSettings = r => ({
     headerExtra: r.header_extra || ''
 });
 
+const mapProvider = r => ({
+    id: r.id,
+    name: r.name,
+    nit: r.nit,
+    email: r.email,
+    phone: r.phone,
+    direccion: r.direccion,
+    ciudad: r.ciudad,
+    contactoPrincipal: r.contacto_principal,
+    joined: r.joined ? (typeof r.joined === 'string' ? r.joined : (r.joined instanceof Date ? r.joined.toISOString().split('T')[0] : r.joined)) : ''
+});
+
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
 app.get('/api/products', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM products ORDER BY id DESC');
-        res.json(rows.map(mapProduct));
+        const { rows: products } = await pool.query('SELECT * FROM products ORDER BY id DESC');
+        const { rows: batches } = await pool.query('SELECT * FROM product_batches ORDER BY id ASC');
+        
+        const mappedProducts = products.map(mapProduct);
+        const mappedBatches = batches.map(mapBatch);
+        
+        const batchesByProduct = {};
+        for (const batch of mappedBatches) {
+            if (!batchesByProduct[batch.productId]) {
+                batchesByProduct[batch.productId] = [];
+            }
+            batchesByProduct[batch.productId].push(batch);
+        }
+        
+        for (const p of mappedProducts) {
+            p.batches = batchesByProduct[p.id] || [];
+        }
+        
+        res.json(mappedProducts);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/products', async (req, res) => {
+    const client = await pool.connect();
     try {
+        await client.query('BEGIN');
         const {
-            id, name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento, tipoCobro, esquemaCobro
+            id, name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento, tipoCobro, esquemaCobro, tipoPropiedad, tipoCobroCosto, esquemaCobroCosto
         } = req.body;
-        await pool.query(
-            `INSERT INTO products(id, name, category, value, total_stock, available_stock, image, proveedor, fecha_compra, costo_adquisicion, proximo_mantenimiento, tipo_cobro, esquema_cobro)
-       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-            [id, name, category, value, totalStock, availableStock, image, proveedor, fechaCompra || null, costoAdquisicion || 0, proximoMantenimiento || null, tipoCobro || 'Día', esquemaCobro || 'Calendario']
+        await client.query(
+            `INSERT INTO products(id, name, category, value, total_stock, available_stock, image, proveedor, fecha_compra, costo_adquisicion, proximo_mantenimiento, tipo_cobro, esquema_cobro, tipo_propiedad, tipo_cobro_costo, esquema_cobro_costo)
+       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+            [id, name, category, value, totalStock, availableStock, image, proveedor, fechaCompra || null, costoAdquisicion || 0, proximoMantenimiento || null, tipoCobro || 'Día', esquemaCobro || 'Calendario', tipoPropiedad || 'Propio', tipoCobroCosto || 'Día', esquemaCobroCosto || 'Calendario']
         );
+
+        // Insert initial batch
+        await client.query(
+            `INSERT INTO product_batches(product_id, stock, available_stock, fecha_compra, costo_adquisicion, tipo_cobro_costo, esquema_cobro_costo)
+             VALUES($1, $2, $3, $4, $5, $6, $7)`,
+            [id, totalStock, availableStock, fechaCompra || null, costoAdquisicion || 0, tipoCobroCosto || 'Día', esquemaCobroCosto || 'Calendario']
+        );
+
+        await client.query('COMMIT');
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
 });
 
 app.put('/api/products/:id', async (req, res) => {
     try {
         const {
-            name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento, tipoCobro, esquemaCobro
+            name, category, value, totalStock, availableStock, image, proveedor, fechaCompra, costoAdquisicion, proximoMantenimiento, tipoCobro, esquemaCobro, tipoPropiedad, tipoCobroCosto, esquemaCobroCosto
         } = req.body;
         await pool.query(
-            `UPDATE products SET name=$1, category=$2, value=$3, total_stock=$4, available_stock=$5, image=$6, proveedor=$7, fecha_compra=$8, costo_adquisicion=$9, proximo_mantenimiento=$10, tipo_cobro=$11, esquema_cobro=$12 WHERE id=$13`,
-            [name, category, value, totalStock, availableStock, image, proveedor, fechaCompra || null, costoAdquisicion || 0, proximoMantenimiento || null, tipoCobro || 'Día', esquemaCobro || 'Calendario', req.params.id]
+            `UPDATE products SET name=$1, category=$2, value=$3, total_stock=$4, available_stock=$5, image=$6, proveedor=$7, fecha_compra=$8, costo_adquisicion=$9, proximo_mantenimiento=$10, tipo_cobro=$11, esquema_cobro=$12, tipo_propiedad=$13, tipo_cobro_costo=$14, esquema_cobro_costo=$15 WHERE id=$16`,
+            [name, category, value, totalStock, availableStock, image, proveedor, fechaCompra || null, costoAdquisicion || 0, proximoMantenimiento || null, tipoCobro || 'Día', esquemaCobro || 'Calendario', tipoPropiedad || 'Propio', tipoCobroCosto || 'Día', esquemaCobroCosto || 'Calendario', req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -491,6 +606,103 @@ app.delete('/api/products/:id', async (req, res) => {
         await pool.query('DELETE FROM products WHERE id=$1', [req.params.id]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── BATCHES ─────────────────────────────────────────────────────────────────
+app.post('/api/products/:productId/batches', async (req, res) => {
+    const { productId } = req.params;
+    const { stock, availableStock, fechaCompra, costoAdquisicion, tipoCobroCosto, esquemaCobroCosto } = req.body;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        await client.query(
+            `INSERT INTO product_batches(product_id, stock, available_stock, fecha_compra, costo_adquisicion, tipo_cobro_costo, esquema_cobro_costo)
+             VALUES($1, $2, $3, $4, $5, $6, $7)`,
+            [productId, stock, availableStock || stock, fechaCompra || null, costoAdquisicion || 0, tipoCobroCosto || 'Día', esquemaCobroCosto || 'Calendario']
+        );
+        
+        await client.query(
+            `UPDATE products 
+             SET total_stock = (SELECT SUM(stock) FROM product_batches WHERE product_id = $1),
+                 available_stock = (SELECT SUM(available_stock) FROM product_batches WHERE product_id = $1)
+             WHERE id = $1`,
+            [productId]
+        );
+        
+        await client.query('COMMIT');
+        res.json({ success: true });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+app.put('/api/products/:productId/batches/:batchId', async (req, res) => {
+    const { productId, batchId } = req.params;
+    const { stock, availableStock, fechaCompra, costoAdquisicion, tipoCobroCosto, esquemaCobroCosto } = req.body;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        const { rows: oldBatchRows } = await client.query('SELECT stock, available_stock FROM product_batches WHERE id = $1', [batchId]);
+        if (oldBatchRows.length === 0) {
+            throw new Error('Batch not found');
+        }
+        const oldBatch = oldBatchRows[0];
+        const calculatedAvailable = availableStock !== undefined ? availableStock : (stock - (oldBatch.stock - oldBatch.available_stock));
+        
+        await client.query(
+            `UPDATE product_batches 
+             SET stock=$1, available_stock=$2, fecha_compra=$3, costo_adquisicion=$4, tipo_cobro_costo=$5, esquema_cobro_costo=$6
+             WHERE id=$7`,
+            [stock, calculatedAvailable, fechaCompra || null, costoAdquisicion || 0, tipoCobroCosto || 'Día', esquemaCobroCosto || 'Calendario', batchId]
+        );
+        
+        await client.query(
+            `UPDATE products 
+             SET total_stock = (SELECT SUM(stock) FROM product_batches WHERE product_id = $1),
+                 available_stock = (SELECT SUM(available_stock) FROM product_batches WHERE product_id = $1)
+             WHERE id = $1`,
+            [productId]
+        );
+        
+        await client.query('COMMIT');
+        res.json({ success: true });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/products/:productId/batches/:batchId', async (req, res) => {
+    const { productId, batchId } = req.params;
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        
+        await client.query('DELETE FROM product_batches WHERE id = $1', [batchId]);
+        
+        await client.query(
+            `UPDATE products 
+             SET total_stock = COALESCE((SELECT SUM(stock) FROM product_batches WHERE product_id = $1), 0),
+                 available_stock = COALESCE((SELECT SUM(available_stock) FROM product_batches WHERE product_id = $1), 0)
+             WHERE id = $1`,
+            [productId]
+        );
+        
+        await client.query('COMMIT');
+        res.json({ success: true });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
 });
 
 // ─── CLIENTS ─────────────────────────────────────────────────────────────────
@@ -532,6 +744,44 @@ app.put('/api/clients/:id', async (req, res) => {
 app.delete('/api/clients/:id', async (req, res) => {
     try {
         await pool.query('DELETE FROM clients WHERE id=$1', [req.params.id]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── PROVIDERS (TERCEROS) ───────────────────────────────────────────────────
+app.get('/api/providers', async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT * FROM providers ORDER BY id DESC');
+        res.json(rows.map(mapProvider));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/providers', async (req, res) => {
+    try {
+        const { id, name, nit, email, phone, direccion, ciudad, contactoPrincipal } = req.body;
+        await pool.query(
+            `INSERT INTO providers(id, name, nit, email, phone, direccion, ciudad, contacto_principal)
+             VALUES($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [id, name, nit, email, phone, direccion, ciudad, contactoPrincipal]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/providers/:id', async (req, res) => {
+    try {
+        const { name, nit, email, phone, direccion, ciudad, contactoPrincipal } = req.body;
+        await pool.query(
+            `UPDATE providers SET name = $1, nit = $2, email = $3, phone = $4, direccion = $5, ciudad = $6, contacto_principal = $7 WHERE id = $8`,
+            [name, nit, email, phone, direccion, ciudad, contactoPrincipal, req.params.id]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/providers/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM providers WHERE id=$1', [req.params.id]);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -688,10 +938,52 @@ app.put('/api/remisiones/:id', async (req, res) => {
 });
 
 app.delete('/api/remisiones/:id', async (req, res) => {
+    const client = await pool.connect();
     try {
-        await pool.query('DELETE FROM remisiones WHERE id=$1', [req.params.id]);
+        await client.query('BEGIN');
+        const remId = req.params.id;
+
+        // 1. Obtener la remisión para saber qué ítems restituir
+        const { rows } = await client.query('SELECT * FROM remisiones WHERE id = $1 OR REPLACE(id, \'--\', \'-\') = $1', [remId]);
+        if (rows.length > 0) {
+            const rem = rows[0];
+            const items = Array.isArray(rem.items) ? rem.items : (typeof rem.items === 'string' ? JSON.parse(rem.items) : []);
+            
+            // 2. Por cada ítem, calcular la cantidad pendiente de devolución y sumar a available_stock
+            for (const item of items) {
+                const prodId = item.productId || item.id || item.product_id;
+                if (!prodId) continue;
+                const pendiente = Math.max(0, (Number(item.cantidad) || 0) - (Number(item.cantidadDevuelta) || 0));
+                if (pendiente > 0) {
+                    await client.query(
+                        'UPDATE products SET available_stock = LEAST(total_stock, available_stock + $1) WHERE id = $2 OR name = $2',
+                        [pendiente, prodId]
+                    );
+                }
+            }
+
+            // 3. Desmarcar factura vinculada si existe
+            if (rem.factura_id) {
+                await client.query('UPDATE invoices SET remision_creada = false WHERE id = $1', [rem.factura_id]);
+            }
+            const autoInvId = typeof rem.id === 'string' ? rem.id.replace('REM-', 'F-') : null;
+            if (autoInvId) {
+                await client.query('UPDATE invoices SET remision_creada = false WHERE id = $1', [autoInvId]);
+            }
+        }
+
+        // 4. Eliminar la remisión de la base de datos
+        await client.query('DELETE FROM remisiones WHERE id = $1 OR REPLACE(id, \'--\', \'-\') = $1', [remId]);
+        
+        await client.query('COMMIT');
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        await client.query('ROLLBACK');
+        console.error('Error en DELETE /api/remisiones/:id:', e);
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
 });
 
 // ─── MAINTENANCES ────────────────────────────────────────────────────────────
