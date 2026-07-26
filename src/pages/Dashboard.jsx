@@ -838,7 +838,7 @@ export default function Dashboard() {
         </div>
 
         {/* En Calle / Total */}
-        <div className="mini-stat-dashboard orange" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1.35rem', padding: '1.5rem 1.75rem', textAlign: 'left', justifyContent: 'flex-start', overflow: 'visible' }}>
+        <div className="mini-stat-dashboard orange" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '1.35rem', padding: '1.5rem 1.75rem', textAlign: 'left', justifyContent: 'flex-start', overflow: 'visible', position: 'relative', zIndex: 1000 }}>
           <MiniProgressCircle percent={rentedPct} color="#f97316" />
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
@@ -853,7 +853,7 @@ export default function Dashboard() {
           </div>
 
           {/* Tooltip Popup on Hover */}
-          <div className="category-kpi-tooltip" style={{ textTransform: 'none' }}>
+          <div className="category-kpi-tooltip" style={{ textTransform: 'none', zIndex: 1000000 }}>
             <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', textTransform: 'uppercase', color: '#f97316', fontWeight: 800 }}>
               Desglose por Categoría
             </h4>
