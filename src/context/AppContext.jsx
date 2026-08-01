@@ -317,22 +317,32 @@ export const AppProvider = ({ children }) => {
     const client = clients.find(c => c.id === invoiceDetails.clientId);
     const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
     const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
-    const amount = subtotal + iva + ret;
+    const amount = subtotal + iva + ret + (Number(invoiceDetails.transporte) || 0);
+
+    const initialPaid = Number(invoiceDetails.paidAmount) || 0;
+    let initialStatus = invoiceDetails.status || 'Pending';
+    if (initialPaid >= amount) {
+      initialStatus = 'Paid';
+    } else if (initialPaid > 0) {
+      initialStatus = 'Partial';
+    }
 
     const newInvoice = {
       ...invoiceDetails,
       id: nextId(invoices, 'F'),
       amount,
-      status: 'Pending',
+      status: initialStatus,
+      paidAmount: initialPaid,
       date: format(new Date(), 'yyyy-MM-dd'),
-      remisionEnabled: false,
-      remisionCreada: false,
+      remisionEnabled: invoiceDetails.remisionEnabled !== undefined ? invoiceDetails.remisionEnabled : false,
+      remisionCreada: invoiceDetails.remisionCreada !== undefined ? invoiceDetails.remisionCreada : false,
     };
     await api.post('/api/invoices', newInvoice);
 
-    // Actualizar deuda del cliente
+    // Actualizar deuda del cliente (solo por la parte pendiente neta de esta factura)
     if (client) {
-      await api.put(`/api/clients/${client.id}`, { ...client, debt: client.debt + amount });
+      const pendingAmount = Math.max(0, amount - initialPaid);
+      await api.put(`/api/clients/${client.id}`, { ...client, debt: client.debt + pendingAmount });
     }
 
     await reloadAll();
@@ -361,6 +371,7 @@ export const AppProvider = ({ children }) => {
       const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
       const amount = subtotal + iva + ret + (Number(cot.transporte) || 0);
 
+      const hasRemision = remisiones.some(r => r.cotizacionId === cotizacionId && r.estado !== 'Cancelada');
       const newInvoice = {
         clientId: cot.clientId,
         obraId: cot.obraId,
@@ -369,8 +380,8 @@ export const AppProvider = ({ children }) => {
         amount,
         status: 'Pending',
         date: format(new Date(), 'yyyy-MM-dd'),
-        remisionEnabled: false,
-        remisionCreada: false,
+        remisionEnabled: hasRemision,
+        remisionCreada: hasRemision,
         id: nextId(invoices, 'F'),
       };
       await api.post('/api/invoices', newInvoice);
@@ -406,18 +417,20 @@ export const AppProvider = ({ children }) => {
     const invoice = invoices.find(inv => inv.id === invoiceId);
     if (!invoice) return;
     
+    const totalPaid = (invoice.paidAmount || 0) + paidAmount;
     let newStatus = 'Paid';
-    if (paymentType === 'Abono' && paidAmount < invoice.amount) {
+    if (totalPaid < invoice.amount) {
       newStatus = 'Partial';
-    } else if (paymentType === 'Credito') {
-      newStatus = 'Credito';
+    }
+    if (paymentType === 'Credito' || paymentType === 'Fiado') {
+      newStatus = paymentType === 'Fiado' ? 'Fiado' : 'Credito';
       paidAmount = 0;
     }
 
     const updated = { 
       ...invoice, 
       status: newStatus, 
-      paidAmount: (invoice.paidAmount || 0) + paidAmount,
+      paidAmount: paymentType === 'Credito' || paymentType === 'Fiado' ? invoice.paidAmount : totalPaid,
       paymentType: paymentType,
       paidDate: paidAmount > 0 ? format(new Date(), 'yyyy-MM-dd') : invoice.paidDate, 
       remisionEnabled: true,
@@ -427,11 +440,6 @@ export const AppProvider = ({ children }) => {
     };
     
     await api.put(`/api/invoices/${invoiceId}`, updated);
-
-    // Si no se ha creado remisión aún, crearla automáticamente en estado 'Pendiente'
-    if (!invoice.remisionCreada) {
-      await createPendingRemision(updated);
-    }
 
     // Actualizar deuda del cliente
     const client = clients.find(c => c.id === invoice.clientId);
@@ -550,65 +558,8 @@ export const AppProvider = ({ children }) => {
 
     await reloadAll();
     
-    // Generar Factura Automática para Remisiones Manuales
-    if (!data.facturaId && !data.cotizacionId) {
-        try {
-            console.log('📦 INICIANDO FACTURACIÓN AUTOMÁTICA PARA REMISIÓN:', id);
-            
-            const invoiceItems = nueva.items.map(i => {
-                const prod = products.find(p => p.id === i.productId);
-                return {
-                    productId: i.productId,
-                    name: i.nombre || prod?.nombre || prod?.name || 'Equipo',
-                    quantity: Number(i.cantidad),
-                    days: 1, 
-                    price: Number(i.tarifaDia || prod?.value || 0)
-                };
-            });
-
-            const subtotal = invoiceItems.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
-            const client = clients.find(c => c.id === data.clientId);
-            const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
-            const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
-            const totalAmount = subtotal + iva + ret + (Number(nueva.transporte) || 0);
-
-            // Usar formato de ID estándar para evitar problemas de filtro
-            const autoInvoiceId = nextId(invoices, 'F');
-
-            const autoInvoice = {
-                id: autoInvoiceId,
-                clientId: data.clientId,
-                obraId: data.obraId,
-                items: invoiceItems,
-                amount: totalAmount,
-                status: 'Pending',
-                date: nueva.fecha,
-                remisionEnabled: true,
-                remisionCreada: true,
-                manualRemisionId: id,
-                notas: `Generada desde Remisión Manual ${id}`
-            };
-
-            await api.post('/api/invoices', autoInvoice);
-            
-            if (client) {
-                await api.put(`/api/clients/${client.id}`, { ...client, debt: (client.debt || 0) + totalAmount });
-            }
-            
-            await api.put(`/api/remisiones/${id}`, { ...nueva, facturaId: autoInvoiceId });
-            await reloadAll();
-            
-            console.log('✅ FACTURA AUTOMÁTICA VINCULADA:', autoInvoiceId);
-        } catch (invErr) {
-            console.error('❌ ERROR CRÍTICO EN FACTURACIÓN AUTOMÁTICA:', invErr);
-            Swal.fire({
-                title: 'Error de Sincronización',
-                text: 'La remisión se creó pero no se pudo generar la factura en Comercio automáticamente.',
-                icon: 'warning',
-                confirmButtonColor: '#f59e0b'
-            });
-        }
-    }
+    // Auto-facturación para remisiones manuales deshabilitada por solicitud de usuario.
+    // La remisión se guarda en el perfil del cliente y se facturará en el Corte de Obra.
 
     const client = clients.find(c => c.id === data.clientId);
     logAction('Remisión Creada', `${id} — ${nueva.items.length} equipo(s)`, client?.name || 'N/A', 'exit');

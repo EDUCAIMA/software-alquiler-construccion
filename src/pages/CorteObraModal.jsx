@@ -144,10 +144,10 @@ function generateCortePDF(resultado, client, obra, settings) {
     let y = applyStandardLayout(doc, 'Corte de Obra', settings);
 
     y = drawInfoGrid(doc, y, client, {
-        valTopLeft: format(new Date(), 'yyyy-MM-dd'),
-        valTopRight: 'PENDIENTE',
-        labelTopLeft: 'Fecha de Corte',
-        labelTopRight: 'Estado Corte',
+        valTopLeft: resultado.fechaInicio || '—',
+        valTopRight: resultado.fechaCorte || '—',
+        labelTopLeft: 'Corte Inicio',
+        labelTopRight: 'Corte Fin',
         valMidLeft: obra?.nombre?.substring(0, 20) || 'TODAS LAS OBRAS',
         valMidRight: client?.responsableIVA ? 'RESP. IVA' : 'NO RESP.',
         valBottom: fmtCOP(resultado.totalNeto),
@@ -558,22 +558,21 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             remFecha: l.remFecha
         }));
 
-        if (resultado.pagosPrevios > 0) {
-            itemsToFacturar.push({
-                productId: 'DESC-PAGO',
-                nombre: 'Deducción por Pagos/Abonos Previos',
-                quantity: 1,
-                days: 1,
-                price: -resultado.pagosPrevios
-            });
-        }
-
         try {
             const newInvoice = await createInvoice({
                 clientId,
                 obraId,
                 items: itemsToFacturar,
-                transporte: resultado.transporte
+                transporte: resultado.transporte,
+                remisionEnabled: true,
+                remisionCreada: true,
+                paidAmount: resultado.pagosPrevios,
+                cortes: [{
+                    id: Date.now(),
+                    fechaInicio: fechaInicio,
+                    fechaCorte: fechaCorte,
+                    status: 'Pendiente'
+                }]
             });
             
             // Download Invoice PDF
@@ -582,7 +581,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             }
 
             // Also download the Corte PDF (Liquidación)
-            generateCortePDF({ ...resultado, lineas: resultado.selectedLineas }, selectedClient, selectedObra, settings);
+            generateCortePDF({ ...resultado, lineas: resultado.selectedLineas, fechaInicio, fechaCorte }, selectedClient, selectedObra, settings);
             
             setSaved(true);
         } catch (e) {

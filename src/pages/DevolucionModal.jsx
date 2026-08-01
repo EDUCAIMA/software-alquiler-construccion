@@ -84,6 +84,14 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
 
     const [loading, setLoading] = useState(false);
 
+    const handleDevolverTodo = () => {
+        const allQty = {};
+        enCampo.forEach(item => {
+            allQty[item.productId] = item.enCampo;
+        });
+        setQuantities(allQty);
+    };
+
     const handleSave = async () => {
         const devoluciones = Object.entries(quantities)
             .filter(([, v]) => v > 0)
@@ -169,9 +177,30 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             {/* Header Section: Title + Date */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                                <h4 style={{ margin: 0, fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                    Equipos para devolución
-                                </h4>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                    <h4 style={{ margin: 0, fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        Equipos para devolución
+                                    </h4>
+                                    <button 
+                                        type="button"
+                                        onClick={handleDevolverTodo}
+                                        style={{ 
+                                            background: '#f97316', 
+                                            border: 'none', 
+                                            color: '#ffffff', 
+                                            fontWeight: 700, 
+                                            fontSize: '0.72rem', 
+                                            padding: '0.35rem 0.75rem', 
+                                            borderRadius: '6px', 
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s ease'
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.background = '#ea580c'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = '#f97316'; }}
+                                    >
+                                        Devolver Todo
+                                    </button>
+                                </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                     <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Reingreso:</span>
                                     <input 

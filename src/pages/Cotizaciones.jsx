@@ -805,7 +805,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                 <button onClick={() => setPayingInvoice(null)} className="btn btn-secondary" style={{ flex: 1, padding: '0.8rem', borderRadius: 10, fontWeight: 700 }}>Cancelar</button>
                                 <button
                                     onClick={async () => { 
-                                        const finalAmount = paymentOption === 'Contado' ? payingInvoice.amount : (paymentOption === 'Credito' ? 0 : Number(abonoAmount));
+                                        const finalAmount = paymentOption === 'Contado' ? (payingInvoice.amount - (payingInvoice.paidAmount || 0)) : (paymentOption === 'Credito' ? 0 : Number(abonoAmount));
                                         await payInvoice?.(payingInvoice.id, finalAmount, paymentOption); 
                                         setPayingInvoice(null); 
                                         // Redirigir a remisiones para despacho inmediato
@@ -854,7 +854,14 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
             {remPreloadData && (
                 <NuevaRemisionModal 
                     onClose={() => setRemPreloadData(null)}
-                    onSave={addRemision}
+                    onSave={async (data) => {
+                        const res = await addRemision(data);
+                        if (remPreloadData?.id && (remPreloadData.type === 'inv' || remPreloadData.id.startsWith('F-') || remPreloadData.id.startsWith('INV-') || remPreloadData.id.startsWith('INC-'))) {
+                            await marcarRemisionCreada(remPreloadData.id);
+                        }
+                        setRemPreloadData(null);
+                        return res;
+                    }}
                     clients={clients}
                     products={products}
                     maintenances={maintenances}

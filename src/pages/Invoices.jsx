@@ -176,12 +176,14 @@ export default function Invoices({ hideHeader = false } = {}) {
 
     const handleConfirmPayment = () => {
         if (payingInvoice) {
-            const finalAmount = paymentOption === 'Contado' ? payingInvoice.amount : (paymentOption === 'Fiado' ? 0 : abonoAmount);
+            const finalAmount = paymentOption === 'Contado' ? (payingInvoice.amount - (payingInvoice.paidAmount || 0)) : (paymentOption === 'Fiado' ? 0 : Number(abonoAmount));
             payInvoice(payingInvoice.id, finalAmount, paymentOption);
             navigate('/comercial?tab=despachos');
             
             if (viewingInvoice && viewingInvoice.id === payingInvoice.id) {
-                setViewingInvoice({ ...viewingInvoice, status: paymentOption === 'Contado' ? 'Paid' : (paymentOption === 'Fiado' ? 'Fiado' : 'Partial') });
+                const totalPaidNow = (payingInvoice.paidAmount || 0) + finalAmount;
+                const nextStatus = totalPaidNow >= payingInvoice.amount ? 'Paid' : (paymentOption === 'Fiado' ? 'Fiado' : 'Partial');
+                setViewingInvoice({ ...viewingInvoice, status: nextStatus, paidAmount: totalPaidNow });
             }
             setShowPayModal(false);
             setPayingInvoice(null);
@@ -281,6 +283,8 @@ export default function Invoices({ hideHeader = false } = {}) {
                                     { label: 'Obra/Proyecto', key: 'obra' },
                                     { label: 'Monto Total', key: 'amount' },
                                     { label: 'Fecha Emisión', key: 'date' },
+                                    { label: 'Fecha Inicio', key: 'fechaInicio' },
+                                    { label: 'Fecha Corte', key: 'fechaCorte' },
                                     { label: 'Estado', key: 'status' }
                                 ].map(head => (
                                     <th 
@@ -306,6 +310,31 @@ export default function Invoices({ hideHeader = false } = {}) {
                         <tbody>
                             {paginatedInvoices.map(invoice => {
                                 const client = clients.find(c => c.id === invoice.clientId);
+                                
+                                // Parse cortes securely
+                                let cortesList = invoice.cortes;
+                                if (typeof cortesList === 'string') {
+                                    try {
+                                        cortesList = JSON.parse(cortesList);
+                                    } catch (e) {
+                                        cortesList = [];
+                                    }
+                                }
+                                const firstCorte = (cortesList && cortesList.length > 0) ? cortesList[0] : null;
+                                
+                                const formatCorteDate = (dateStr) => {
+                                    if (!dateStr || dateStr === '—') return '—';
+                                    try {
+                                        const [y, m, d] = dateStr.split('-').map(Number);
+                                        return format(new Date(y, m - 1, d), 'dd/MM/yy');
+                                    } catch (e) {
+                                        return dateStr;
+                                    }
+                                };
+                                
+                                const fInicio = firstCorte?.fechaInicio ? formatCorteDate(firstCorte.fechaInicio) : '—';
+                                const fCorte = firstCorte?.fechaCorte ? formatCorteDate(firstCorte.fechaCorte) : '—';
+
                                 return (
                                     <tr key={invoice.id}>
                                         <td style={{ padding: '0.85rem' }}>
@@ -318,6 +347,12 @@ export default function Invoices({ hideHeader = false } = {}) {
                                         <td style={{ fontWeight: 700 }}>${invoice.amount.toLocaleString()}</td>
                                         <td className="text-muted" style={{ fontSize: '0.85rem' }}>
                                             {invoice.date ? format(parseISO(invoice.date), 'dd/MM/yy') : '—'}
+                                        </td>
+                                        <td className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                            {fInicio}
+                                        </td>
+                                        <td className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                            {fCorte}
                                         </td>
                                         <td>
                                             <span style={{ 

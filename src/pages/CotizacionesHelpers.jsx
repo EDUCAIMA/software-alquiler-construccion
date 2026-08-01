@@ -689,11 +689,22 @@ function generateCortePDF(invoice, client, obra, settings, allInvoices, allRemis
         
         let y = applyStandardLayout(doc, 'Corte de Obra', settings, invoice.id);
         
+        let cortesList = invoice.cortes;
+        if (typeof cortesList === 'string') {
+            try {
+                cortesList = JSON.parse(cortesList);
+            } catch (e) {
+                cortesList = [];
+            }
+        }
+        const corteObj = (cortesList || []).find(c => c.fechaCorte === fechaCorte);
+        const fechaInicioCorte = corteObj?.fechaInicio || invoice.fecha || invoice.date;
+
         y = drawInfoGrid(doc, y, client, {
-            valTopLeft: invoice.fecha || invoice.date,
-            labelTopLeft: 'Fecha Contrato',
+            valTopLeft: fechaInicioCorte,
+            labelTopLeft: 'Corte Inicio',
             valTopRight: fechaCorte,
-            labelTopRight: 'Fecha de Corte',
+            labelTopRight: 'Corte Fin',
             valMidLeft: obra?.nombre?.substring(0, 25) || invoice.obraId || '—',
             valMidRight: invoice.status?.toUpperCase(),
             labelMidRight: 'Estado Pago',
@@ -958,11 +969,21 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         return gridY + gridH + 10;
     };
 
+    let cortesList = invoice.cortes;
+    if (typeof cortesList === 'string') {
+        try {
+            cortesList = JSON.parse(cortesList);
+        } catch (e) {
+            cortesList = [];
+        }
+    }
+    const isCorte = cortesList && cortesList.length > 0 && cortesList[0].fechaInicio;
+    
     y = drawCustomInfoGrid(doc, y, client, {
-        valTopLeft: invoice.date || format(new Date(), 'yyyy-MM-dd'),
-        valTopRight: (invoice.status === 'Paid' || invoice.status === 'Pagada') ? 'PAGADA' : 'PENDIENTE',
-        labelTopLeft: 'Fecha Emisión',
-        labelTopRight: 'Estado Pago',
+        valTopLeft: isCorte ? invoice.cortes[0].fechaInicio : (invoice.date || format(new Date(), 'yyyy-MM-dd')),
+        valTopRight: isCorte ? invoice.cortes[0].fechaCorte : ((invoice.status === 'Paid' || invoice.status === 'Pagada') ? 'PAGADA' : 'PENDIENTE'),
+        labelTopLeft: isCorte ? 'Corte Inicio' : 'Fecha Emisión',
+        labelTopRight: isCorte ? 'Corte Fin' : 'Estado Pago',
         valMidLeft: (client?.obras || []).find(o => o.id === invoice.obraId)?.nombre || '—',
         valMidRight: (invoice.paymentType || 'CONTADO').toUpperCase(),
         valBottom: `$${(Number(invoice.transporte) || 0).toLocaleString('es-CO')}`,
