@@ -566,52 +566,6 @@ export const AppProvider = ({ children }) => {
     return nueva;
   };
 
-  const createPendingRemision = async (invoice) => {
-    // Intentar usar el mismo consecutivo numérico de la cotización/factura
-    let remId = nextId(remisiones, 'REM');
-    const consecutive = invoice.id.split('-').pop();
-    const candidateId = `REM-${consecutive}`;
-    
-    // Si no existe ya una remisión con ese ID, lo usamos para mantener consistencia con Comercio
-    if (!remisiones.some(r => r.id === candidateId)) {
-        remId = candidateId;
-    }
-
-    const newRem = {
-        id: remId,
-        clientId: invoice.clientId,
-        obraId: invoice.obraId,
-        fecha: format(new Date(), 'yyyy-MM-dd'),
-        items: invoice.items.map(i => {
-            const prod = products.find(p => p.id === i.productId);
-            return { 
-                productId: i.productId,
-                nombre: i.nombre || i.name || prod?.nombre || prod?.name || 'Equipo sin nombre',
-                cantidad: i.quantity || i.cantidad || 0,
-                tarifaDia: i.price || i.tarifaDia || 0,
-                cantidadDevuelta: 0 
-            };
-        }),
-        estado: 'Pendiente', // Estado especial para identificar que viene de facturación
-        notas: `Generada automáticamente desde Factura ${invoice.id}`,
-        cotizacionId: invoice.cotizacionId || null,
-        facturaId: invoice.id
-    };
-
-    await api.post('/api/remisiones', newRem);
-    
-    // Reducir stock de productos inmediatamente para reservar los equipos
-    for (const item of newRem.items) {
-      const prod = products.find(p => p.id === item.productId);
-      if (prod) {
-        await api.put(`/api/products/${prod.id}`, { ...prod, availableStock: Math.max(0, prod.availableStock - item.cantidad) });
-      }
-    }
-
-    // Marcar la factura como remisión creada para que no se duplique
-    await api.put(`/api/invoices/${invoice.id}`, { ...invoice, remisionCreada: true });
-  };
-
   const editRemision = async (remId, data) => {
     const current = remisiones.find(r => r.id === remId);
     if (!current) return;
