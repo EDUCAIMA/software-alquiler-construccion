@@ -317,6 +317,24 @@ async function initDB() {
         await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS proveedor_beneficiario VARCHAR(255)`);
         await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS referencia_soporte VARCHAR(100)`);
         await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS subtipo_gasto VARCHAR(100)`);
+
+        // --- Ingresos de Caja Menor (ingresos no facturados) ---
+        await client.query(`
+      CREATE TABLE IF NOT EXISTS ingresos_caja_menor(
+                id VARCHAR(50) PRIMARY KEY,
+                concepto VARCHAR(255) NOT NULL,
+                descripcion TEXT,
+                monto NUMERIC(15, 2) DEFAULT 0,
+                fecha_ingreso DATE DEFAULT CURRENT_DATE,
+                fecha_registro TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                metodo_pago VARCHAR(50) DEFAULT 'Efectivo',
+                origen VARCHAR(255),
+                referencia_soporte VARCHAR(100)
+            )
+            `);
+
+        // Migración: capturar el método de pago (Transferencia/Efectivo/etc.) en cada abono de una remisión
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50)`);
         // Migración: agregar columnas si no existen
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS short_name VARCHAR(100)`);
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS name_complement VARCHAR(255)`);
@@ -450,6 +468,7 @@ const mapInvoice = r => ({
     remisionCreada: r.remision_creada || false,
     paidAmount: Number(r.paid_amount || 0),
     paymentType: r.payment_type || null,
+    paymentMethod: r.payment_method || null,
     cortes: r.cortes || [],
     abonos: r.abonos || []
 });
@@ -796,11 +815,11 @@ app.get('/api/invoices', async (req, res) => {
 
 app.post('/api/invoices', async (req, res) => {
     try {
-        const { id, clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType, cortes, abonos } = req.body;
+        const { id, clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType, paymentMethod, cortes, abonos } = req.body;
         await pool.query(
-            `INSERT INTO invoices(id, client_id, obra_id, amount, status, date, paid_date, items, cotizacion_id, remision_enabled, remision_creada, paid_amount, payment_type, cortes, abonos) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+            `INSERT INTO invoices(id, client_id, obra_id, amount, status, date, paid_date, items, cotizacion_id, remision_enabled, remision_creada, paid_amount, payment_type, payment_method, cortes, abonos) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
             [id, clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
-                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, JSON.stringify(cortes || []), JSON.stringify(abonos || [])]
+                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, paymentMethod || null, JSON.stringify(cortes || []), JSON.stringify(abonos || [])]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -808,11 +827,11 @@ app.post('/api/invoices', async (req, res) => {
 
 app.put('/api/invoices/:id', async (req, res) => {
     try {
-        const { clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType, cortes, abonos } = req.body;
+        const { clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType, paymentMethod, cortes, abonos } = req.body;
         await pool.query(
-            `UPDATE invoices SET client_id = $1, obra_id = $2, amount = $3, status = $4, date = $5, paid_date = $6, items = $7, cotizacion_id = $8, remision_enabled = $9, remision_creada = $10, paid_amount = $11, payment_type = $12, cortes = $13, abonos = $14 WHERE id = $15`,
+            `UPDATE invoices SET client_id = $1, obra_id = $2, amount = $3, status = $4, date = $5, paid_date = $6, items = $7, cotizacion_id = $8, remision_enabled = $9, remision_creada = $10, paid_amount = $11, payment_type = $12, payment_method = $13, cortes = $14, abonos = $15 WHERE id = $16`,
             [clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
-                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, JSON.stringify(cortes || []), JSON.stringify(abonos || []), req.params.id]
+                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, paymentMethod || null, JSON.stringify(cortes || []), JSON.stringify(abonos || []), req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1187,6 +1206,65 @@ app.delete('/api/gastos-mantenimiento/:id', async (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error('ERROR DELETING GASTO MANTENIMIENTO:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── INGRESOS DE CAJA MENOR CRUD (ingresos no facturados) ────────────────────
+app.get('/api/ingresos-caja-menor', async (req, res) => {
+    try {
+        const { rows } = await pool.query(`
+            SELECT * FROM ingresos_caja_menor
+            ORDER BY fecha_ingreso DESC, fecha_registro DESC
+        `);
+        res.json(rows);
+    } catch (e) {
+        console.error('ERROR GETTING INGRESOS CAJA MENOR:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/ingresos-caja-menor', async (req, res) => {
+    const { id, concepto, descripcion, monto, fecha_ingreso, metodo_pago, origen, referencia_soporte } = req.body;
+    try {
+        const { rows } = await pool.query(`
+            INSERT INTO ingresos_caja_menor (id, concepto, descripcion, monto, fecha_ingreso, metodo_pago, origen, referencia_soporte)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+        `, [id, concepto, descripcion || null, Number(monto) || 0, fecha_ingreso, metodo_pago || 'Efectivo', origen || null, referencia_soporte || null]);
+        res.status(201).json(rows[0]);
+    } catch (e) {
+        console.error('ERROR CREATING INGRESO CAJA MENOR:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put('/api/ingresos-caja-menor/:id', async (req, res) => {
+    const { id } = req.params;
+    const { concepto, descripcion, monto, fecha_ingreso, metodo_pago, origen, referencia_soporte } = req.body;
+    try {
+        const { rows } = await pool.query(`
+            UPDATE ingresos_caja_menor
+            SET concepto = $1, descripcion = $2, monto = $3, fecha_ingreso = $4, metodo_pago = $5, origen = $6, referencia_soporte = $7
+            WHERE id = $8
+            RETURNING *
+        `, [concepto, descripcion || null, Number(monto) || 0, fecha_ingreso, metodo_pago || 'Efectivo', origen || null, referencia_soporte || null, id]);
+        if (rows.length === 0) return res.status(404).json({ error: 'Ingreso de caja menor no encontrado' });
+        res.json(rows[0]);
+    } catch (e) {
+        console.error('ERROR UPDATING INGRESO CAJA MENOR:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/ingresos-caja-menor/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const { rowCount } = await pool.query('DELETE FROM ingresos_caja_menor WHERE id = $1', [id]);
+        if (rowCount === 0) return res.status(404).json({ error: 'Ingreso de caja menor no encontrado' });
+        res.json({ success: true });
+    } catch (e) {
+        console.error('ERROR DELETING INGRESO CAJA MENOR:', e.message);
         res.status(500).json({ error: e.message });
     }
 });

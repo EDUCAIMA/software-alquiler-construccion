@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight, ArrowUp, ArrowDown, ChevronDown, Clock } from 'lucide-react';
+import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight, ArrowUp, ArrowDown, ChevronDown, Clock, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { format, parseISO } from 'date-fns';
@@ -7,10 +7,15 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
 import { generateInvoicePDF } from './CotizacionesHelpers';
+import IngresosTab from './IngresosTab';
 
 export default function Invoices({ hideHeader = false } = {}) {
     const { invoices, clients, products, settings, createInvoice, payInvoice, deleteInvoice, remisiones = [] } = useAppContext();
     const navigate = useNavigate();
+
+    // Submenu de pestañas: Remisiones/Cobros vs. Ingresos
+    const [tab, setTab] = useState('remisiones');
+    const [ingresosActionSlot, setIngresosActionSlot] = useState(null);
 
     // New Invoice Modal
     const [showModal, setShowModal] = useState(false);
@@ -31,6 +36,7 @@ export default function Invoices({ hideHeader = false } = {}) {
     const [paymentMethod, setPaymentMethod] = useState('Transferencia');
     const [paymentOption, setPaymentOption] = useState('Contado'); // Contado, Abono, Fiado
     const [abonoAmount, setAbonoAmount] = useState(0);
+    const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
     // Filters
     const [filterClient, setFilterClient] = useState('');
@@ -171,13 +177,14 @@ export default function Invoices({ hideHeader = false } = {}) {
         setPaymentMethod('Transferencia');
         setPaymentOption('Contado');
         setAbonoAmount(invoice.amount);
+        setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
         setShowPayModal(true);
     };
 
     const handleConfirmPayment = () => {
         if (payingInvoice) {
             const finalAmount = paymentOption === 'Contado' ? (payingInvoice.amount - (payingInvoice.paidAmount || 0)) : (paymentOption === 'Fiado' ? 0 : Number(abonoAmount));
-            payInvoice(payingInvoice.id, finalAmount, paymentOption);
+            payInvoice(payingInvoice.id, finalAmount, paymentOption, paymentOption !== 'Fiado' ? paymentMethod : null, paymentDate);
             navigate('/comercial?tab=despachos');
             
             if (viewingInvoice && viewingInvoice.id === payingInvoice.id) {
@@ -225,6 +232,30 @@ export default function Invoices({ hideHeader = false } = {}) {
 
     return (
         <>
+            {/* Submenu: Remisiones / Cobros vs. Ingresos */}
+            {!hideHeader && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(255,255,255,0.04)', padding: '0.3rem', borderRadius: 12, border: '1px solid var(--surface-border)', width: '100%', maxWidth: 480 }}>
+                        {[
+                            { id: 'remisiones', label: 'Remisiones / Cobros', icon: FileText },
+                            { id: 'ingresos', label: 'Ingresos', icon: TrendingUp },
+                        ].map(t => {
+                            const Ic = t.icon;
+                            const active = tab === t.id;
+                            return (
+                                <button key={t.id} onClick={() => setTab(t.id)}
+                                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem', padding: '0.6rem 1rem', borderRadius: 9, border: 'none', cursor: 'pointer', fontWeight: active ? 700 : 500, fontSize: '0.875rem', background: active ? 'var(--primary)' : 'transparent', color: active ? 'white' : 'var(--text-muted)', transition: 'all 0.2s ease', boxShadow: active ? '0 2px 10px rgba(35, 101, 171,0.3)' : 'none' }}>
+                                    <Ic size={16} />{t.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div ref={setIngresosActionSlot}></div>
+                </div>
+            )}
+
+            {tab === 'ingresos' && !hideHeader ? <IngresosTab actionSlot={ingresosActionSlot} /> : (
+            <>
             {/* Header – oculto cuando se embebe en Comercial */}
             {!hideHeader && (
                 <div className="flex justify-end gap-4 mb-6">
@@ -914,6 +945,16 @@ export default function Invoices({ hideHeader = false } = {}) {
                                     </div>
                                 )}
 
+                                <div className="input-group">
+                                    <label className="input-label">Fecha del Pago</label>
+                                    <input
+                                        type="date"
+                                        className="input-base"
+                                        value={paymentDate}
+                                        onChange={e => setPaymentDate(e.target.value)}
+                                    />
+                                </div>
+
                                 {paymentOption !== 'Fiado' && (
                                     <div className="input-group">
                                         <label className="input-label">Método de Pago</label>
@@ -952,6 +993,8 @@ export default function Invoices({ hideHeader = false } = {}) {
                     </div>
                 );
             })()}
+            </>
+            )}
         </>
     );
 }

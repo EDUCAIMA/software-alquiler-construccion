@@ -161,9 +161,10 @@ function ClientModal({ initial, onSave, onClose, isEdit }) {
 // ─── MODAL: Nueva Obra ────────────────────────────────────────────────────────
 const EMPTY_OBRA = { nombre: '', ubicacion: '', estado: 'Activa', presupuesto: '', fechaInicio: format(new Date(), 'yyyy-MM-dd'), descripcion: '' };
 
-function ObraModal({ onSave, onClose }) {
-    const [form, setForm] = useState(EMPTY_OBRA);
+function ObraModal({ onSave, onClose, initialData }) {
+    const [form, setForm] = useState(initialData || EMPTY_OBRA);
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+    const isEdit = !!initialData;
     return (
         <div 
             onClick={onClose}
@@ -178,7 +179,7 @@ function ObraModal({ onSave, onClose }) {
                         <div style={{ background: 'rgba(249,115,22,0.1)', padding: '0.5rem', borderRadius: '10px', display: 'flex' }}>
                             <MapPin size={18} style={{ color: '#f97316' }} />
                         </div>
-                        Nueva Obra
+                        {isEdit ? 'Editar Obra' : 'Nueva Obra'}
                     </h3>
                     <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}><X size={18} /></button>
                 </div>
@@ -204,7 +205,7 @@ function ObraModal({ onSave, onClose }) {
 
                 <div style={{ padding: '1.25rem 1.75rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '1rem', justifyContent: 'flex-end', borderBottomLeftRadius: '16px', borderBottomRightRadius: '16px' }}>
                     <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-                    <button type="submit" form="obra-form" className="btn btn-primary" style={{ background: '#f97316', boxShadow: '0 4px 14px rgba(249,115,22,0.3)' }} onMouseEnter={e => e.currentTarget.style.background = '#ea580c'} onMouseLeave={e => e.currentTarget.style.background = '#f97316'}>Guardar Obra</button>
+                    <button type="submit" form="obra-form" className="btn btn-primary" style={{ background: '#f97316', boxShadow: '0 4px 14px rgba(249,115,22,0.3)' }} onMouseEnter={e => e.currentTarget.style.background = '#ea580c'} onMouseLeave={e => e.currentTarget.style.background = '#f97316'}>{isEdit ? 'Guardar Cambios' : 'Guardar Obra'}</button>
                 </div>
             </div>
         </div>
@@ -1047,10 +1048,11 @@ function AddEditThirdPartyProductForm({ mode, providerName, initialProduct, onSa
     );
 }
 
-function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, onDelete, remisiones, addRemision, editRemision, maintenances, settings }) {
+function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices, products, onDelete, remisiones, addRemision, editRemision, maintenances, settings }) {
     const { deleteRemision } = useAppContext();
     const [tab, setTab] = useState('datos');
     const [showObraModal, setShowObraModal] = useState(false);
+    const [editingObra, setEditingObra] = useState(null);
     const [showRemisionModal, setShowRemisionModal] = useState(false);
     const [editingRemisionTarget, setEditingRemisionTarget] = useState(null);
     const [expandedRemIds, setExpandedRemIds] = useState([]);
@@ -1203,22 +1205,36 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
                             {tab === 'obras' && (<>
                                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem' }}>
                                     <SectionLabel icon={<Building2 size={13}/>} color="#f97316">{client.obras?.length || 0} Proyectos</SectionLabel>
-                                    <button onClick={() => setShowObraModal(true)} className="btn btn-primary btn-sm" style={{display:'flex',alignItems:'center',gap:'0.4rem'}}><Plus size={14}/> Nueva Obra</button>
+                                    <button onClick={() => { setEditingObra(null); setShowObraModal(true); }} className="btn btn-primary btn-sm" style={{display:'flex',alignItems:'center',gap:'0.4rem'}}><Plus size={14}/> Nueva Obra</button>
                                 </div>
                                 <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'1rem' }}>
                                     {(client.obras || []).map(obra => {
                                         if (!obra) return null;
                                         const cfg = OBRA_ESTADO[obra.estado] || OBRA_ESTADO['Activa'];
                                         return (
-                                            <div key={obra.id} style={{ padding:'1.25rem 1.5rem', border:'1px solid #e2e8f0', borderRadius:'14px', background:'#fafafa', borderLeft:`4px solid ${cfg.color}` }}>
-                                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.65rem' }}>
-                                                    <div style={{ fontWeight:700, color:'#0f172a', fontSize:'0.92rem' }}>{obra.nombre}</div>
-                                                    <span style={{ padding:'3px 9px', borderRadius:'20px', background:`${cfg.color}18`, color:cfg.color, fontSize:'0.65rem', fontWeight:700, border:`1px solid ${cfg.color}30` }}>{obra.estado.toUpperCase()}</span>
+                                            <div key={obra.id} className="obra-card" style={{ border: `1px solid ${cfg.color}40` }}>
+                                                <div style={{ background: cfg.color, padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <div style={{ fontWeight: 800, color: '#ffffff', fontSize: '1.05rem', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <Building2 size={16} />
+                                                        {obra.nombre}
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                        <span style={{ padding: '3px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.25)', color: '#ffffff', fontSize: '0.7rem', fontWeight: 800 }}>
+                                                            {obra.estado.toUpperCase()}
+                                                        </span>
+                                                        <button onClick={() => { setEditingObra(obra); setShowObraModal(true); }} className="obra-edit-btn-solid" title="Editar Obra">
+                                                            <Edit3 size={15} />
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <div style={{ fontSize:'0.78rem', color:'#94a3b8', display:'flex', alignItems:'center', gap:'0.35rem' }}><MapPin size={11}/>{obra.ubicacion || 'Sin ubicación'}</div>
-                                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'0.75rem', paddingTop:'0.75rem', borderTop:'1px solid #f1f5f9' }}>
-                                                    <span style={{ fontSize:'0.72rem', color:'#cbd5e1' }}>Presupuesto</span>
-                                                    <span style={{ fontSize:'0.88rem', fontWeight:800, color:'#0f172a' }}>${(obra.presupuesto||0).toLocaleString()}</span>
+                                                <div style={{ padding: '1.25rem' }}>
+                                                    <div style={{ fontSize: '0.85rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem' }}>
+                                                        <MapPin size={14} color="#64748b" />{obra.ubicacion || 'Sin ubicación'}
+                                                    </div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+                                                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.05em' }}>PRESUPUESTO</span>
+                                                        <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>${(obra.presupuesto||0).toLocaleString()}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         );
@@ -1520,7 +1536,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
                 </div>
             </div>
 
-            {showObraModal && <ObraModal onSave={obra => { onAddObra(client.id, obra); setShowObraModal(false); }} onClose={() => setShowObraModal(false)} />}
+            {showObraModal && <ObraModal initialData={editingObra} onSave={obra => { if(editingObra) { onEditObra(client.id, editingObra.id, obra); } else { onAddObra(client.id, obra); } setShowObraModal(false); setEditingObra(null); }} onClose={() => { setShowObraModal(false); setEditingObra(null); }} />}
             
             {showRemisionModal && (
                 <NuevaRemisionModal 
@@ -1551,6 +1567,34 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
                     from { opacity:0; transform:scale(0.97); }
                     to   { opacity:1; transform:scale(1); }
                 }
+                .obra-card {
+                    padding: 0;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
+                    background: #ffffff;
+                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+                    transition: all 0.25s ease-out;
+                    overflow: hidden;
+                }
+                .obra-card:hover {
+                    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+                    transform: translateY(-2px);
+                }
+                .obra-edit-btn-solid {
+                    background: rgba(255,255,255,0.15);
+                    border: 1px solid rgba(255,255,255,0.1);
+                    color: #ffffff;
+                    cursor: pointer;
+                    padding: 5px;
+                    border-radius: 6px;
+                    transition: all 0.2s;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .obra-edit-btn-solid:hover {
+                    background: rgba(255,255,255,0.3);
+                }
             `}</style>
         </>
     );
@@ -1559,7 +1603,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, invoices, products, 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Clients() {
     const { 
-        clients, addClient, editClient, deleteClient, addObra, 
+        clients, addClient, editClient, deleteClient, addObra, editObra,
         invoices, products, addProduct, editProduct, deleteProduct, remisiones, addRemision, editRemision, maintenances, settings, checkPassword,
         providers, addProvider, editProvider, deleteProvider
     } = useAppContext();
@@ -2124,6 +2168,7 @@ export default function Clients() {
                     onClose={() => setSelectedClient(null)}
                     onEdit={handleEdit}
                     onAddObra={addObra}
+                    onEditObra={editObra}
                     invoices={invoices}
                     products={products}
                     remisiones={remisiones}

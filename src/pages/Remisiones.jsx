@@ -6,7 +6,7 @@ import {
     ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Trash2, Ban,
     Printer, Download, Activity, TrendingUp, Edit3
 } from 'lucide-react';
-import { generateRemisionPDF } from './CotizacionesHelpers';
+import { generateRemisionPDF, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
 import Swal from 'sweetalert2';
@@ -37,7 +37,6 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
     const [clientId, setClientId] = useState(facturaPreload?.clientId || '');
     const [obraId, setObraId] = useState(facturaPreload?.obraId || '');
     const [fecha, setFecha] = useState(format(new Date(), 'yyyy-MM-dd'));
-    const [transporte, setTransporte] = useState(0);
     const [notas, setNotas] = useState('');
     const [items, setItems] = useState(() => {
         if (facturaPreload?.items) {
@@ -85,7 +84,16 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
             updated[existing].cantidad = totalWanted;
             setItems(updated);
         } else {
-            setItems(prev => [...prev, { productId: selProd, nombre: prod.name, cantidad: selCant, tarifaDia: prod.value }]);
+            setItems(prev => [...prev, { 
+                productId: selProd, 
+                nombre: prod.name, 
+                cantidad: selCant, 
+                tarifaDia: prod.value,
+                tipoCobro: prod.tipoCobro || 'Día',
+                horaInicio: '',
+                horaFin: '',
+                horasCalculadas: 0
+            }]);
         }
         setSelProd(''); setSelCant(1);
     };
@@ -96,7 +104,7 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
         if (!clientId || !obraId || items.length === 0) return;
         setLoading(true);
         try {
-            const rem = await onSave({ clientId, obraId, fecha, transporte: Number(transporte), notas, items });
+            const rem = await onSave({ clientId, obraId, fecha, notas, items });
             setCreatedRem(rem);
             setStep(4);
         } catch (e) {
@@ -159,15 +167,9 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                                     </select>
                                 </div>
                             )}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div>
-                                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Fecha de Despacho</label>
-                                    <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={IS} />
-                                </div>
-                                <div>
-                                    <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Costo Transporte ($)</label>
-                                    <input type="number" min="0" value={transporte} onChange={e => setTransporte(e.target.value)} style={IS} />
-                                </div>
+                            <div>
+                                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Fecha de Despacho</label>
+                                <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={IS} />
                             </div>
                             <div>
                                 <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Notas</label>
@@ -234,16 +236,78 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {items.map((item, idx) => (
-                                                <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#104166' }}>{item.nombre}</td>
-                                                    <td style={{ padding: '0.75rem 1rem' }}>{item.cantidad}</td>
-                                                    <td style={{ padding: '0.75rem 1rem', color: '#10b981', fontWeight: 500 }}>${item.tarifaDia?.toLocaleString()}</td>
-                                                    <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                                                        <button onClick={() => removeItem(idx)} style={{ background: '#fee2e2', border: 'none', cursor: 'pointer', color: '#ef4444', display: 'inline-flex', padding: '0.4rem', borderRadius: 6, transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#fecaca'} onMouseLeave={e => e.currentTarget.style.background = '#fee2e2'}><X size={14} /></button>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {items.map((item, idx) => {
+                                                const prod = products.find(p => p.id === item.productId);
+                                                const isHora = (item.tipoCobro || prod?.tipoCobro || '').toLowerCase() === 'hora';
+
+                                                const handleTimeChange = (field, val) => {
+                                                    if ((field === 'horaInicio' || field === 'horaFin') && val && !/^\d{2}:\d{2}$/.test(val)) return;
+                                                    const updated = [...items];
+                                                    const cur = { ...updated[idx], [field]: val };
+
+                                                    if (field === 'horaInicio') {
+                                                        if (cur.horaFin && /^\d{2}:\d{2}$/.test(cur.horaFin)) {
+                                                            cur.horasCalculadas = calcularHorasAlquiler(val, cur.horaFin);
+                                                        } else if (cur.horasCalculadas > 0) {
+                                                            cur.horaFin = calcularHoraFin(val, cur.horasCalculadas);
+                                                        }
+                                                    } else if (field === 'horaFin') {
+                                                        if (cur.horaInicio && /^\d{2}:\d{2}$/.test(cur.horaInicio)) {
+                                                            cur.horasCalculadas = calcularHorasAlquiler(cur.horaInicio, val);
+                                                        }
+                                                    } else if (field === 'horasCalculadas') {
+                                                        const numH = Number(val) || 0;
+                                                        cur.horasCalculadas = numH;
+                                                        if (cur.horaInicio && /^\d{2}:\d{2}$/.test(cur.horaInicio) && numH > 0) {
+                                                            cur.horaFin = calcularHoraFin(cur.horaInicio, numH);
+                                                        }
+                                                    }
+
+                                                    updated[idx] = cur;
+                                                    setItems(updated);
+                                                };
+
+                                                return (
+                                                    <React.Fragment key={idx}>
+                                                        <tr style={{ borderBottom: isHora ? 'none' : '1px solid #f1f5f9' }}>
+                                                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#104166' }}>
+                                                                {item.nombre}
+                                                                {isHora && (
+                                                                    <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: 4, fontWeight: 700, marginLeft: 6 }}>
+                                                                        Por Horas
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td style={{ padding: '0.75rem 1rem' }}>{item.cantidad}</td>
+                                                            <td style={{ padding: '0.75rem 1rem', color: '#10b981', fontWeight: 500 }}>
+                                                                ${item.tarifaDia?.toLocaleString()} {isHora ? '/ hora' : '/ día'}
+                                                            </td>
+                                                            <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                                                                <button onClick={() => removeItem(idx)} style={{ background: '#fee2e2', border: 'none', cursor: 'pointer', color: '#ef4444', display: 'inline-flex', padding: '0.4rem', borderRadius: 6, transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#fecaca'} onMouseLeave={e => e.currentTarget.style.background = '#fee2e2'}><X size={14} /></button>
+                                                            </td>
+                                                        </tr>
+                                                        {isHora && (
+                                                            <tr style={{ borderBottom: '1px solid #f1f5f9', background: '#fcfcfd' }}>
+                                                                <td colSpan={4} style={{ padding: '0.5rem 1rem 0.8rem 1rem' }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: '#ffffff', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+                                                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>Hora Alquiler:</div>
+                                                                        <input type="time" value={item.horaInicio || ''} onChange={e => handleTimeChange('horaInicio', e.target.value)} style={{ padding: '0.2rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.8rem' }} />
+                                                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>Horas Servicio:</div>
+                                                                        <input type="number" step="0.5" min="0.5" value={item.horasCalculadas || ''} placeholder="0" onChange={e => handleTimeChange('horasCalculadas', e.target.value)} style={{ width: '60px', padding: '0.2rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.8rem', textAlign: 'center', fontWeight: 700 }} />
+                                                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>Hora Devolución:</div>
+                                                                        <input type="time" value={item.horaFin || ''} onChange={e => handleTimeChange('horaFin', e.target.value)} style={{ padding: '0.2rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.8rem' }} />
+                                                                        {item.horasCalculadas > 0 && (
+                                                                            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#2365AB', background: '#e0f2fe', padding: '2px 8px', borderRadius: 12 }}>
+                                                                                ⏱️ {item.horasCalculadas} {item.horasCalculadas === 1 ? 'Hora' : 'Horas'}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </React.Fragment>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
@@ -293,13 +357,6 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                                     </tbody>
                                 </table>
                             </div>
-
-                            {transporte > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff7ed', border: '1px solid #ffedd5', borderRadius: 10, padding: '1rem 1.25rem' }}>
-                                    <span style={{ fontSize: '0.85rem', color: '#9a3412', fontWeight: 600 }}>Costo de Transporte</span>
-                                    <span style={{ fontWeight: 800, color: '#f97316', fontSize: '1.05rem' }}>${Number(transporte).toLocaleString()}</span>
-                                </div>
-                            )}
 
                             {notas && (
                                 <div style={{ display: 'flex', gap: '0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '1rem' }}>

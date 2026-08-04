@@ -81,6 +81,7 @@ export const AppProvider = ({ children }) => {
   const [maintenances, setMaintenances] = useState([]);
   const [gastos, setGastos] = useState([]);
   const [gastosMantenimiento, setGastosMantenimiento] = useState([]);
+  const [ingresosCajaMenor, setIngresosCajaMenor] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -107,7 +108,7 @@ export const AppProvider = ({ children }) => {
     try {
       const fetchSafe = (url, fallback) => api.get(url).catch(e => { console.error(`Error fetching ${url}:`, e); return fallback; });
       
-      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs, provs] = await Promise.all([
+      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs, provs, icm] = await Promise.all([
         fetchSafe('/api/products', []),
         fetchSafe('/api/clients', []),
         fetchSafe('/api/invoices', []),
@@ -122,6 +123,7 @@ export const AppProvider = ({ children }) => {
         fetchSafe('/api/logs', []),
         fetchSafe('/api/users', []),
         fetchSafe('/api/providers', []),
+        fetchSafe('/api/ingresos-caja-menor', []),
       ]);
       
       console.log('API Data loaded:', { products: p.length, clients: c.length, settings: s });
@@ -139,6 +141,7 @@ export const AppProvider = ({ children }) => {
       setLogs(Array.isArray(lgs) ? lgs : []);
       setUsers(Array.isArray(usrs) ? usrs : []);
       setProviders(Array.isArray(provs) ? provs : []);
+      setIngresosCajaMenor(Array.isArray(icm) ? icm : []);
       if (s && !s.error) setSettings(s);
     } catch (err) {
       console.error('Error crítico en reloadAll:', err);
@@ -315,9 +318,11 @@ export const AppProvider = ({ children }) => {
   const createInvoice = async (invoiceDetails) => {
     const subtotal = invoiceDetails.items.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
     const client = clients.find(c => c.id === invoiceDetails.clientId);
-    const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
-    const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
-    const amount = subtotal + iva + ret + (Number(invoiceDetails.transporte) || 0);
+    const descuentoMonto = Math.min(subtotal, Math.max(0, Number(invoiceDetails.descuentoMonto) || 0));
+    const subtotalConDescuento = subtotal - descuentoMonto;
+    const iva = client?.responsableIVA ? Math.round(subtotalConDescuento * (client?.porcIVA || 0) / 100) : 0;
+    const ret = Math.round(subtotalConDescuento * (client?.porcRetencion || 0) / 100);
+    const amount = subtotalConDescuento + iva + ret + (Number(invoiceDetails.transporte) || 0);
 
     const initialPaid = Number(invoiceDetails.paidAmount) || 0;
     let initialStatus = invoiceDetails.status || 'Pending';
@@ -369,7 +374,7 @@ export const AppProvider = ({ children }) => {
       const client = clients.find(c => c.id === cot.clientId);
       const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
       const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
-      const amount = subtotal + iva + ret + (Number(cot.transporte) || 0);
+      const amount = subtotal + iva + ret;
 
       const hasRemision = remisiones.some(r => r.cotizacionId === cotizacionId && r.estado !== 'Cancelada');
       const newInvoice = {
@@ -413,10 +418,12 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  const payInvoice = async (invoiceId, paidAmount, paymentType) => {
+  const payInvoice = async (invoiceId, paidAmount, paymentType, paymentMethod, paymentDate) => {
     const invoice = invoices.find(inv => inv.id === invoiceId);
     if (!invoice) return;
-    
+
+    const fecha = paymentDate || format(new Date(), 'yyyy-MM-dd');
+
     const totalPaid = (invoice.paidAmount || 0) + paidAmount;
     let newStatus = 'Paid';
     if (totalPaid < invoice.amount) {
@@ -427,18 +434,19 @@ export const AppProvider = ({ children }) => {
       paidAmount = 0;
     }
 
-    const updated = { 
-      ...invoice, 
-      status: newStatus, 
+    const updated = {
+      ...invoice,
+      status: newStatus,
       paidAmount: paymentType === 'Credito' || paymentType === 'Fiado' ? invoice.paidAmount : totalPaid,
       paymentType: paymentType,
-      paidDate: paidAmount > 0 ? format(new Date(), 'yyyy-MM-dd') : invoice.paidDate, 
+      paymentMethod: paidAmount > 0 ? (paymentMethod || invoice.paymentMethod) : invoice.paymentMethod,
+      paidDate: paidAmount > 0 ? fecha : invoice.paidDate,
       remisionEnabled: true,
-      abonos: paidAmount > 0 
-        ? [...(invoice.abonos || []), { monto: paidAmount, fecha: format(new Date(), 'yyyy-MM-dd'), tipo: paymentType }]
+      abonos: paidAmount > 0
+        ? [...(invoice.abonos || []), { monto: paidAmount, fecha: fecha, tipo: paymentType, metodoPago: paymentMethod || null }]
         : (invoice.abonos || [])
     };
-    
+
     await api.put(`/api/invoices/${invoiceId}`, updated);
 
     // Actualizar deuda del cliente
@@ -448,7 +456,7 @@ export const AppProvider = ({ children }) => {
     }
 
     await reloadAll();
-    logAction('Pago Registrado', `Factura ${invoiceId} - ${paymentType}: $${paidAmount.toLocaleString()}`, client?.name || 'Unknown', 'entry');
+    logAction('Pago Registrado', `Factura ${invoiceId} - ${paymentType}${paymentMethod ? ` (${paymentMethod})` : ''}: $${paidAmount.toLocaleString()}`, client?.name || 'Unknown', 'entry');
   };
 
   const addCorteObra = async (invoiceId, corteData) => {
@@ -615,7 +623,7 @@ export const AppProvider = ({ children }) => {
     await reloadAll();
   };
 
-  const registrarDevolucion = async (clientId, obraId, devoluciones, fecha) => {
+  const registrarDevolucion = async (clientId, obraId, devoluciones, fecha, hora) => {
     // 1. Identificar remisiones candidatas (Activas o Parciales para el cliente/obra)
     const targetRems = (remisiones || [])
       .filter(r => r.clientId === clientId && r.obraId === obraId && (r.estado === 'Activa' || r.estado === 'Parcial'))
@@ -651,16 +659,20 @@ export const AppProvider = ({ children }) => {
         
         // Registrar la devolución
         item.cantidadDevuelta = (item.cantidadDevuelta || 0) + descuento;
+        if (hora) item.horaFin = hora;
         if (!item.devoluciones) item.devoluciones = [];
         
         const returnDate = fecha || format(new Date(), 'yyyy-MM-dd');
+        const returnTime = hora || format(new Date(), 'HH:mm');
         const existingDev = item.devoluciones.find(d => d.fecha === returnDate);
         if (existingDev) {
             existingDev.cantidad += descuento;
+            if (hora) existingDev.hora = hora;
         } else {
             item.devoluciones.push({ 
                 cantidad: descuento, 
-                fecha: returnDate 
+                fecha: returnDate,
+                hora: returnTime
             });
         }
         
@@ -760,7 +772,6 @@ export const AppProvider = ({ children }) => {
         '4. El incumplimiento en el pago generará intereses de mora del 1.5% mensual sobre el saldo pendiente.',
         '5. Este contrato se rige por las leyes colombianas. Las partes se someten a los jueces competentes de la ciudad de Bogotá D.C.',
         '6. Forma de pago: ' + (data.metodoPago || 'Acordada entre las partes.'),
-        '7. Transporte: ' + (data.responsableTransporte || 'Acordado entre las partes.'),
     ];
     const nueva = { ...data, id, fecha: format(new Date(), 'yyyy-MM-dd'), estado: 'Borrador', habeasData: false, habeasDataTimestamp: null, firma: null, foto: null, clausulas: data.clausulas || defaultClausulas };
     await api.post('/api/cotizaciones', nueva);
@@ -856,6 +867,28 @@ export const AppProvider = ({ children }) => {
     logAction('Gasto Mantenimiento Eliminado', id, '', 'system');
   };
 
+  // ─── INGRESOS DE CAJA MENOR CRUD (ingresos no facturados) ──────────────────
+  const addIngresoCajaMenor = async (data) => {
+    const id = nextId(ingresosCajaMenor, 'IC');
+    const nuevo = { ...data, id, monto: Number(data.monto || 0) };
+    await api.post('/api/ingresos-caja-menor', nuevo);
+    await reloadAll();
+    logAction('Ingreso Caja Menor Registrado', `${id} — ${data.concepto}`, data.origen || 'N/A', 'entry');
+  };
+
+  const editIngresoCajaMenor = async (id, data) => {
+    const editado = { ...data, monto: Number(data.monto || 0) };
+    await api.put(`/api/ingresos-caja-menor/${id}`, editado);
+    await reloadAll();
+    logAction('Ingreso Caja Menor Modificado', id, data.origen || 'N/A', 'system');
+  };
+
+  const deleteIngresoCajaMenor = async (id) => {
+    await api.del(`/api/ingresos-caja-menor/${id}`);
+    await reloadAll();
+    logAction('Ingreso Caja Menor Eliminado', id, '', 'system');
+  };
+
   // ─── EMPLEADOS + NÓMINA ───────────────────────────────────────────────────
   const addEmpleado = async (data) => {
     const id = nextId(empleados, 'EMP');
@@ -917,6 +950,8 @@ export const AppProvider = ({ children }) => {
       gastos, addGasto, pagarGasto,
       // Gastos Mantenimiento
       gastosMantenimiento, addGastoMantenimiento, editGastoMantenimiento, deleteGastoMantenimiento,
+      // Ingresos Caja Menor
+      ingresosCajaMenor, addIngresoCajaMenor, editIngresoCajaMenor, deleteIngresoCajaMenor,
       empleados, addEmpleado,
       liquidaciones, addLiquidacion, pagarLiquidacion,
       // Settings

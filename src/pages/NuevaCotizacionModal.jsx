@@ -1,21 +1,25 @@
 import React, { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import {
-    FilePlus, CheckCircle, X, ChevronRight,
-    MapPin, Package, Truck, Search, Plus, Minus, Trash2
+    FilePlus, CheckCircle, X, ChevronRight, ChevronDown,
+    MapPin, Package, Search, Plus, Minus, Trash2
 } from 'lucide-react';
-import { fmtCOP } from './CotizacionesHelpers';
-import { useAppContext } from '../context/AppContext';
+import { fmtCOP, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
 import Swal from 'sweetalert2';
 
 export default function NuevaCotizacionModal({ onClose, onSave, clients, products, initialData }) {
     const [step, setStep] = useState(1);
     const [clientId, setClientId] = useState(initialData?.clientId || '');
     const [obraId, setObraId] = useState(initialData?.obraId || '');
-    const { settings } = useAppContext();
-    const [respTransporte, setRespTransporte] = useState(initialData?.responsableTransporte || settings?.shortName || 'CIELO');
-    const [transporte, setTransporte] = useState(initialData?.transporte || 0);
-    const [notas, setNotas] = useState(initialData?.notas || '');
+    const [clientSearch, setClientSearch] = useState(() => {
+        if (initialData?.clientId) {
+            const found = (clients || []).find(c => c.id === initialData.clientId);
+            return found?.name || '';
+        }
+        return '';
+    });
+    const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+    const [notas, setNotas] = useState(initialData?.notas || 'Cotización sujeto a disponibilidad de equipos.');
     const [items, setItems] = useState(initialData?.items ? [...initialData.items] : []);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterPropiedad, setFilterPropiedad] = useState('Todos'); // 'Todos' | 'Propio' | 'Terceros'
@@ -23,6 +27,23 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
 
     const selectedClient = clients.find(c => c.id === clientId);
     const obras = selectedClient?.obras || [];
+
+    const filteredClients = useMemo(() => {
+        if (!clients || !Array.isArray(clients)) return [];
+        const query = clientSearch.trim().toLowerCase();
+        return clients.filter(c => 
+            (c.name || '').toLowerCase().includes(query) ||
+            (c.nit || c.cedula || c.documento || '').toLowerCase().includes(query) ||
+            (c.phone || c.telefono || '').toLowerCase().includes(query)
+        );
+    }, [clients, clientSearch]);
+
+    const handleSelectClient = (c) => {
+        setClientId(c.id);
+        setObraId('');
+        setClientSearch(c.name);
+        setClientDropdownOpen(false);
+    };
 
     const filteredProducts = useMemo(() => {
         return (products || []).filter(p => {
@@ -48,7 +69,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
     const porcRet = Number(selectedClient?.porcRetencion) || 0;
     const iva = Math.round(subtotal * porcIVA / 100);
     const ret = Math.round(subtotal * porcRet / 100);
-    const total = subtotal + iva + ret + (Number(transporte) || 0);
+    const total = subtotal + iva + ret;
 
     const handleProductClick = (prod) => {
         const isServ = (prod.category || '').toLowerCase().includes('servicio') ||
@@ -147,7 +168,15 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                        (prod?.category || '').toLowerCase().includes('servicio') ||
                        (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
                        (prod?.esquemaCobro || '').toLowerCase().includes('única');
-        newItems[idx].dias = isServ ? 1 : Math.max(1, Number(days) || 1);
+        const isHora = (newItems[idx].tipoCobro || '').toLowerCase() === 'hora' || (prod?.tipoCobro || '').toLowerCase() === 'hora';
+
+        const numVal = isServ ? 1 : Math.max(0.5, Number(days) || 0.5);
+        newItems[idx].dias = numVal;
+
+        if (isHora && newItems[idx].horaInicio) {
+            const hFin = calcularHoraFin(newItems[idx].horaInicio, numVal);
+            if (hFin) newItems[idx].horaFin = hFin;
+        }
         setItems(newItems);
     };
 
@@ -159,8 +188,6 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
         if (!clientId || !obraId || items.length === 0) return;
         onSave({
             clientId, obraId, 
-            responsableTransporte: respTransporte,
-            transporte: Number(transporte) || 0,
             notas, items,
             validezDias: initialData?.validezDias || 15, // Default as requested to remove field
             metodoPago: initialData?.metodoPago || 'Crédito 30 días', // Default as requested to remove field
@@ -199,13 +226,102 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                     <div style={{ flex: 2, display: 'flex', flexDirection: 'column', borderRight: '1px solid #e2e8f0', background: '#ffffff' }}>
                         
                         {/* Config Area */}
-                        <div style={{ padding: '1.5rem 2.5rem', borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1.25rem', alignItems: 'end' }}>
+                        <div style={{ padding: '1.5rem 2.5rem', borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.25rem', alignItems: 'end' }}>
                             <div>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Cliente *</label>
-                                <select value={clientId} onChange={e => { setClientId(e.target.value); setObraId(''); }} style={IS}>
-                                    <option value="">Seleccione Cliente</option>
-                                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        type="text"
+                                        value={clientSearch}
+                                        onChange={e => {
+                                            setClientSearch(e.target.value);
+                                            setClientId('');
+                                            setObraId('');
+                                            setClientDropdownOpen(true);
+                                        }}
+                                        onFocus={() => setClientDropdownOpen(true)}
+                                        onClick={() => setClientDropdownOpen(true)}
+                                        onBlur={() => {
+                                            window.setTimeout(() => setClientDropdownOpen(false), 150);
+                                        }}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && filteredClients.length > 0) {
+                                                e.preventDefault();
+                                                handleSelectClient(filteredClients[0]);
+                                            }
+                                        }}
+                                        placeholder="Buscar o seleccionar cliente..."
+                                        autoComplete="off"
+                                        style={{
+                                            ...IS,
+                                            paddingRight: '2.4rem',
+                                            background: '#ffffff'
+                                        }}
+                                    />
+                                    <ChevronDown
+                                        size={16}
+                                        style={{
+                                            position: 'absolute',
+                                            right: '0.85rem',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            color: '#64748b',
+                                            pointerEvents: 'none'
+                                        }}
+                                    />
+                                    {clientDropdownOpen && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: 'calc(100% + 4px)',
+                                            left: 0,
+                                            right: 0,
+                                            zIndex: 100,
+                                            maxHeight: 260,
+                                            overflowY: 'auto',
+                                            background: '#ffffff',
+                                            border: '1px solid #cbd5e1',
+                                            borderRadius: '12px',
+                                            boxShadow: '0 12px 24px rgba(15, 23, 42, 0.15)'
+                                        }}>
+                                            {filteredClients.length > 0 ? filteredClients.map(c => (
+                                                <button
+                                                    key={c.id}
+                                                    type="button"
+                                                    onMouseDown={e => e.preventDefault()}
+                                                    onClick={() => handleSelectClient(c)}
+                                                    style={{
+                                                        width: '100%',
+                                                        border: 'none',
+                                                        background: clientId === c.id ? '#eff6ff' : 'transparent',
+                                                        padding: '0.75rem 1rem',
+                                                        textAlign: 'left',
+                                                        cursor: 'pointer',
+                                                        borderBottom: '1px solid #f1f5f9',
+                                                        color: clientId === c.id ? '#2365AB' : '#1e293b',
+                                                        fontWeight: clientId === c.id ? 800 : 600,
+                                                        fontSize: '0.85rem',
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center'
+                                                    }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = clientId === c.id ? '#eff6ff' : 'transparent'}
+                                                >
+                                                    <span>{c.name}</span>
+                                                    {(c.nit || c.cedula || c.documento) && (
+                                                        <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 500 }}>
+                                                            {c.nit || c.cedula || c.documento}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            )) : (
+                                                <div style={{ padding: '0.85rem', fontSize: '0.85rem', color: '#94a3b8', textAlign: 'center' }}>
+                                                    No se encontraron clientes
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Obra *</label>
@@ -213,10 +329,6 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                     <option value="">Seleccione Obra</option>
                                     {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
                                 </select>
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Transporte ($)</label>
-                                <input type="number" value={transporte} onChange={e => setTransporte(e.target.value)} style={IS} placeholder="0" />
                             </div>
                         </div>
 
@@ -367,14 +479,39 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                     {items.map((item, idx) => {
                                         const prod = (products || []).find(p => p && p.id === item.productId);
+                                        const isTerceros = prod?.tipoPropiedad === 'Terceros';
                                         const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') ||
                                                        (item.tipoCobro || '').toLowerCase().includes('única') ||
                                                        (item.category || '').toLowerCase().includes('servicio') ||
                                                        (prod?.category || '').toLowerCase().includes('servicio') ||
                                                        (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
                                                        (prod?.esquemaCobro || '').toLowerCase().includes('única');
-                                        const isTerceros = prod?.tipoPropiedad === 'Terceros';
+                                        const isHora = (item.tipoCobro || '').toLowerCase() === 'hora' || (prod?.tipoCobro || '').toLowerCase() === 'hora';
                                         const lineTotal = item.cantidad * (isServ ? 1 : item.dias) * item.tarifaDia;
+
+                                        const handleTimeChange = (field, val) => {
+                                            if (!val || !/^\d{2}:\d{2}$/.test(val)) return;
+                                            const newItems = [...items];
+                                            const curItem = { ...newItems[idx], [field]: val };
+
+                                            if (field === 'horaInicio') {
+                                                if (curItem.horaFin && /^\d{2}:\d{2}$/.test(curItem.horaFin)) {
+                                                    const hrs = calcularHorasAlquiler(val, curItem.horaFin);
+                                                    if (hrs > 0) curItem.dias = hrs;
+                                                } else if (curItem.dias > 0) {
+                                                    const hFin = calcularHoraFin(val, curItem.dias);
+                                                    if (hFin) curItem.horaFin = hFin;
+                                                }
+                                            } else if (field === 'horaFin') {
+                                                if (curItem.horaInicio && /^\d{2}:\d{2}$/.test(curItem.horaInicio)) {
+                                                    const hrs = calcularHorasAlquiler(curItem.horaInicio, val);
+                                                    if (hrs > 0) curItem.dias = hrs;
+                                                }
+                                            }
+
+                                            newItems[idx] = curItem;
+                                            setItems(newItems);
+                                        };
 
                                         return (
                                             <div key={idx} style={{ background: 'white', padding: '1rem', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
@@ -394,9 +531,28 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                                                 Cobro Único
                                                             </span>
                                                         )}
+                                                        {isHora && (
+                                                            <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#b45309', padding: '2px 6px', borderRadius: 6, fontWeight: 700 }}>
+                                                                Cobro por Horas
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <button onClick={() => removeItem(idx)} style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer' }}><Trash2 size={16} /></button>
                                                 </div>
+
+                                                {isHora && (
+                                                    <div style={{ background: '#f8fafc', padding: '0.65rem', borderRadius: 10, border: '1px solid #e2e8f0', marginBottom: '0.75rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                                        <div>
+                                                            <label style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: 2 }}>HORA ALQUILER (INICIO)</label>
+                                                            <input type="time" value={item.horaInicio || ''} onChange={e => handleTimeChange('horaInicio', e.target.value)} style={{ width: '100%', padding: '0.3rem', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: '0.8rem', fontWeight: 600 }} />
+                                                        </div>
+                                                        <div>
+                                                            <label style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, display: 'block', marginBottom: 2 }}>HORA DEVOLUCIÓN (FIN)</label>
+                                                            <input type="time" value={item.horaFin || ''} onChange={e => handleTimeChange('horaFin', e.target.value)} style={{ width: '100%', padding: '0.3rem', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: '0.8rem', fontWeight: 600 }} />
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 <div style={{ display: 'grid', gridTemplateColumns: isServ ? '1fr' : '1fr 1fr', gap: '1rem' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                         <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Cant:</div>
@@ -413,10 +569,11 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                                     </div>
                                                     {!isServ && (
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                            <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Días:</div>
+                                                            <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>{isHora ? 'Horas:' : 'Días:'}</div>
                                                             <input 
                                                                 type="number" 
-                                                                min="1" 
+                                                                step="0.5"
+                                                                min="0.5" 
                                                                 value={item.dias} 
                                                                 onChange={(e) => updateItemDays(idx, e.target.value)} 
                                                                 style={{ width: '100%', padding: '0.3rem', border: '1px solid #e2e8f0', borderRadius: 8, textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }} 
@@ -451,10 +608,6 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                         <span style={{ fontWeight: 600, color: '#991b1b' }}>-{fmtCOP(ret)}</span>
                                     </div>
                                 )}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
-                                    <span>Transporte</span>
-                                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{fmtCOP(Number(transporte))}</span>
-                                </div>
                                 <div style={{ height: '1px', background: '#e2e8f0', margin: '0.4rem 0' }}></div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', fontWeight: 900, color: '#1e293b' }}>
                                     <span>Total</span>

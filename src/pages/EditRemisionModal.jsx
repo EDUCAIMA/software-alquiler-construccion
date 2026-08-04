@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Save, Edit3, Plus, Trash2, Calendar, DollarSign, FileText, CheckCircle, Package, Truck, User } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
 
 export default function EditRemisionModal({ remision, onClose, onSave, products = [], clients = [] }) {
     const [fecha, setFecha] = useState(remision?.fecha || '');
@@ -16,7 +17,10 @@ export default function EditRemisionModal({ remision, onClose, onSave, products 
             cantidadDevuelta: Number(i.cantidadDevuelta) || 0,
             tarifaDia: Number(i.tarifaDia) || 0,
             tipoCobro: i.tipoCobro || '',
-            category: i.category || ''
+            category: i.category || '',
+            horaInicio: i.horaInicio || '',
+            horaFin: i.horaFin || '',
+            horasCalculadas: i.horasCalculadas || calcularHorasAlquiler(i.horaInicio, i.horaFin)
         }))
     );
     const [selectedAddProduct, setSelectedAddProduct] = useState('');
@@ -82,7 +86,10 @@ export default function EditRemisionModal({ remision, onClose, onSave, products 
                 cantidadDevuelta: 0,
                 tarifaDia: Number(prod.value) || 0,
                 tipoCobro: prod.tipoCobro || 'Día',
-                category: prod.category || ''
+                category: prod.category || '',
+                horaInicio: '',
+                horaFin: '',
+                horasCalculadas: 0
             }
         ]);
         setSelectedAddProduct('');
@@ -243,66 +250,122 @@ export default function EditRemisionModal({ remision, onClose, onSave, products 
                                         </tr>
                                     ) : (
                                         items.map((it, idx) => {
+                                            const prod = products.find(p => p.id === it.productId);
                                             const isServ = (it.tipoCobro || '').toLowerCase().includes('servicio') || 
                                                            (it.tipoCobro || '').toLowerCase().includes('única') ||
                                                            (it.category || '').toLowerCase().includes('servicio');
+                                            const isHora = (it.tipoCobro || prod?.tipoCobro || '').toLowerCase() === 'hora';
+
+                                            const handleTimeChange = (field, val) => {
+                                                if ((field === 'horaInicio' || field === 'horaFin') && val && !/^\d{2}:\d{2}$/.test(val)) return;
+                                                const copy = [...items];
+                                                const cur = { ...copy[idx], [field]: val };
+
+                                                if (field === 'horaInicio') {
+                                                    if (cur.horaFin && /^\d{2}:\d{2}$/.test(cur.horaFin)) {
+                                                        cur.horasCalculadas = calcularHorasAlquiler(val, cur.horaFin);
+                                                    } else if (cur.horasCalculadas > 0) {
+                                                        cur.horaFin = calcularHoraFin(val, cur.horasCalculadas);
+                                                    }
+                                                } else if (field === 'horaFin') {
+                                                    if (cur.horaInicio && /^\d{2}:\d{2}$/.test(cur.horaInicio)) {
+                                                        cur.horasCalculadas = calcularHorasAlquiler(cur.horaInicio, val);
+                                                    }
+                                                } else if (field === 'horasCalculadas') {
+                                                    const numH = Number(val) || 0;
+                                                    cur.horasCalculadas = numH;
+                                                    if (cur.horaInicio && /^\d{2}:\d{2}$/.test(cur.horaInicio) && numH > 0) {
+                                                        cur.horaFin = calcularHoraFin(cur.horaInicio, numH);
+                                                    }
+                                                }
+
+                                                copy[idx] = cur;
+                                                setItems(copy);
+                                            };
+
                                             return (
-                                                <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
-                                                    <td style={{ padding: '0.65rem 0.85rem' }}>
-                                                        <input 
-                                                            type="text" 
-                                                            value={it.nombre} 
-                                                            onChange={e => handleItemChange(idx, 'nombre', e.target.value)}
-                                                            style={{ ...IS, background: 'white' }}
-                                                            required 
-                                                        />
-                                                        {isServ && (
-                                                            <span style={{ fontSize: '0.65rem', background: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: 4, fontWeight: 700, marginTop: 3, display: 'inline-block' }}>
-                                                                Servicio (Cobro Único)
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>
-                                                        <input 
-                                                            type="number" 
-                                                            min="1" 
-                                                            value={it.cantidad} 
-                                                            onChange={e => handleItemChange(idx, 'cantidad', e.target.value)}
-                                                            style={{ ...IS, textAlign: 'center', background: 'white' }}
-                                                            required 
-                                                        />
-                                                    </td>
-                                                    <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>
-                                                        <input 
-                                                            type="number" 
-                                                            min="0" 
-                                                            max={it.cantidad} 
-                                                            value={it.cantidadDevuelta} 
-                                                            onChange={e => handleItemChange(idx, 'cantidadDevuelta', e.target.value)}
-                                                            style={{ ...IS, textAlign: 'center', background: 'white' }}
-                                                        />
-                                                    </td>
-                                                    <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }}>
-                                                        <input 
-                                                            type="number" 
-                                                            min="0" 
-                                                            value={it.tarifaDia} 
-                                                            onChange={e => handleItemChange(idx, 'tarifaDia', e.target.value)}
-                                                            style={{ ...IS, textAlign: 'right', background: 'white' }}
-                                                            required 
-                                                        />
-                                                    </td>
-                                                    <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>
-                                                        <button 
-                                                            type="button"
-                                                            onClick={() => handleRemoveItem(idx)}
-                                                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 4 }}
-                                                            title="Eliminar de remisión"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    </td>
-                                                </tr>
+                                                <React.Fragment key={idx}>
+                                                    <tr style={{ borderBottom: isHora ? 'none' : '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
+                                                        <td style={{ padding: '0.65rem 0.85rem' }}>
+                                                            <input 
+                                                                type="text" 
+                                                                value={it.nombre} 
+                                                                onChange={e => handleItemChange(idx, 'nombre', e.target.value)}
+                                                                style={{ ...IS, background: 'white' }}
+                                                                required 
+                                                            />
+                                                            {isServ && (
+                                                                <span style={{ fontSize: '0.65rem', background: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: 4, fontWeight: 700, marginTop: 3, display: 'inline-block' }}>
+                                                                    Servicio (Cobro Único)
+                                                                </span>
+                                                            )}
+                                                            {isHora && (
+                                                                <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: 4, fontWeight: 700, marginTop: 3, display: 'inline-block' }}>
+                                                                    Por Horas
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>
+                                                            <input 
+                                                                type="number" 
+                                                                min="1" 
+                                                                value={it.cantidad} 
+                                                                onChange={e => handleItemChange(idx, 'cantidad', e.target.value)}
+                                                                style={{ ...IS, textAlign: 'center', background: 'white' }}
+                                                                required 
+                                                            />
+                                                        </td>
+                                                        <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>
+                                                            <input 
+                                                                type="number" 
+                                                                min="0" 
+                                                                max={it.cantidad} 
+                                                                value={it.cantidadDevuelta} 
+                                                                onChange={e => handleItemChange(idx, 'cantidadDevuelta', e.target.value)}
+                                                                style={{ ...IS, textAlign: 'center', background: 'white' }}
+                                                            />
+                                                        </td>
+                                                        <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }}>
+                                                            <input 
+                                                                type="number" 
+                                                                min="0" 
+                                                                value={it.tarifaDia} 
+                                                                onChange={e => handleItemChange(idx, 'tarifaDia', e.target.value)}
+                                                                style={{ ...IS, textAlign: 'right', background: 'white' }}
+                                                                required 
+                                                            />
+                                                        </td>
+                                                        <td style={{ padding: '0.65rem 0.85rem', textAlign: 'center' }}>
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => handleRemoveItem(idx)}
+                                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 4 }}
+                                                                title="Eliminar de remisión"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                    {isHora && (
+                                                        <tr style={{ borderBottom: '1px solid #f1f5f9', background: '#fcfcfd' }}>
+                                                            <td colSpan={5} style={{ padding: '0.4rem 0.85rem 0.75rem 0.85rem' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: '#ffffff', padding: '0.4rem 0.75rem', borderRadius: 8, border: '1px solid #e2e8f0', flexWrap: 'wrap' }}>
+                                                                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>Hora Alquiler:</div>
+                                                                    <input type="time" value={it.horaInicio || ''} onChange={e => handleTimeChange('horaInicio', e.target.value)} style={{ padding: '0.2rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.8rem' }} />
+                                                                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>Horas Servicio:</div>
+                                                                    <input type="number" step="0.5" min="0.5" value={it.horasCalculadas || ''} placeholder="0" onChange={e => handleTimeChange('horasCalculadas', e.target.value)} style={{ width: '60px', padding: '0.2rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.8rem', textAlign: 'center', fontWeight: 700 }} />
+                                                                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b' }}>Hora Devolución:</div>
+                                                                    <input type="time" value={it.horaFin || ''} onChange={e => handleTimeChange('horaFin', e.target.value)} style={{ padding: '0.2rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: 4, fontSize: '0.8rem' }} />
+                                                                    {it.horasCalculadas > 0 && (
+                                                                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#2365AB', background: '#e0f2fe', padding: '2px 8px', borderRadius: 12 }}>
+                                                                            ⏱️ {it.horasCalculadas} {it.horasCalculadas === 1 ? 'Hora' : 'Horas'}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </React.Fragment>
                                             );
                                         })
                                     )}

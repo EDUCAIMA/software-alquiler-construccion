@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { RotateCcw, X, Package, ArrowDownCircle, FileText, User, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -6,9 +6,69 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
     const [selClientId, setSelClientId] = useState(initialClientId || '');
     const [selObraId, setSelObraId] = useState(initialObraId || '');
     const [fechaDevolucion, setFechaDevolucion] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [horaDevolucion, setHoraDevolucion] = useState(format(new Date(), 'HH:mm'));
+
+    const isServicio = (item, prod) => {
+        return (item.tipoCobro || '').toLowerCase().includes('servicio') ||
+            (item.tipoCobro || '').toLowerCase().includes('única') ||
+            (item.category || '').toLowerCase().includes('servicio') ||
+            (prod?.category || '').toLowerCase().includes('servicio') ||
+            (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+            (prod?.esquemaCobro || '').toLowerCase().includes('única');
+    };
 
     const client = clients.find(c => c.id === selClientId);
     const obra = client?.obras?.find(o => o.id === selObraId);
+
+    const devolucionesDisponibles = useMemo(() => {
+        const clienteMap = {};
+
+        remisiones
+            .filter(r => r.estado === 'Activa' || r.estado === 'Parcial')
+            .forEach(r => {
+                const clientInfo = clients.find(c => c.id === r.clientId);
+                const obraInfo = clientInfo?.obras?.find(o => o.id === r.obraId);
+                if (!clientInfo || !obraInfo) return;
+
+                r.items.forEach(item => {
+                    const prod = products.find(p => p.id === item.productId);
+                    if (isServicio(item, prod)) return;
+
+                    const pendiente = (Number(item.cantidad) || 0) - (Number(item.cantidadDevuelta) || 0);
+                    if (pendiente <= 0) return;
+
+                    if (!clienteMap[clientInfo.id]) {
+                        clienteMap[clientInfo.id] = {
+                            id: clientInfo.id,
+                            name: clientInfo.name,
+                            obras: {}
+                        };
+                    }
+
+                    if (!clienteMap[clientInfo.id].obras[obraInfo.id]) {
+                        clienteMap[clientInfo.id].obras[obraInfo.id] = {
+                            id: obraInfo.id,
+                            nombre: obraInfo.nombre,
+                            totalPendiente: 0
+                        };
+                    }
+
+                    clienteMap[clientInfo.id].obras[obraInfo.id].totalPendiente += pendiente;
+                });
+            });
+
+        return Object.values(clienteMap)
+            .map(cliente => ({
+                ...cliente,
+                obras: Object.values(cliente.obras).filter(obraItem => obraItem.totalPendiente > 0)
+            }))
+            .filter(cliente => cliente.obras.length > 0);
+    }, [remisiones, clients, products]);
+
+    const clientesDisponibles = devolucionesDisponibles;
+    const obrasDisponibles = useMemo(() => {
+        return clientesDisponibles.find(c => c.id === selClientId)?.obras || [];
+    }, [clientesDisponibles, selClientId]);
 
     // Construir totales en campo por producto (de remisiones activas/parciales)
     const enCampo = useMemo(() => {
@@ -19,15 +79,9 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
             .forEach(r => {
                 r.items.forEach(item => {
                     const prod = products.find(p => p.id === item.productId);
-                    const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') ||
-                                   (item.tipoCobro || '').toLowerCase().includes('única') ||
-                                   (item.category || '').toLowerCase().includes('servicio') ||
-                                   (prod?.category || '').toLowerCase().includes('servicio') ||
-                                   (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
-                                   (prod?.esquemaCobro || '').toLowerCase().includes('única');
-                    if (isServ) return;
+                    if (isServicio(item, prod)) return;
 
-                    const pend = item.cantidad - item.cantidadDevuelta;
+                    const pend = (Number(item.cantidad) || 0) - (Number(item.cantidadDevuelta) || 0);
                     if (pend > 0) map[item.productId] = (map[item.productId] || 0) + pend;
                 });
             });
@@ -40,7 +94,7 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
     const [quantities, setQuantities] = useState({});
 
     // Reset quantities when client/obra changes
-    useMemo(() => {
+    useEffect(() => {
         setQuantities(Object.fromEntries(enCampo.map(i => [i.productId, 0])));
     }, [enCampo]);
 
@@ -100,7 +154,7 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
 
         setLoading(true);
         try {
-            await onSave(selClientId, selObraId, devoluciones, fechaDevolucion);
+            await onSave(selClientId, selObraId, devoluciones, fechaDevolucion, horaDevolucion);
             onClose();
         } catch (error) {
             console.error('Error saving return:', error);
@@ -139,10 +193,7 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
                                 disabled={!!initialClientId}
                             >
                                 <option value="">-- Busca un cliente --</option>
-                                {clients
-                                    .filter(c => (c.obras || []).some(o => remisiones.some(r => r.clientId === c.id && r.obraId === o.id && (r.estado === 'Activa' || r.estado === 'Parcial'))))
-                                    .map(c => <option key={c.id} value={c.id}>{c.name}</option>)
-                                }
+                                {clientesDisponibles.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
                         <div>
@@ -156,8 +207,7 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
                                 style={{ ...selectStyle, padding: '0.5rem 0.75rem', background: (!selClientId || initialObraId) ? '#f8fafc' : 'white' }}
                             >
                                 <option value="">-- Selecciona obra --</option>
-                                {selClientId && (clients.find(c => c.id === selClientId)?.obras || [])
-                                    .filter(o => remisiones.some(r => r.clientId === selClientId && r.obraId === o.id && (r.estado === 'Activa' || r.estado === 'Parcial')))
+                                {selClientId && obrasDisponibles
                                     .map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)
                                 }
                             </select>
@@ -201,13 +251,20 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
                                         Devolver Todo
                                     </button>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Reingreso:</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Fecha:</span>
                                     <input 
                                         type="date" 
                                         value={fechaDevolucion} 
                                         onChange={e => setFechaDevolucion(e.target.value)} 
                                         style={{ ...inputStyle, textAlign: 'left', width: '130px', height: '30px', padding: '0 0.5rem', fontSize: '0.85rem' }} 
+                                    />
+                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginLeft: 4 }}>Hora:</span>
+                                    <input 
+                                        type="time" 
+                                        value={horaDevolucion} 
+                                        onChange={e => setHoraDevolucion(e.target.value)} 
+                                        style={{ ...inputStyle, textAlign: 'center', width: '90px', height: '30px', padding: '0 0.4rem', fontSize: '0.85rem' }} 
                                     />
                                 </div>
                             </div>

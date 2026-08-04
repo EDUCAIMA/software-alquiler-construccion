@@ -84,6 +84,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
     const [paymentOption, setPaymentOption] = useState('Contado');
     const [abonoAmount, setAbonoAmount] = useState(0);
     const [paymentMethod, setPaymentMethod] = useState('Transferencia');
+    const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [facturaPreload, setFacturaPreload] = useState(null);
     const [showNueva, setShowNueva] = useState(false);
     const [showVerifyModal, setShowVerifyModal] = useState(false);
@@ -421,7 +422,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                                 {canPay && (
                                                     <button onClick={() => {
                                                         const t = cot.isDirectInvoice ? cot : inv;
-                                                        if (t) { setPayingInvoice(t); setPaymentOption('Contado'); setAbonoAmount(t.amount - (t.paidAmount || 0)); }
+                                                        if (t) { setPayingInvoice(t); setPaymentOption('Contado'); setAbonoAmount(t.amount - (t.paidAmount || 0)); setPaymentDate(format(new Date(), 'yyyy-MM-dd')); }
                                                     }} className="btn-action-standard" title="Registrar Pago"
                                                         style={{ width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', background: '#10b981', color: 'white' }}>
                                                         <DollarSign size={13} />
@@ -599,6 +600,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                         setPayingInvoice(inv);
                         setPaymentOption('Contado');
                         setAbonoAmount(inv.amount - (inv.paidAmount || 0));
+                        setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
                     }}
                 />
             , document.body)}
@@ -779,6 +781,16 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                 </div>
                             )}
 
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.6rem', textTransform: 'uppercase' }}>Fecha del Pago</label>
+                                <input
+                                    type="date"
+                                    value={paymentDate}
+                                    onChange={e => setPaymentDate(e.target.value)}
+                                    style={{ width: '100%', padding: '0.75rem', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: '0.9rem', fontWeight: 600, color: '#1e293b', background: 'white', outline: 'none', boxSizing: 'border-box' }}
+                                />
+                            </div>
+
                             {paymentOption !== 'Credito' && (
                                 <div style={{ marginBottom: '1.5rem' }}>
                                     <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.6rem', textTransform: 'uppercase' }}>Método</label>
@@ -806,7 +818,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                 <button
                                     onClick={async () => { 
                                         const finalAmount = paymentOption === 'Contado' ? (payingInvoice.amount - (payingInvoice.paidAmount || 0)) : (paymentOption === 'Credito' ? 0 : Number(abonoAmount));
-                                        await payInvoice?.(payingInvoice.id, finalAmount, paymentOption); 
+                                        await payInvoice?.(payingInvoice.id, finalAmount, paymentOption, paymentOption !== 'Credito' ? paymentMethod : null, paymentDate);
                                         setPayingInvoice(null); 
                                         // Redirigir a remisiones para despacho inmediato
                                         navigate('/comercial?tab=despachos');

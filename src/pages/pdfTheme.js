@@ -4,7 +4,7 @@ import { format } from 'date-fns';
  * Aplica el encabezado y pie de página estándar institucional a un documento jsPDF.
  * Basado en el formato profesional de factura/cotización solicitado.
  */
-export const applyStandardLayout = (doc, title, settings, number = '') => {
+export const applyStandardLayout = (doc, title, settings, number = '', options = {}) => {
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
     const margin = 10;
@@ -75,13 +75,15 @@ export const applyStandardLayout = (doc, title, settings, number = '') => {
         doc.text(`Nro - ${number.replace('--', '-')}`, boxX + (boxW / 2), boxY + 18, { align: 'center' });
     }
 
-    // --- PIE DE PÁGINA ---
-    doc.setFontSize(6.5);
-    doc.setTextColor(100, 116, 139);
-    doc.setFont('helvetica', 'normal');
-    
-    const generationInfo = `Página 1 de 1  |  Generado por Sistema de Gestión ${settings?.shortName || ''} el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
-    doc.text(generationInfo, W / 2, H - 8, { align: 'center' });
+    if (!options.skipFooter) {
+        // --- PIE DE PÁGINA ---
+        doc.setFontSize(6.5);
+        doc.setTextColor(100, 116, 139);
+        doc.setFont('helvetica', 'normal');
+        
+        const generationInfo = `Página 1 de 1  |  Generado por Sistema de Gestión ${settings?.shortName || ''} el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
+        doc.text(generationInfo, W / 2, H - 8, { align: 'center' });
+    }
     
     return Math.max(y + 4, 45); // Retorna la posición Y donde debe continuar el contenido
 };
@@ -140,18 +142,24 @@ export const drawInfoGrid = (doc, y, client, meta = {}) => {
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     doc.text(meta.labelMidLeft || 'Obra / Proyecto', dateBoxX + 18.75, y + 11.5, { align: 'center' });
-    doc.text(meta.labelMidRight || 'Forma de Pago', dateBoxX + 56.25, y + 11.5, { align: 'center' });
+    if (!meta.hideMidRight) {
+        doc.text(meta.labelMidRight || 'Forma de Pago', dateBoxX + 56.25, y + 11.5, { align: 'center' });
+    }
     
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'normal');
     doc.text(meta.valMidLeft || '—', dateBoxX + 18.75, y + 14.5, { align: 'center' });
-    doc.text(meta.valMidRight || 'CONTADO', dateBoxX + 56.25, y + 14.5, { align: 'center' });
+    if (!meta.hideMidRight) {
+        doc.text(meta.valMidRight || 'CONTADO', dateBoxX + 56.25, y + 14.5, { align: 'center' });
+    }
 
     doc.setFontSize(7);
-    doc.setFont('helvetica', 'bold');
-    doc.text(meta.labelBottom || 'Transporte:', dateBoxX + 37.5, y + 19.5, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.text(meta.valBottom || 'CLIENTE', dateBoxX + 37.5, y + 22.5, { align: 'center' });
+    if (!meta.hideBottom) {
+        doc.setFont('helvetica', 'bold');
+        doc.text(meta.labelBottom || 'Transporte:', dateBoxX + 37.5, y + 19.5, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.text(meta.valBottom || 'CLIENTE', dateBoxX + 37.5, y + 22.5, { align: 'center' });
+    }
 
     return y + gridH + 10;
 };

@@ -10,6 +10,7 @@ import { format, addDays, differenceInDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
+import { calcularHorasAlquiler, calcularHoraFin } from './cotizacionesUtils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ESTADO_CFG = {
@@ -44,7 +45,7 @@ function generateCotizacionPDF(cot, client, obra, settings) {
             labelTopRight: 'Fecha Vencimiento',
             valMidLeft: obra?.nombre?.substring(0, 20) || cot.obraId || '—',
             valMidRight: cot.metodoPago?.toUpperCase() || 'CONTADO',
-            valBottom: cot.responsableTransporte?.toUpperCase() || 'CLIENTE',
+            hideBottom: true,
             obraDireccion: obra?.ubicacion || client?.direccion
         });
 
@@ -60,7 +61,7 @@ function generateCotizacionPDF(cot, client, obra, settings) {
         const porcRet = client?.porcRetencion || 0;
         const iva = Math.round(subtotal * porcIVA / 100);
         const ret = Math.round(subtotal * porcRet / 100);
-        const total = subtotal + iva + ret + Number(cot.transporte || 0);
+        const total = subtotal + iva + ret;
 
         autoTable(doc, {
             startY: y,
@@ -134,8 +135,7 @@ function generateCotizacionPDF(cot, client, obra, settings) {
             ['DESCUENTO', '0'],
             ['SUB-TOTAL', fmtN(subtotal)],
             [`IVA (${porcIVA}%)`, fmtN(iva)],
-            [`RETENCIÓN (${porcRet}%)`, fmtN(ret)],
-            ['TRANSPORTE', fmtN(cot.transporte || 0)]
+            [`RETENCIÓN (${porcRet}%)`, fmtN(ret)]
         ];
 
         let ty = footerY;
@@ -218,7 +218,7 @@ function generateContratoPDF(cot, client, obra, settings) {
             labelTopRight: 'Vigencia',
             valMidLeft: obra?.nombre?.substring(0, 20) || cot.obraId || '—',
             valMidRight: cot.metodoPago?.toUpperCase() || 'CONTADO',
-            valBottom: cot.responsableTransporte?.toUpperCase() || 'CLIENTE',
+            hideBottom: true,
             obraDireccion: obra?.ubicacion || client?.direccion
         });
 
@@ -282,7 +282,7 @@ function generateContratoPDF(cot, client, obra, settings) {
             foot: [['', '', '', '', 'TOTAL ANTES DE IMP.', (cot.items.reduce((s, i) => {
                 const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
                 return s + (i.cantidad * (isServ ? 1 : i.dias) * i.tarifaDia);
-            }, 0) + (Number(cot.transporte) || 0)).toLocaleString('es-CO')]],
+            }, 0)).toLocaleString('es-CO')]],
             footStyles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [30, 41, 59], halign: 'right', lineWidth: 0.1, lineColor: [30, 41, 59] },
         });
 
@@ -299,7 +299,6 @@ function generateContratoPDF(cot, client, obra, settings) {
             '4. El incumplimiento en el pago generará intereses de mora del 1.5% mensual sobre el saldo pendiente.',
             '5. Este contrato se rige por las leyes colombianas. Las partes se someten a los jueces competentes de la ciudad de Bogotá D.C.',
             '6. Forma de pago: ' + (cot.metodoPago || 'Acordada entre las partes.'),
-            '7. Transporte: ' + (cot.responsableTransporte || 'Acordado entre las partes.'),
         ];
 
         clausulas.forEach((c, idx) => { 
@@ -363,7 +362,7 @@ function generatePagarePDF(cot, client, settings) {
     });
 
     doc.setTextColor(30, 41, 59); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-    const total = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0) + (Number(cot.transporte) || 0);
+    const total = cot.items.reduce((s, i) => s + (i.cantidad * i.dias * i.tarifaDia), 0);
     const texto = `Yo, ${client?.name || '—'}, identificado con NIT/CC ${client?.nit || '—'}, actuando en nombre de la empresa ${client?.name || '—'}, me comprometo incondicionalmente a pagar a la orden de ${settings?.companyName || 'CIELO'} — Alquiler de Equipos y Herramientas, la suma de ${fmtCOP(total)} (${total.toLocaleString()} pesos colombianos), más los intereses de mora pactados, en los plazos y condiciones establecidos en el Contrato de Alquiler ${cot.id} suscrito en la misma fecha.`;
     doc.text(doc.splitTextToSize(texto, W - margin * 2), margin, y + 5);
 
@@ -610,8 +609,7 @@ function generateRemisionPDF(rem, client, obra, settings) {
             valTopRight: rem.estado?.toUpperCase(),
             labelTopRight: 'Estado',
             valMidLeft: obra?.nombre?.substring(0, 25) || rem.obraId || '—',
-            valMidRight: rem.transporte > 0 ? `$${rem.transporte.toLocaleString()}` : '—',
-            labelMidRight: 'Costo Transp.',
+            hideMidRight: true,
             valBottom: rem.notas?.substring(0, 50) || 'Sin observaciones',
             labelBottom: 'Notas:',
             obraDireccion: obra?.ubicacion || client?.direccion
@@ -622,13 +620,20 @@ function generateRemisionPDF(rem, client, obra, settings) {
             startY: y,
             margin: { left: margin, right: margin },
             head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANTIDAD', 'DEVUELTA', 'PENDIENTE']],
-            body: rem.items.map((i, idx) => [
-                idx + 1,
-                (i.nombre || i.productId || 'EQUIPO').toUpperCase(),
-                i.cantidad || 0,
-                i.cantidadDevuelta || 0,
-                (i.cantidad || 0) - (i.cantidadDevuelta || 0)
-            ]),
+            body: rem.items.map((i, idx) => {
+                const hrs = i.horasCalculadas || calcularHorasAlquiler(i.horaInicio, i.horaFin);
+                let timeInfo = '';
+                if (i.horaInicio || i.horaFin) {
+                    timeInfo = `\n[Horario: ${i.horaInicio || '--:--'} a ${i.horaFin || '--:--'}${hrs > 0 ? ` (${hrs} hrs)` : ''}]`;
+                }
+                return [
+                    idx + 1,
+                    (i.nombre || i.productId || 'EQUIPO').toUpperCase() + timeInfo,
+                    i.cantidad || 0,
+                    i.cantidadDevuelta || 0,
+                    (i.cantidad || 0) - (i.cantidadDevuelta || 0)
+                ];
+            }),
             theme: 'plain',
             headStyles: { 
                 fillColor: [241, 245, 249], 
@@ -902,7 +907,7 @@ export function generateInvoicePDF(invoice, client, products, settings) {
     const H = doc.internal.pageSize.getHeight();
     const margin = 10;
 
-    let y = applyStandardLayout(doc, 'REMISIÓN DE COBRO', settings, invoice.id);
+    let y = applyStandardLayout(doc, 'REMISIÓN DE COBRO', settings, invoice.id, { skipFooter: true });
 
     // Custom info grid in pure black, using unified font size 8.5
     const drawCustomInfoGrid = (doc, gridY, cl, meta = {}) => {
@@ -963,8 +968,10 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         doc.text(meta.valMidLeft || '—', separatorX + (rightW / 4), gridY + 15.8, { align: 'center' });
         doc.text(meta.valMidRight || 'CONTADO', separatorX + (3 * rightW / 4), gridY + 15.8, { align: 'center' });
         
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${meta.labelBottom || 'Transporte:'} ${meta.valBottom || 'CLIENTE'}`, separatorX + (rightW / 2), gridY + 22.5, { align: 'center' });
+        if (!meta.hideBottom) {
+            doc.setFont('helvetica', 'bold');
+            doc.text(`${meta.labelBottom || 'Transporte:'} ${meta.valBottom || 'CLIENTE'}`, separatorX + (rightW / 2), gridY + 22.5, { align: 'center' });
+        }
         
         return gridY + gridH + 10;
     };
@@ -986,8 +993,7 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         labelTopRight: isCorte ? 'Corte Fin' : 'Estado Pago',
         valMidLeft: (client?.obras || []).find(o => o.id === invoice.obraId)?.nombre || '—',
         valMidRight: (invoice.paymentType || 'CONTADO').toUpperCase(),
-        valBottom: `$${(Number(invoice.transporte) || 0).toLocaleString('es-CO')}`,
-        labelBottom: 'Valor Transporte:',
+        hideBottom: true,
         obraDireccion: (client?.obras || []).find(o => o.id === invoice.obraId)?.ubicacion || client?.direccion
     });
 
@@ -1024,7 +1030,7 @@ export function generateInvoicePDF(invoice, client, products, settings) {
 
         autoTable(doc, {
             startY: y,
-            margin: { left: margin, right: margin },
+            margin: { left: margin, right: margin, bottom: 18 },
             head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
             body: groupItems.map((item, gIdx) => {
                 const productName = item.nombre || item.name || products.find(p => p.id === item.productId)?.name || 'EQUIPO';
@@ -1084,7 +1090,7 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         const iva = Math.round(subtotal * porcIVA / 100);
         const porcRet = client?.porcRetencion || 0;
         const ret = Math.round(subtotal * porcRet / 100);
-        const totalVal = subtotal + iva + ret + (Number(invoice.transporte) || 0);
+        const totalVal = subtotal + iva + ret;
 
         let ty = (doc.lastAutoTable?.finalY || y + 20) + 10;
         const totW = 90;
@@ -1094,9 +1100,13 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         const totals = [
             ['SUB-TOTAL', `$${subtotal.toLocaleString('es-CO')}`],
             [`IVA (${porcIVA}%)`, `$${iva.toLocaleString('es-CO')}`],
-            [`RETENCIÓN (${porcRet}%)`, `$${ret.toLocaleString('es-CO')}`],
-            ['TRANSPORTE', `$${(Number(invoice.transporte) || 0).toLocaleString('es-CO')}`]
+            [`RETENCIÓN (${porcRet}%)`, `$${ret.toLocaleString('es-CO')}`]
         ];
+
+        if (ty + (totals.length * totH) + 35 > H - 18) {
+            doc.addPage();
+            ty = 20;
+        }
 
         totals.forEach(([label, value]) => {
             doc.setLineWidth(0.1);
@@ -1138,6 +1148,11 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         console.error('Error in total calculation or summary:', err);
     }
 
+    if (y + 25 > H - 22) {
+        doc.addPage();
+        y = 20;
+    }
+
     const signatureY = Math.max(H - 45, y + 25);
 
     if (invoice.status === 'Paid' || invoice.status === 'Pagada') {
@@ -1170,6 +1185,4 @@ export function generateInvoicePDF(invoice, client, products, settings) {
     doc.save(`Remision_Cobro_${invoice.id}.pdf`);
 }
 
-export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, generateCortePDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP, exportClientPDF };
-
-
+export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, generateCortePDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP, exportClientPDF, calcularHorasAlquiler, calcularHoraFin };
