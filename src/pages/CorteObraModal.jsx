@@ -150,7 +150,7 @@ const countColombianHolidays = (start, end, scheme, billedPeriods = []) => {
     }
 };
 
-function generateCortePDF(resultado, client, obra, settings) {
+function generateCortePDF(resultado, client, obra, settings, remisiones, invoices) {
     const doc = new jsPDF();
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 10;
@@ -759,7 +759,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             }
 
             // Also download the Corte PDF (Liquidación)
-            generateCortePDF({ ...resultado, lineas: resultado.selectedLineas, fechaInicio, fechaCorte }, selectedClient, selectedObra, settings);
+            generateCortePDF({ ...resultado, lineas: resultado.selectedLineas, fechaInicio, fechaCorte }, selectedClient, selectedObra, settings, remisiones, invoices);
             
             setSaved(true);
         } catch (e) {
