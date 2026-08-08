@@ -1103,7 +1103,11 @@ export function generateInvoicePDF(invoice, client, products, settings) {
             [`RETENCIÓN (${porcRet}%)`, `$${ret.toLocaleString('es-CO')}`]
         ];
 
-        if (ty + (totals.length * totH) + 35 > H - 18) {
+        const paid = Number(invoice.paidAmount) || 0;
+        const hasExtra = paid > 0;
+        const totalRowsCount = totals.length + (hasExtra ? 2 : 0) + 1.3; // 1.3 accounts for the slightly taller TOTAL row
+
+        if (ty + (totalRowsCount * totH) + 35 > H - 18) {
             doc.addPage();
             ty = 20;
         }
@@ -1143,7 +1147,32 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         doc.setFont('helvetica', 'bold');
         doc.text(`$${totalVal.toLocaleString('es-CO')}`, totX + 72.5, ty + 6.5, { align: 'center' });
         
-        y = ty + 20;
+        ty += 9;
+
+        if (hasExtra) {
+            const extraTotals = [
+                ['ABONADO', `$${paid.toLocaleString('es-CO')}`],
+                ['SALDO RESTANTE', `$${(totalVal - paid).toLocaleString('es-CO')}`]
+            ];
+            extraTotals.forEach(([label, value]) => {
+                doc.setLineWidth(0.1);
+                doc.setDrawColor(0, 0, 0);
+                doc.rect(totX, ty, 55, totH);
+                doc.rect(totX + 55, ty, 35, totH);
+                
+                doc.setFontSize(8.5);
+                doc.setTextColor(0, 0, 0);
+                doc.setFont('helvetica', 'bold');
+                doc.text(label, totX + 2, ty + 5);
+                
+                doc.setFontSize(10.5);
+                doc.setFont('helvetica', label === 'SALDO RESTANTE' ? 'bold' : 'normal');
+                doc.text(value, totX + 72.5, ty + 5, { align: 'center' });
+                ty += totH;
+            });
+        }
+        
+        y = ty + 10;
     } catch (err) {
         console.error('Error in total calculation or summary:', err);
     }

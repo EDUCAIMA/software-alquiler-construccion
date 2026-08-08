@@ -252,8 +252,7 @@ function generateCortePDF(resultado, client, obra, settings) {
         ['SUBTOTAL ALQUILER GLOBAL', resultado.subtotal.toLocaleString('es-CO')],
         ['DESCUENTO', `-${resultado.descuento.toLocaleString('es-CO')}`],
         [`IVA APLICADO (${resultado.porcIVA || 0}%)`, resultado.iva.toLocaleString('es-CO')],
-        [`RETENCIÓN FUENTE (${client?.porcRetencion || 0}%)`, resultado.retencion.toLocaleString('es-CO')],
-        ['PAGOS / ABONOS PREVIOS', resultado.pagosPrevios.toLocaleString('es-CO')]
+        [`RETENCIÓN FUENTE (${client?.porcRetencion || 0}%)`, resultado.retencion.toLocaleString('es-CO')]
     ];
 
     totals.forEach(([label, value]) => {
@@ -390,6 +389,11 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                    (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
                                    (prod?.esquemaCobro || '').toLowerCase().includes('única');
                     const isHora = (item.tipoCobro || '').toLowerCase() === 'hora' || (prod?.tipoCobro || '').toLowerCase() === 'hora';
+
+                    if (isServ) {
+                        const inRange = rDate >= fStart && rDate <= fEnd;
+                        if (!inRange) return;
+                    }
 
                     let accountedQty = 0;
 
@@ -625,8 +629,8 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             inv.status !== 'Cancelada'
         );
         const totalAntesDePagos = subtotalConDescuento + iva + retencion + totalTransporteFiltered;
-        const pagosPrevios = relatedInvoices.reduce((sum, inv) => sum + (Number(inv.paidAmount) || 0), 0);
-        const totalNeto = Math.max(0, totalAntesDePagos - pagosPrevios);
+        const pagosPrevios = 0;
+        const totalNeto = totalAntesDePagos;
 
         return { 
             lineas, // All lines for UI
@@ -667,7 +671,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                 transporte: resultado.transporte,
                 remisionEnabled: true,
                 remisionCreada: true,
-                paidAmount: resultado.pagosPrevios,
+                paidAmount: 0,
                 descuentoMonto: resultado.descuento,
                 descuentoTipo,
                 descuentoValor: Number(descuentoValor) || 0,
@@ -904,6 +908,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                     {[
                                         ['Subtotal', fmtCOP(resultado.subtotal), '#1e293b'],
                                         ['Descuento', `-${fmtCOP(resultado.descuento)}`, '#16a34a'],
+                                        ['Transporte', fmtCOP(resultado.transporte), '#1e293b'],
                                         ['IVA', fmtCOP(resultado.iva), '#2365AB'],
                                         ['Retención', `-${fmtCOP(resultado.retencion)}`, '#ef4444'],
                                         ['Saldo real', fmtCOP(resultado.totalNeto), resultado.totalNeto === 0 ? '#16a34a' : '#1e293b'],
