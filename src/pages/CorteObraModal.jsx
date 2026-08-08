@@ -381,7 +381,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             inv.status !== 'Cancelada'
         );
 
-        const billedPeriods = [];
+        const billedPeriodsByRem = {};
         const billedServices = new Set();
 
         relatedInvoices.forEach(inv => {
@@ -389,23 +389,38 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             if (typeof list === 'string') {
                 try { list = JSON.parse(list); } catch (e) { list = []; }
             }
+
+            const remIdsInInvoice = new Set();
+            if (Array.isArray(inv.items)) {
+                inv.items.forEach(item => {
+                    if (item.remId) {
+                        remIdsInInvoice.add(item.remId);
+                    }
+                });
+            }
+
             if (Array.isArray(list) && list.length > 0) {
                 list.forEach(c => {
                     if (c.fechaInicio && c.fechaCorte) {
-                        billedPeriods.push({
+                        const period = {
                             start: parseUTCDate(c.fechaInicio),
                             end: parseUTCDate(c.fechaCorte)
+                        };
+                        remIdsInInvoice.forEach(rId => {
+                            if (!billedPeriodsByRem[rId]) billedPeriodsByRem[rId] = [];
+                            billedPeriodsByRem[rId].push(period);
                         });
                     }
                 });
             } else if (Array.isArray(inv.items)) {
                 inv.items.forEach(item => {
-                    if (item.remFecha && item.days) {
+                    if (item.remId && item.remFecha && item.days) {
                         const start = parseUTCDate(item.remFecha);
                         if (start) {
                             const end = new Date(start);
                             end.setDate(start.getDate() + (Number(item.days) - 1));
-                            billedPeriods.push({ start, end });
+                            if (!billedPeriodsByRem[item.remId]) billedPeriodsByRem[item.remId] = [];
+                            billedPeriodsByRem[item.remId].push({ start, end });
                         }
                     }
                 });
@@ -491,13 +506,13 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                             if (isHora) {
                                 dDays = calcHours || 1;
                             } else if (effectiveStart <= effectiveEnd) {
-                                dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme, billedPeriods);
+                                dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
                             }
 
                             const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
                             const clampedDays = isHora ? finalDays : Math.min(dDays, Math.max(0, finalDays));
                             
-                            const autoFestivos = (isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriods);
+                            const autoFestivos = (isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
                             const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
                             const clampedFestivos = isHora ? 0 : Math.min(clampedDays, Math.max(0, festivos));
                             const netDays = clampedDays - clampedFestivos;
@@ -559,13 +574,13 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         if (isHora) {
                             dDays = calcHours || 1;
                         } else if (effectiveStart <= effectiveEnd) {
-                            dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme, billedPeriods);
+                            dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
                         }
 
                         const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
                         const clampedDays = isHora ? finalDays : Math.min(dDays, Math.max(0, finalDays));
 
-                        const autoFestivos = (isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriods);
+                        const autoFestivos = (isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
                         const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
                         const clampedFestivos = isHora ? 0 : Math.min(clampedDays, Math.max(0, festivos));
                         const netDays = clampedDays - clampedFestivos;
@@ -625,13 +640,13 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         if (isHora) {
                             dDays = calcHours || 1;
                         } else if (effectiveStart <= effectiveEnd) {
-                            dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme, billedPeriods);
+                            dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
                         }
 
                         const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
                         const clampedDays = isHora ? finalDays : Math.min(dDays, Math.max(0, finalDays));
 
-                        const autoFestivos = (isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriods);
+                        const autoFestivos = (isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
                         const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
                         const clampedFestivos = isHora ? 0 : Math.min(clampedDays, Math.max(0, festivos));
                         const netDays = clampedDays - clampedFestivos;
