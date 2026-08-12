@@ -6,7 +6,7 @@ import {
     ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Trash2, Ban,
     Printer, Download, Activity, TrendingUp, Edit3
 } from 'lucide-react';
-import { generateRemisionPDF, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
+import { generateRemisionPDF, generateDevolucionPDF, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
 import Swal from 'sweetalert2';
@@ -1158,7 +1158,12 @@ export default function Remisiones() {
                     products={products}
                     clients={clients}
                     onClose={() => setDevolucionTarget(null)}
-                    onSave={(cId, oId, devoluciones, fecha) => registrarDevolucion(cId, oId, devoluciones, fecha)}
+                    onSave={async (cId, oId, devoluciones, fecha, hora) => {
+                        await registrarDevolucion(cId, oId, devoluciones, fecha, hora);
+                        const client = clients.find(c => c.id === cId);
+                        const obra = client?.obras?.find(o => o.id === oId);
+                        generateDevolucionPDF({ devoluciones, fecha, hora }, client, obra, settings, products);
+                    }}
                 />
             )}
 

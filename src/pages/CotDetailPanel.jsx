@@ -8,7 +8,7 @@ import { differenceInDays, format } from 'date-fns';
 import Swal from 'sweetalert2';
 import { 
     fmtCOP, generateCotizacionPDF, generateContratoPDF, generatePagarePDF, 
-    generateCartaPDF, generateRemisionPDF, generateCortePDF 
+    generateCartaPDF, generateRemisionPDF, generateCortePDF, generateDevolucionPDF 
 } from './CotizacionesHelpers';
 import { ActionSection, ActionBtn, ProcessTimeline, BADGE, REM_ICON } from './CotComponents';
 import { useAppContext } from '../context/AppContext';
@@ -660,14 +660,21 @@ export default function CotDetailPanel({
                                                             <RotateCcw size={12} /> Trazabilidad de Reingresos
                                                         </div>
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                                            {rem.items.flatMap((it, i) => (it.devoluciones || []).map((d, di) => ({ ...d, nombre: it.nombre, key: `${i}-${di}` })))
+                                                            {rem.items.flatMap((it, i) => (it.devoluciones || []).map((d, di) => ({ ...d, productId: it.productId, nombre: it.nombre, key: `${i}-${di}` })))
                                                                 .sort((a, b) => b.fecha.localeCompare(a.fecha))
                                                                 .map(d => (
-                                                                    <div key={d.key} style={{ fontSize: '0.78rem', color: '#15803d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: 'rgba(255,255,255,0.5)', borderRadius: 6 }}>
+                                                                    <div key={d.key} style={{ fontSize: '0.78rem', color: '#15803d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px', background: 'rgba(255,255,255,0.7)', borderRadius: 6 }}>
                                                                         <span style={{ fontWeight: 600 }}>• {d.nombre}</span>
                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                                                             <span style={{ fontWeight: 800 }}>{d.cantidad} ud.</span>
-                                                                            <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>[{d.fecha}]</span>
+                                                                            <span style={{ color: '#2365AB', fontWeight: 800, fontSize: '0.75rem' }}>[{d.fecha}]</span>
+                                                                            <button 
+                                                                                onClick={() => generateDevolucionPDF({ devoluciones: [{ productId: d.productId, cantidad: d.cantidad, nombre: d.nombre }], fecha: d.fecha, hora: d.hora }, client, obra, settings, products)} 
+                                                                                title="Descargar Acta de Devolución (PDF)"
+                                                                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#2365AB', padding: 2, display: 'flex', alignItems: 'center' }}
+                                                                            >
+                                                                                <Download size={14} />
+                                                                            </button>
                                                                         </div>
                                                                     </div>
                                                                 ))

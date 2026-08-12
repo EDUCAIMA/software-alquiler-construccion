@@ -9,7 +9,7 @@ import { useAppContext } from '../context/AppContext';
 import { format, addDays, differenceInDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
+import { applyStandardLayout, drawInfoGrid, createEquipoTagger } from './pdfTheme';
 import { calcularHorasAlquiler, calcularHoraFin } from './cotizacionesUtils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ const fmtCOP = n => `$${(Number(n) || 0).toLocaleString('es-CO')}`;
 // ─── PDF Cotización al Cliente (Nuevo Formato Profesional) ────────────────────────
 function generateCotizacionPDF(cot, client, obra, settings) {
     try {
-        const doc = new jsPDF();
+        const doc = new jsPDF({ orientation: 'portrait', format: 'letter', unit: 'mm' });
         const W = doc.internal.pageSize.getWidth();
         const H = doc.internal.pageSize.getHeight();
         const margin = 10;
@@ -206,7 +206,7 @@ function generateCotizacionPDF(cot, client, obra, settings) {
 // ─── PDF generators ───────────────────────────────────────────────────────────
 function generateContratoPDF(cot, client, obra, settings) {
     try {
-        const doc = new jsPDF();
+        const doc = new jsPDF({ orientation: 'portrait', format: 'letter', unit: 'mm' });
         const W = doc.internal.pageSize.getWidth();
         const H = doc.internal.pageSize.getHeight();
         let y = applyStandardLayout(doc, 'Contrato de Alquiler', settings, cot.id);
@@ -595,7 +595,7 @@ function HabeasDataModal({ onAccept, onClose }) {
 // ─── PDF Remisión de Despacho ──────────────────────────────────────────────────
 function generateRemisionPDF(rem, client, obra, settings) {
     try {
-        const doc = new jsPDF();
+        const doc = new jsPDF({ orientation: 'portrait', format: 'letter', unit: 'mm' });
         const W = doc.internal.pageSize.getWidth();
         const margin = 10;
         
@@ -688,7 +688,7 @@ function generateRemisionPDF(rem, client, obra, settings) {
 // ─── PDF Corte de Obra ────────────────────────────────────────────────────────
 function generateCortePDF(invoice, client, obra, settings, allInvoices, allRemisiones, fechaCorte) {
     try {
-        const doc = new jsPDF();
+        const doc = new jsPDF({ orientation: 'portrait', format: 'letter', unit: 'mm' });
         const W = doc.internal.pageSize.getWidth();
         const margin = 10;
         
@@ -902,7 +902,7 @@ function exportClientPDF(client, invoices, products, settings) {
 
 // ─── PDF Factura / Cobro (Nuevo Formato Profesional) ──────────────────────────
 export function generateInvoicePDF(invoice, client, products, settings) {
-    const doc = new jsPDF({ orientation: 'landscape', format: 'letter', unit: 'mm' });
+    const doc = new jsPDF({ orientation: 'portrait', format: 'letter', unit: 'mm' });
     const W = doc.internal.pageSize.getWidth();
     const H = doc.internal.pageSize.getHeight();
     const margin = 10;
@@ -920,8 +920,9 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         // Contenedor principal
         doc.rect(margin, gridY, W - (margin * 2), gridH);
         
-        // Separador vertical: right panel is 100mm wide
-        const separatorX = W - margin - 100;
+        // Separador vertical: right panel is 85mm wide
+        const rightW = 85;
+        const separatorX = W - margin - rightW;
         doc.line(separatorX, gridY, separatorX, gridY + gridH);
         
         doc.setTextColor(0, 0, 0);
@@ -932,22 +933,18 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         doc.setFont('helvetica', 'bold');
         doc.text('Señores:', margin + 3, gridY + 6);
         doc.text('Nit:', margin + 3, gridY + 11);
+        doc.text('Teléfonos:', margin + 45, gridY + 11);
         doc.text('Dirección:', margin + 3, gridY + 16);
         doc.text('Ciudad:', margin + 3, gridY + 21);
         
         doc.setFont('helvetica', 'normal');
-        doc.text(cl?.name?.toUpperCase() || '—', margin + 25, gridY + 6);
-        doc.text(cl?.nit || '—', margin + 25, gridY + 11);
-        doc.text(meta?.obraDireccion || cl?.direccion || '—', margin + 25, gridY + 16);
-        doc.text(cl?.ciudad || 'BOGOTÁ', margin + 25, gridY + 21);
-        
-        doc.setFont('helvetica', 'bold');
-        doc.text('Teléfonos:', margin + 110, gridY + 21);
-        doc.setFont('helvetica', 'normal');
-        doc.text(cl?.phone || '—', margin + 130, gridY + 21);
+        doc.text(cl?.name?.toUpperCase() || '—', margin + 22, gridY + 6);
+        doc.text(cl?.nit || '—', margin + 22, gridY + 11);
+        doc.text(cl?.phone || '—', margin + 63, gridY + 11);
+        doc.text(meta?.obraDireccion || cl?.direccion || '—', margin + 22, gridY + 16);
+        doc.text(cl?.ciudad || 'BOGOTÁ', margin + 22, gridY + 21);
         
         // --- Lado Derecho: Metadatos ---
-        const rightW = 100;
         doc.line(separatorX, gridY + 8.5, W - margin, gridY + 8.5);
         doc.line(separatorX, gridY + 17, W - margin, gridY + 17);
         doc.line(separatorX + (rightW / 2), gridY, separatorX + (rightW / 2), gridY + 17);
@@ -956,9 +953,11 @@ export function generateInvoicePDF(invoice, client, products, settings) {
         doc.text(meta.labelTopLeft || 'Fecha Inicio', separatorX + (rightW / 4), gridY + 4, { align: 'center' });
         doc.text(meta.labelTopRight || 'Fecha Fin', separatorX + (3 * rightW / 4), gridY + 4, { align: 'center' });
         
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(35, 101, 171); // Azul negrilla sostenida
         doc.text(meta.valTopLeft || '—', separatorX + (rightW / 4), gridY + 7.5, { align: 'center' });
         doc.text(meta.valTopRight || '—', separatorX + (3 * rightW / 4), gridY + 7.5, { align: 'center' });
+        doc.setTextColor(0, 0, 0); // Restablecer color
         
         doc.setFont('helvetica', 'bold');
         doc.text(meta.labelMidLeft || 'Obra / Proyecto', separatorX + (rightW / 4), gridY + 12.5, { align: 'center' });
@@ -987,8 +986,8 @@ export function generateInvoicePDF(invoice, client, products, settings) {
     const isCorte = cortesList && cortesList.length > 0 && cortesList[0].fechaInicio;
     
     y = drawCustomInfoGrid(doc, y, client, {
-        valTopLeft: isCorte ? invoice.cortes[0].fechaInicio : (invoice.date || format(new Date(), 'yyyy-MM-dd')),
-        valTopRight: isCorte ? invoice.cortes[0].fechaCorte : ((invoice.status === 'Paid' || invoice.status === 'Pagada') ? 'PAGADA' : 'PENDIENTE'),
+        valTopLeft: isCorte ? cortesList[0].fechaInicio : (invoice.date || format(new Date(), 'yyyy-MM-dd')),
+        valTopRight: isCorte ? cortesList[0].fechaCorte : ((invoice.status === 'Paid' || invoice.status === 'Pagada') ? 'PAGADA' : 'PENDIENTE'),
         labelTopLeft: isCorte ? 'Corte Inicio' : 'Fecha Emisión',
         labelTopRight: isCorte ? 'Corte Fin' : 'Estado Pago',
         valMidLeft: (client?.obras || []).find(o => o.id === invoice.obraId)?.nombre || '—',
@@ -1028,6 +1027,16 @@ export function generateInvoicePDF(invoice, client, products, settings) {
             y = doc.lastAutoTable.finalY + 10;
         }
 
+        // En las facturas de corte de obra cada equipo lleva su estado (devuelto / en obra)
+        // alineado a la derecha de la celda. Las facturas normales no lo llevan.
+        const tagger = isCorte
+            ? createEquipoTagger(doc, {
+                fontSize: 8.5,
+                basePadding: 2.5,
+                columnWidth: W - margin * 2 - (15 + 20 + 20 + 35 + 40)
+            })
+            : null;
+
         autoTable(doc, {
             startY: y,
             margin: { left: margin, right: margin, bottom: 18 },
@@ -1037,16 +1046,17 @@ export function generateInvoicePDF(invoice, client, products, settings) {
                 const qty = Number(item.quantity || item.cantidad || 0);
                 const days = Number(item.days || item.dias || 1);
                 const price = Number(item.price || item.tarifaDia || 0);
-                
+
                 return [
                     gIdx + 1,
-                    productName.toUpperCase(),
+                    tagger ? tagger.cell(gIdx, productName) : productName.toUpperCase(),
                     qty,
                     days,
                     `$${price.toLocaleString('es-CO')}`,
                     `$${(qty * days * price).toLocaleString('es-CO')}`
                 ];
             }),
+            didDrawCell: tagger ? tagger.didDrawCell : undefined,
             theme: 'plain',
             headStyles: { 
                 fillColor: [255, 255, 255], 
@@ -1086,11 +1096,29 @@ export function generateInvoicePDF(invoice, client, products, settings) {
             return s + (qty * days * price);
         }, 0);
 
+        // El descuento se registra al generar el corte. El monto de la factura
+        // (que también usa el botón de pago) se calcula después de aplicarlo.
+        const descuento = Math.min(subtotal, Math.max(0, Number(invoice.descuentoMonto) || 0));
+        const subtotalConDescuento = subtotal - descuento;
         const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
-        const iva = Math.round(subtotal * porcIVA / 100);
+        const iva = Math.round(subtotalConDescuento * porcIVA / 100);
         const porcRet = client?.porcRetencion || 0;
-        const ret = Math.round(subtotal * porcRet / 100);
-        const totalVal = subtotal + iva + ret;
+        const ret = Math.round(subtotalConDescuento * porcRet / 100);
+        const transporte = Math.max(0, Number(invoice.transporte) || 0);
+        const totalCalculado = subtotalConDescuento + iva + ret + transporte;
+        // invoice.amount es la fuente de verdad del saldo que se cobra; usarlo
+        // aquí mantiene el PDF exactamente igual al valor mostrado al pagar.
+        const totalGuardado = Number(invoice.amount);
+        const totalVal = Number.isFinite(totalGuardado) ? totalGuardado : totalCalculado;
+        const porcentajeDescuento = subtotal > 0
+            ? (invoice.descuentoTipo === 'porcentaje' && Number(invoice.descuentoValor) > 0
+                ? Number(invoice.descuentoValor)
+                : (descuento / subtotal) * 100)
+            : 0;
+        const etiquetaDescuento = `DESCUENTO APLICADO (${porcentajeDescuento.toLocaleString('es-CO', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        })}%)`;
 
         let ty = (doc.lastAutoTable?.finalY || y + 20) + 10;
         const totW = 90;
@@ -1099,8 +1127,10 @@ export function generateInvoicePDF(invoice, client, products, settings) {
 
         const totals = [
             ['SUB-TOTAL', `$${subtotal.toLocaleString('es-CO')}`],
+            ...(descuento > 0 ? [[etiquetaDescuento, `-$${descuento.toLocaleString('es-CO')}`]] : []),
             [`IVA (${porcIVA}%)`, `$${iva.toLocaleString('es-CO')}`],
-            [`RETENCIÓN (${porcRet}%)`, `$${ret.toLocaleString('es-CO')}`]
+            [`RETENCIÓN (${porcRet}%)`, `$${ret.toLocaleString('es-CO')}`],
+            ...(transporte > 0 ? [['TRANSPORTE', `$${transporte.toLocaleString('es-CO')}`]] : [])
         ];
 
         const paid = Number(invoice.paidAmount) || 0;
@@ -1212,6 +1242,101 @@ export function generateInvoicePDF(invoice, client, products, settings) {
     }
 
     doc.save(`Remision_Cobro_${invoice.id}.pdf`);
+}
+
+// ─── PDF Acta / Comprobante de Devolución ────────────────────────────────────
+export function generateDevolucionPDF(devData, client, obra, settings, products = []) {
+    try {
+        const doc = new jsPDF({ orientation: 'portrait', format: 'letter', unit: 'mm' });
+        const W = doc.internal.pageSize.getWidth();
+        const margin = 10;
+        
+        const devDateStr = devData.fecha || format(new Date(), 'yyyy-MM-dd');
+        const devTimeStr = devData.hora || format(new Date(), 'HH:mm');
+        const devId = devData.id || `DEV-${format(new Date(), 'yyyyMMdd-HHmm')}`;
+
+        let y = applyStandardLayout(doc, 'Acta de Devolución', settings, devId);
+
+        y = drawInfoGrid(doc, y, client, {
+            valTopLeft: devDateStr,
+            labelTopLeft: 'Fecha Devolución',
+            valTopRight: devTimeStr,
+            labelTopRight: 'Hora Devolución',
+            valMidLeft: obra?.nombre?.substring(0, 25) || '—',
+            valMidRight: 'REINGRESO',
+            labelMidRight: 'Tipo Movimiento',
+            hideBottom: true,
+            obraDireccion: obra?.ubicacion || client?.direccion
+        });
+
+        const items = devData.devoluciones || [];
+
+        autoTable(doc, {
+            startY: y,
+            margin: { left: margin, right: margin },
+            head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT. DEVUELTA', 'FECHA DEVOLUCIÓN', 'ESTADO INVENTARIO']],
+            body: items.map((item, idx) => {
+                const prod = (products || []).find(p => p.id === item.productId);
+                const nombreProd = item.nombre || prod?.name || item.productId || 'EQUIPO';
+                return [
+                    idx + 1,
+                    nombreProd.toUpperCase(),
+                    item.cantidad || 0,
+                    { content: `${devDateStr} ${devTimeStr}`, styles: { textColor: [35, 101, 171], fontStyle: 'bold' } },
+                    'REINGRESADO A BODEGA'
+                ];
+            }),
+            theme: 'plain',
+            headStyles: { 
+                fillColor: [241, 245, 249], 
+                textColor: [30, 41, 59], 
+                fontSize: 8, 
+                fontStyle: 'bold', 
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [30, 41, 59]
+            },
+            styles: { 
+                fontSize: 8, 
+                cellPadding: 3, 
+                textColor: [30, 41, 59], 
+                halign: 'center',
+                lineWidth: 0.1,
+                lineColor: [30, 41, 59]
+            },
+            columnStyles: {
+                0: { cellWidth: 10 },
+                1: { halign: 'left', cellWidth: 'auto' },
+                2: { cellWidth: 30, fontStyle: 'bold' },
+                3: { cellWidth: 45, halign: 'center' },
+                4: { cellWidth: 40 }
+            }
+        });
+
+        y = doc.lastAutoTable.finalY + 25;
+
+        // Firmas
+        doc.setLineWidth(0.5);
+        doc.setDrawColor(30, 41, 59);
+        doc.line(margin, y, margin + 60, y);
+        doc.line(W - margin - 60, y, W - margin, y);
+
+        doc.setFontSize(8);
+        doc.setTextColor(30, 41, 59);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Entregado por (Cliente)', margin + 30, y + 5, { align: 'center' });
+        doc.text('Recibido por (Bodega)', W - margin - 30, y + 5, { align: 'center' });
+
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        const disclaimer = "Certifico que los equipos descritos en esta acta han sido devueltos e inspeccionados al ingresar a bodega. La responsabilidad sobre el cobro de alquiler cesa a partir de la fecha y hora indicadas.";
+        doc.text(doc.splitTextToSize(disclaimer, W - margin * 2), margin, y + 15);
+
+        doc.save(`Acta_Devolucion_${devId}.pdf`);
+    } catch (error) {
+        console.error('Error generating Devolucion PDF:', error);
+        alert('Error al generar el PDF de devolución.');
+    }
 }
 
 export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, generateCortePDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP, exportClientPDF, calcularHorasAlquiler, calcularHoraFin };

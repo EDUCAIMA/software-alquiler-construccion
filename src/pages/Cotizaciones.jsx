@@ -8,7 +8,7 @@ import {
     Plus, List, Edit2, User, ArrowRight,
     ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp,
     Truck, RotateCcw, Ban, Printer, Activity, TrendingUp, Info,
-    ArrowDownCircle, Package, CreditCard, AlertTriangle
+    ArrowDownCircle, Package, CreditCard, AlertTriangle, Wallet
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
@@ -16,7 +16,7 @@ import Swal from 'sweetalert2';
 import {
     generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF,
     generateRemisionPDF, SignatureCanvas, WebcamCapture, HabeasDataModal,
-    generateCortePDF, ESTADO_CFG, fmtCOP
+    generateCortePDF, generateDevolucionPDF, ESTADO_CFG, fmtCOP
 } from './CotizacionesHelpers';
 import NuevaCotizacionModal from './NuevaCotizacionModal';
 import DevolucionModal from './DevolucionModal';
@@ -83,7 +83,10 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
     const [payingInvoice, setPayingInvoice] = useState(null);
     const [paymentOption, setPaymentOption] = useState('Contado');
     const [abonoAmount, setAbonoAmount] = useState(0);
-    const [paymentMethod, setPaymentMethod] = useState('Transferencia');
+    // Sin valor por defecto: el método debe elegirse explícitamente en cada pago.
+    // Un default silencioso hacía que todo cobro quedara como "Transferencia" y el
+    // efectivo nunca llegara a la caja menor.
+    const [paymentMethod, setPaymentMethod] = useState('');
     const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [facturaPreload, setFacturaPreload] = useState(null);
     const [showNueva, setShowNueva] = useState(false);
@@ -422,7 +425,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                                 {canPay && (
                                                     <button onClick={() => {
                                                         const t = cot.isDirectInvoice ? cot : inv;
-                                                        if (t) { setPayingInvoice(t); setPaymentOption('Contado'); setAbonoAmount(t.amount - (t.paidAmount || 0)); setPaymentDate(format(new Date(), 'yyyy-MM-dd')); }
+                                                        if (t) { setPayingInvoice(t); setPaymentOption('Contado'); setPaymentMethod(''); setAbonoAmount(t.amount - (t.paidAmount || 0)); setPaymentDate(format(new Date(), 'yyyy-MM-dd')); }
                                                     }} className="btn-action-standard" title="Registrar Pago"
                                                         style={{ width: 28, height: 28, padding: 0, justifyContent: 'center', minWidth: 'auto', background: '#10b981', color: 'white' }}>
                                                         <DollarSign size={13} />
@@ -599,6 +602,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     onTriggerPay={(inv) => {
                         setPayingInvoice(inv);
                         setPaymentOption('Contado');
+                        setPaymentMethod('');
                         setAbonoAmount(inv.amount - (inv.paidAmount || 0));
                         setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
                     }}
@@ -793,13 +797,24 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
 
                             {paymentOption !== 'Credito' && (
                                 <div style={{ marginBottom: '1.5rem' }}>
-                                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.6rem', textTransform: 'uppercase' }}>Método</label>
-                                    <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: '0.9rem', fontWeight: 600, color: '#1e293b', background: 'white', outline: 'none' }}>
-                                        <option value="Transferencia">Transferencia Bancaria</option>
+                                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.6rem', textTransform: 'uppercase' }}>Método * (¿cómo se recibió el dinero?)</label>
+                                    <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: 10, border: `1px solid ${paymentMethod ? '#e2e8f0' : '#fca5a5'}`, fontSize: '0.9rem', fontWeight: 600, color: '#1e293b', background: 'white', outline: 'none' }}>
+                                        <option value="">— Seleccione el método —</option>
                                         <option value="Efectivo">Efectivo</option>
+                                        <option value="Transferencia">Transferencia Bancaria</option>
                                         <option value="Tarjeta">Tarjeta</option>
                                         <option value="Cheque">Cheque</option>
                                     </select>
+                                    {paymentMethod === 'Efectivo' && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem', fontSize: '0.78rem', color: '#c2410c', fontWeight: 600 }}>
+                                            <Wallet size={14} /> Este pago ingresará a la caja menor.
+                                        </div>
+                                    )}
+                                    {!paymentMethod && (
+                                        <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#dc2626' }}>
+                                            Seleccione el método para poder confirmar el pago.
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -816,15 +831,16 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <button onClick={() => setPayingInvoice(null)} className="btn btn-secondary" style={{ flex: 1, padding: '0.8rem', borderRadius: 10, fontWeight: 700 }}>Cancelar</button>
                                 <button
-                                    onClick={async () => { 
+                                    disabled={paymentOption !== 'Credito' && !paymentMethod}
+                                    onClick={async () => {
                                         const finalAmount = paymentOption === 'Contado' ? (payingInvoice.amount - (payingInvoice.paidAmount || 0)) : (paymentOption === 'Credito' ? 0 : Number(abonoAmount));
                                         await payInvoice?.(payingInvoice.id, finalAmount, paymentOption, paymentOption !== 'Credito' ? paymentMethod : null, paymentDate);
-                                        setPayingInvoice(null); 
+                                        setPayingInvoice(null);
                                         // Redirigir a remisiones para despacho inmediato
                                         navigate('/comercial?tab=despachos');
                                     }}
                                     className="btn btn-primary"
-                                    style={{ flex: 2, background: '#10b981', border: 'none', color: 'white', fontWeight: 800, fontSize: '0.95rem', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}
+                                    style={{ flex: 2, background: '#10b981', border: 'none', color: 'white', fontWeight: 800, fontSize: '0.95rem', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 12px rgba(16,185,129,0.3)', opacity: (paymentOption !== 'Credito' && !paymentMethod) ? 0.5 : 1, cursor: (paymentOption !== 'Credito' && !paymentMethod) ? 'not-allowed' : 'pointer' }}
                                 >
                                     <CheckCircle size={18} /> Confirmar {paymentOption}
                                 </button>
@@ -840,11 +856,14 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                     clientId={devolucionTarget.clientId}
                     obraId={devolucionTarget.obraId}
                     onClose={() => setDevolucionTarget(null)}
-                    onSave={(cId, oId, devs, fecha) => {
-                        registrarDevolucion(cId, oId, devs, fecha);
+                    onSave={async (cId, oId, devs, fecha, hora) => {
+                        await registrarDevolucion(cId, oId, devs, fecha, hora);
+                        const devClient = getClient(cId);
+                        const devObra = getObra({ clientId: cId, obraId: oId });
+                        generateDevolucionPDF({ devoluciones: devs, fecha, hora }, devClient, devObra, settings, products);
                         Swal.fire({
                             title: '¡Devolución Exitosa!',
-                            text: 'Los equipos han reingresado al inventario.',
+                            text: 'Los equipos han reingresado al inventario y se ha generado el acta PDF.',
                             icon: 'success',
                             confirmButtonColor: '#2365AB'
                         });

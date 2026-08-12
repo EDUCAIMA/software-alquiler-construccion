@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Package, Activity,
   Wrench, LogOut, ShieldAlert, Calculator, Briefcase, Settings,
   Plus, RotateCcw, DollarSign, ArrowDownCircle, FileText,
-  Sun, Moon, Monitor
+  Sun, Moon, Monitor, Wallet
 } from 'lucide-react';
 import { AppProvider, useAppContext } from './context/AppContext';
 
@@ -21,6 +21,7 @@ import SettingsPage from './pages/Settings';
 import PublicCotizacionApproval from './pages/PublicCotizacionApproval';
 import Invoices from './pages/Invoices';
 import GastosMantenimiento from './pages/GastosMantenimiento';
+import CajaMenor from './pages/CajaMenor';
 
 // ─── Route Guard ──────────────────────────────────────────────────────────────
 function ProtectedRoute({ children, requireDashboard }) {
@@ -101,6 +102,7 @@ function Topbar() {
     { icon: FileText,        label: 'Remisión',              path: '/invoices',    restricted: false },
     { icon: Activity,        label: 'Trazabilidad',          path: '/trazability', restricted: false },
     { icon: Calculator,      label: 'Gastos y Costos Operativos', path: '/gastos-mantenimiento', restricted: false },
+    { icon: Wallet,          label: 'Caja Menor',            path: '/caja-menor',  restricted: false },
     { icon: Wrench,          label: 'Mantenimientos',        path: '/maintenance', restricted: false },
     { icon: Settings,        label: 'Configuración',         path: '/settings',    restricted: true  },
   ].filter(item => !item.restricted || canViewDashboard);
@@ -195,6 +197,7 @@ function Topbar() {
             '/trazability': 'Trazabilidad',
             '/maintenance': 'Mantenimientos',
             '/gastos-mantenimiento': 'Gastos y Costos Operativos',
+            '/caja-menor': 'Caja Menor',
             '/settings': 'Configuración'
           };
           const title = titles[location.pathname];
@@ -461,6 +464,7 @@ function AppShell() {
         <Route path="/financiero" element={<ProtectedRoute><Financiero /></ProtectedRoute>} />
         <Route path="/maintenance" element={<ProtectedRoute><Maintenance /></ProtectedRoute>} />
         <Route path="/gastos-mantenimiento" element={<ProtectedRoute><GastosMantenimiento /></ProtectedRoute>} />
+        <Route path="/caja-menor" element={<ProtectedRoute><CajaMenor /></ProtectedRoute>} />
         <Route path="/trazability" element={<ProtectedRoute><Trazability /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute requireDashboard><SettingsPage /></ProtectedRoute>} />
         <Route path="/login" element={<Navigate to="/" replace />} />

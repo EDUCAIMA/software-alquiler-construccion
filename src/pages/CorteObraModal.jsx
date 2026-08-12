@@ -7,7 +7,7 @@ import { useAppContext } from '../context/AppContext';
 import { differenceInDays, format, eachDayOfInterval, isSunday, isSaturday, addDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
+import { applyStandardLayout, drawInfoGrid, createEquipoTagger } from './pdfTheme';
 import { generateInvoicePDF, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -195,24 +195,33 @@ function generateCortePDF(resultado, client, obra, settings, remisiones, invoice
         doc.text(`REMISION #${displayId} - Despachada el ${lines[0].remFecha}`, margin, y + 6);
         y += 8;
 
+        // Etiqueta de estado (devuelto / en obra) al lado derecho de cada equipo.
+        // El ancho de la columna "EQUIPO" es el sobrante tras las columnas fijas.
+        const tagger = createEquipoTagger(doc, {
+            fontSize: 7.5,
+            basePadding: 2,
+            columnWidth: pageW - margin * 2 - (10 + 15 + 15 + 25 + 30)
+        });
+
         autoTable(doc, {
             startY: y,
             margin: { left: margin, right: margin },
             head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CAN.', 'DÍAS/HRS', 'TARIFA', 'SUBTOTAL']],
             body: lines.map((l, idx) => {
-                let eqName = l.equipo.toUpperCase();
-                if (l.isHora && (l.horaInicio || l.horaFin)) {
-                    eqName += `\n[Horario: ${l.horaInicio || '--:--'} a ${l.horaFin || '--:--'}]`;
-                }
+                const horario = (l.isHora && (l.horaInicio || l.horaFin))
+                    ? `\n[Horario: ${l.horaInicio || '--:--'} a ${l.horaFin || '--:--'}]`
+                    : '';
+
                 return [
                     idx + 1,
-                    eqName,
+                    tagger.cell(idx, l.equipo, horario),
                     l.cantidad,
                     l.isHora ? `${l.dias} hrs` : l.dias,
                     l.tarifaDia.toLocaleString('es-CO'),
                     l.subtotal.toLocaleString('es-CO')
                 ];
             }),
+            didDrawCell: tagger.didDrawCell,
             theme: 'grid',
             headStyles: { 
                 fillColor: [241, 245, 249], 
@@ -342,12 +351,37 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     // Filtered remissions list for selection
     const availableRems = useMemo(() => {
         if (!clientId) return [];
+
+        // Una remisión cerrada y pagada no vuelve a cobrarse. En cambio, una
+        // remisión Activa o Parcial sí debe permanecer disponible: un pago
+        // anterior sólo cubre su período facturado, no los días posteriores.
+        const remisionesPagadas = new Set();
+        const facturasPagadas = new Set();
+        invoices.forEach(invoice => {
+            const amount = Number(invoice.amount) || 0;
+            const paidAmount = Number(invoice.paidAmount) || 0;
+            const isPaid = ['paid', 'pagada'].includes(String(invoice.status || '').toLowerCase()) ||
+                (amount > 0 && paidAmount >= amount);
+
+            if (!isPaid) return;
+
+            facturasPagadas.add(String(invoice.id));
+
+            (invoice.items || []).forEach(item => {
+                if (item.remId) remisionesPagadas.add(String(item.remId));
+            });
+        });
+
         return remisiones.filter(r => 
             r.clientId === clientId && 
             (!obraId || r.obraId === obraId) && 
-            r.estado !== 'Cancelada'
+            r.estado !== 'Cancelada' &&
+            !(r.estado === 'Cerrada' && (
+                remisionesPagadas.has(String(r.id)) ||
+                facturasPagadas.has(String(r.facturaId || ''))
+            ))
         ).sort((a, b) => b.fecha.localeCompare(a.fecha));
-    }, [clientId, obraId, remisiones]);
+    }, [clientId, obraId, remisiones, invoices]);
 
     // Reset when base client/obra/dates change
     React.useEffect(() => {
@@ -399,6 +433,16 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                 });
             }
 
+            // Facturas antiguas pueden estar vinculadas desde la remisión pero
+            // no contener remId dentro de sus ítems. Conservamos la relación
+            // para descontar únicamente el período ya pagado, sin ocultar el
+            // alquiler activo de los siguientes cortes.
+            availableRems.forEach(rem => {
+                if (String(rem.facturaId || '') === String(inv.id)) {
+                    remIdsInInvoice.add(rem.id);
+                }
+            });
+
             if (Array.isArray(list) && list.length > 0) {
                 list.forEach(c => {
                     if (c.fechaInicio && c.fechaCorte) {
@@ -413,6 +457,12 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                     }
                 });
             } else if (Array.isArray(inv.items)) {
+                const legacyDays = Math.max(0, ...inv.items.map(item => Number(item.days) || 0));
+                const legacyStart = parseUTCDate(inv.date);
+                const legacyEnd = legacyStart && legacyDays > 0
+                    ? addDays(legacyStart, legacyDays - 1)
+                    : null;
+
                 inv.items.forEach(item => {
                     if (item.remId && item.remFecha && item.days) {
                         const start = parseUTCDate(item.remFecha);
@@ -424,6 +474,15 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         }
                     }
                 });
+
+                // Mismo tratamiento para la factura histórica vinculada sólo
+                // por facturaId en la remisión.
+                if (legacyStart && legacyEnd) {
+                    remIdsInInvoice.forEach(rId => {
+                        if (!billedPeriodsByRem[rId]) billedPeriodsByRem[rId] = [];
+                        billedPeriodsByRem[rId].push({ start: legacyStart, end: legacyEnd });
+                    });
+                }
             }
             if (Array.isArray(inv.items)) {
                 inv.items.forEach(item => {
@@ -681,9 +740,15 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         });
 
         // 4. Calculate filtered totals based on selectedRemIds
-        const selectedLineas = lineas.filter(l => selectedRemIds.includes(l.remId));
+        // No se deben arrastrar al documento líneas de períodos ya cobrados.
+        // Al no tener días facturables su subtotal es cero; dejarlas aquí hacía
+        // que el PDF mostrara remisiones antiguas aunque no incrementaran el saldo.
+        const selectedLineas = lineas.filter(l =>
+            selectedRemIds.includes(l.remId) && Number(l.subtotal) > 0
+        );
+        const remisionesConCobro = new Set(selectedLineas.map(l => String(l.remId)));
         const subtotalTotalFiltered = selectedLineas.reduce((s, l) => s + l.subtotal, 0);
-        const totalTransporteFiltered = rems.filter(r => selectedRemIds.includes(r.id)).reduce((s, r) => {
+        const totalTransporteFiltered = rems.filter(r => remisionesConCobro.has(String(r.id))).reduce((s, r) => {
              const rDate = parseUTCDate(r.fecha);
              return (rDate >= fStart && rDate <= fEnd) ? s + (r.transporte || 0) : s;
         }, 0);

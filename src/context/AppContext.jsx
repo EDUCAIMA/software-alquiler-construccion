@@ -82,6 +82,7 @@ export const AppProvider = ({ children }) => {
   const [gastos, setGastos] = useState([]);
   const [gastosMantenimiento, setGastosMantenimiento] = useState([]);
   const [ingresosCajaMenor, setIngresosCajaMenor] = useState([]);
+  const [retirosCajaMenor, setRetirosCajaMenor] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -98,6 +99,12 @@ export const AppProvider = ({ children }) => {
     return newUser;
   };
 
+  const updateUser = async (id, userData) => {
+    const updatedUser = await api.put(`/api/users/${id}`, userData);
+    setUsers(prev => prev.map(u => u.id === id ? updatedUser : u));
+    return updatedUser;
+  };
+
   const deleteUser = async (id) => {
     await api.del(`/api/users/${id}`);
     setUsers(prev => prev.filter(u => u.id !== id));
@@ -108,7 +115,7 @@ export const AppProvider = ({ children }) => {
     try {
       const fetchSafe = (url, fallback) => api.get(url).catch(e => { console.error(`Error fetching ${url}:`, e); return fallback; });
       
-      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs, provs, icm] = await Promise.all([
+      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs, provs, icm, rcm] = await Promise.all([
         fetchSafe('/api/products', []),
         fetchSafe('/api/clients', []),
         fetchSafe('/api/invoices', []),
@@ -124,6 +131,7 @@ export const AppProvider = ({ children }) => {
         fetchSafe('/api/users', []),
         fetchSafe('/api/providers', []),
         fetchSafe('/api/ingresos-caja-menor', []),
+        fetchSafe('/api/retiros-caja-menor', []),
       ]);
       
       console.log('API Data loaded:', { products: p.length, clients: c.length, settings: s });
@@ -142,6 +150,7 @@ export const AppProvider = ({ children }) => {
       setUsers(Array.isArray(usrs) ? usrs : []);
       setProviders(Array.isArray(provs) ? provs : []);
       setIngresosCajaMenor(Array.isArray(icm) ? icm : []);
+      setRetirosCajaMenor(Array.isArray(rcm) ? rcm : []);
       if (s && !s.error) setSettings(s);
     } catch (err) {
       console.error('Error crítico en reloadAll:', err);
@@ -457,6 +466,27 @@ export const AppProvider = ({ children }) => {
 
     await reloadAll();
     logAction('Pago Registrado', `Factura ${invoiceId} - ${paymentType}${paymentMethod ? ` (${paymentMethod})` : ''}: $${paidAmount.toLocaleString()}`, client?.name || 'Unknown', 'entry');
+  };
+
+  // Corrige el método de un pago ya registrado (p. ej. un cobro que fue en
+  // efectivo pero quedó grabado como transferencia). Al cambiarlo a Efectivo el
+  // pago entra a la caja menor; al sacarlo de Efectivo, sale.
+  const actualizarMetodoPagoAbono = async (invoiceId, abonoIndex, metodoPago) => {
+    const invoice = invoices.find(inv => inv.id === invoiceId);
+    if (!invoice) return;
+    const abonos = (invoice.abonos || []).map((ab, i) =>
+      i === abonoIndex ? { ...ab, metodoPago: metodoPago || null } : ab
+    );
+    const updated = {
+      ...invoice,
+      abonos,
+      // El método a nivel de factura refleja el del último pago recibido
+      paymentMethod: abonos[abonos.length - 1]?.metodoPago || invoice.paymentMethod
+    };
+    await api.put(`/api/invoices/${invoiceId}`, updated);
+    await reloadAll();
+    const client = clients.find(c => c.id === invoice.clientId);
+    logAction('Método de Pago Corregido', `Factura ${invoiceId} → ${metodoPago || 'Sin especificar'}`, client?.name || 'N/A', 'system');
   };
 
   const addCorteObra = async (invoiceId, corteData) => {
@@ -889,6 +919,28 @@ export const AppProvider = ({ children }) => {
     logAction('Ingreso Caja Menor Eliminado', id, '', 'system');
   };
 
+  // ─── RETIROS DE CAJA MENOR CRUD (salidas de efectivo que no son gastos) ────
+  const addRetiroCajaMenor = async (data) => {
+    const id = nextId(retirosCajaMenor, 'RC');
+    const nuevo = { ...data, id, monto: Number(data.monto || 0) };
+    await api.post('/api/retiros-caja-menor', nuevo);
+    await reloadAll();
+    logAction('Retiro de Caja Menor', `${id} — ${data.concepto}`, data.responsable || 'N/A', 'exit');
+  };
+
+  const editRetiroCajaMenor = async (id, data) => {
+    const editado = { ...data, monto: Number(data.monto || 0) };
+    await api.put(`/api/retiros-caja-menor/${id}`, editado);
+    await reloadAll();
+    logAction('Retiro de Caja Menor Modificado', id, data.responsable || 'N/A', 'system');
+  };
+
+  const deleteRetiroCajaMenor = async (id) => {
+    await api.del(`/api/retiros-caja-menor/${id}`);
+    await reloadAll();
+    logAction('Retiro de Caja Menor Eliminado', id, '', 'system');
+  };
+
   // ─── EMPLEADOS + NÓMINA ───────────────────────────────────────────────────
   const addEmpleado = async (data) => {
     const id = nextId(empleados, 'EMP');
@@ -939,7 +991,7 @@ export const AppProvider = ({ children }) => {
       // Products
       products, setProducts, addProduct, editProduct, returnProduct, deleteProduct, darDeBajaProduct, addProductBatch, editProductBatch, deleteProductBatch,
       // Invoices
-      invoices, setInvoices, createInvoice, payInvoice, addCorteObra, updateCorteStatus, createInvoiceFromCotizacion, marcarRemisionCreada, deleteInvoice,
+      invoices, setInvoices, createInvoice, payInvoice, addCorteObra, updateCorteStatus, createInvoiceFromCotizacion, marcarRemisionCreada, deleteInvoice, actualizarMetodoPagoAbono,
       // Other
       logs, maintenances, addMaintenance, editMaintenance,
       // Remisiones
@@ -952,12 +1004,14 @@ export const AppProvider = ({ children }) => {
       gastosMantenimiento, addGastoMantenimiento, editGastoMantenimiento, deleteGastoMantenimiento,
       // Ingresos Caja Menor
       ingresosCajaMenor, addIngresoCajaMenor, editIngresoCajaMenor, deleteIngresoCajaMenor,
+      // Retiros Caja Menor
+      retirosCajaMenor, addRetiroCajaMenor, editRetiroCajaMenor, deleteRetiroCajaMenor,
       empleados, addEmpleado,
       liquidaciones, addLiquidacion, pagarLiquidacion,
       // Settings
       settings, updateSettings,
       // Users & Roles
-      users, addUser, deleteUser,
+      users, addUser, updateUser, deleteUser,
       // Auth Utils
       checkPassword,
       globalPreload, setGlobalPreload

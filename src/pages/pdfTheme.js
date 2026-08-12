@@ -89,6 +89,144 @@ export const applyStandardLayout = (doc, title, settings, number = '', options =
 };
 
 /**
+ * Etiquetas de estado en la columna "EQUIPO / DESCRIPCIÓN" de los cortes de obra.
+ *
+ * Los nombres de equipo de un corte vienen con una anotación al final:
+ *   "(Dev: fecha)" / "(Dev. previa: fecha)" → el equipo ya fue devuelto
+ *   "(Corte: fecha)" o sin anotación        → el equipo sigue en obra
+ *
+ * Este ayudante separa esa anotación del nombre para dibujarla aparte: en la
+ * misma celda y fila, pero alineada al borde derecho y con color propio
+ * (azul = devuelto, rojo = en obra).
+ */
+const DATE_TAG_RE = /\s*(\((?:DEV|CORTE)[^()]*\))\s*$/i;
+const COLOR_DEVUELTO = [35, 101, 171]; // #2365AB
+const COLOR_EN_OBRA = [220, 38, 38];   // #DC2626
+
+export const createEquipoTagger = (doc, { fontSize = 8, basePadding = 2, columnIndex = 1, columnWidth = Infinity } = {}) => {
+    const tagsByRow = {};
+    const GAP = 2; // separación mínima entre el nombre y la etiqueta
+
+    const measure = (text, fontStyle) => {
+        const prevFont = doc.getFont();
+        const prevSize = doc.getFontSize();
+        doc.setFont('helvetica', fontStyle);
+        doc.setFontSize(fontSize);
+        const width = doc.getTextWidth(text);
+        doc.setFont(prevFont.fontName, prevFont.fontStyle);
+        doc.setFontSize(prevSize);
+        return width;
+    };
+
+    const lineHeightOf = () => {
+        const factor = doc.getLineHeightFactor ? doc.getLineHeightFactor() : 1.15;
+        return (fontSize / doc.internal.scaleFactor) * factor;
+    };
+
+    /** Número de líneas que ocupa un texto dentro de un ancho dado. */
+    const countLines = (text, width) => {
+        if (!(width > 0)) return Infinity;
+        const prevFont = doc.getFont();
+        const prevSize = doc.getFontSize();
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(fontSize);
+        const lines = doc.splitTextToSize(text, width);
+        doc.setFont(prevFont.fontName, prevFont.fontStyle);
+        doc.setFontSize(prevSize);
+        return lines.length;
+    };
+
+    return {
+        /**
+         * Prepara la celda de equipo: quita la anotación del texto y reserva el
+         * espacio de la etiqueta para que el nombre nunca se solape con ella.
+         *
+         * Si al reservar ese ancho el nombre quedaría demasiado apretado (se
+         * partirían palabras a la mitad), la etiqueta baja a su propia línea
+         * dentro de la misma celda, siempre pegada al borde derecho.
+         *
+         * @param {number} rowIndex índice de la fila dentro del body de la tabla
+         * @param {string} name nombre del equipo (puede traer la anotación)
+         * @param {string} extraLines líneas adicionales a añadir bajo el nombre
+         */
+        cell: (rowIndex, name, extraLines = '') => {
+            const upper = (name || '').toUpperCase();
+            const match = upper.match(DATE_TAG_RE);
+            const annotation = match ? match[1] : '';
+            const cleanName = match ? upper.replace(DATE_TAG_RE, '') : upper;
+
+            const tag = /^\(DEV/i.test(annotation)
+                ? { text: annotation, color: COLOR_DEVUELTO }
+                : { text: annotation ? `EN OBRA ${annotation}` : 'EN OBRA', color: COLOR_EN_OBRA };
+
+            const tagWidth = measure(tag.text, 'bold');
+            const available = columnWidth - basePadding * 2;
+            const remaining = available - tagWidth - GAP;
+            const longestWord = Math.max(
+                0,
+                ...cleanName.split(/\s+/).filter(Boolean).map(w => measure(w, 'normal'))
+            );
+
+            // Va en la misma línea del nombre solo si no parte ninguna palabra y
+            // si no hace crecer la celda más que bajar la etiqueta a su propia
+            // línea (que siempre cuesta exactamente una línea extra).
+            tag.inline = remaining >= longestWord &&
+                countLines(cleanName, remaining) <= countLines(cleanName, available) + 1;
+            tagsByRow[rowIndex] = tag;
+
+            return {
+                content: cleanName + extraLines,
+                styles: {
+                    cellPadding: tag.inline
+                        ? { top: basePadding, right: tagWidth + GAP + basePadding, bottom: basePadding, left: basePadding }
+                        : { top: basePadding, right: basePadding, bottom: basePadding + lineHeightOf(), left: basePadding }
+                }
+            };
+        },
+
+        /** Hook `didDrawCell` de autoTable que pinta la etiqueta. */
+        didDrawCell: (data) => {
+            if (data.section !== 'body' || data.column.index !== columnIndex) return;
+            const tag = tagsByRow[data.row.index];
+            if (!tag) return;
+
+            const cell = data.cell;
+            const tagX = cell.x + cell.width - basePadding;
+
+            const prevFont = doc.getFont();
+            const prevSize = doc.getFontSize();
+            const prevColor = doc.getTextColor();
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(fontSize);
+            doc.setTextColor(tag.color[0], tag.color[1], tag.color[2]);
+
+            if (tag.inline) {
+                // Misma línea base que la primera línea de texto de la celda
+                // (replica el cálculo interno de autoTable).
+                const size = doc.internal.getFontSize() / doc.internal.scaleFactor;
+                const factor = doc.getLineHeightFactor ? doc.getLineHeightFactor() : 1.15;
+                const lineHeight = size * factor;
+
+                const pos = cell.getTextPos();
+                let tagY = pos.y + size * (2 - 1.15);
+                if (cell.styles.valign === 'middle') tagY -= (cell.text.length / 2) * lineHeight;
+                else if (cell.styles.valign === 'bottom') tagY -= cell.text.length * lineHeight;
+
+                doc.text(tag.text, tagX, tagY, { align: 'right' });
+            } else {
+                // Línea propia reservada al pie de la celda
+                doc.text(tag.text, tagX, cell.y + cell.height - basePadding, { align: 'right', baseline: 'bottom' });
+            }
+
+            doc.setTextColor(prevColor);
+            doc.setFont(prevFont.fontName, prevFont.fontStyle);
+            doc.setFontSize(prevSize);
+        }
+    };
+};
+
+/**
  * Dibuja la cuadrícula de información del cliente y metadatos (fechas, obra, etc.)
  */
 export const drawInfoGrid = (doc, y, client, meta = {}) => {
@@ -134,10 +272,12 @@ export const drawInfoGrid = (doc, y, client, meta = {}) => {
     doc.text(meta.labelTopLeft || 'Fecha Inicio', dateBoxX + 18.75, y + 3.5, { align: 'center' });
     doc.text(meta.labelTopRight || 'Fecha Fin', dateBoxX + 56.25, y + 3.5, { align: 'center' });
     
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(35, 101, 171); // Azul en negrilla sostenida
     doc.text(meta.valTopLeft || '—', dateBoxX + 18.75, y + 7, { align: 'center' });
     doc.text(meta.valTopRight || '—', dateBoxX + 56.25, y + 7, { align: 'center' });
+    doc.setTextColor(30, 41, 59); // Restablecer color por defecto
 
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');

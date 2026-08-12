@@ -164,6 +164,11 @@ async function initDB() {
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS remision_creada BOOLEAN DEFAULT false`);
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(15, 2) DEFAULT 0`);
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_type VARCHAR(50)`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_method VARCHAR(100)`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS transporte NUMERIC(15, 2) DEFAULT 0`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS descuento_monto NUMERIC(15, 2) DEFAULT 0`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS descuento_tipo VARCHAR(50)`);
+        await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS descuento_valor NUMERIC(15, 2) DEFAULT 0`);
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS cortes JSONB DEFAULT '[]'`);
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS abonos JSONB DEFAULT '[]'`);
 
@@ -317,6 +322,11 @@ async function initDB() {
         await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS proveedor_beneficiario VARCHAR(255)`);
         await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS referencia_soporte VARCHAR(100)`);
         await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS subtipo_gasto VARCHAR(100)`);
+        await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS metadata TEXT`);
+        // Método con el que se pagó el egreso. Solo los marcados 'Efectivo' descuentan
+        // de la caja menor; los registros históricos quedan en NULL (Sin especificar)
+        // para no alterar el saldo con datos que nadie verificó.
+        await client.query(`ALTER TABLE gastos_mantenimiento ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(50)`);
 
         // --- Ingresos de Caja Menor (ingresos no facturados) ---
         await client.query(`
@@ -329,6 +339,23 @@ async function initDB() {
                 fecha_registro TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                 metodo_pago VARCHAR(50) DEFAULT 'Efectivo',
                 origen VARCHAR(255),
+                referencia_soporte VARCHAR(100)
+            )
+            `);
+
+        // --- Retiros de Caja Menor (salidas de efectivo que NO son gastos) ---
+        // Un retiro no es un egreso contable: es un traslado del efectivo en caja
+        // hacia el banco, la gerencia, etc. Solo afecta el saldo de la caja menor.
+        await client.query(`
+      CREATE TABLE IF NOT EXISTS retiros_caja_menor(
+                id VARCHAR(50) PRIMARY KEY,
+                concepto VARCHAR(255) NOT NULL,
+                descripcion TEXT,
+                monto NUMERIC(15, 2) DEFAULT 0,
+                fecha_retiro DATE DEFAULT CURRENT_DATE,
+                fecha_registro TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                destino VARCHAR(100),
+                responsable VARCHAR(255),
                 referencia_soporte VARCHAR(100)
             )
             `);
@@ -352,6 +379,13 @@ async function initDB() {
                 avatar VARCHAR(10)
             )
         `);
+
+        // --- Migraciones de Usuarios para Nómina ---
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cargo VARCHAR(100)`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS documento VARCHAR(50)`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS salario_base NUMERIC DEFAULT 0`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auxilio_transporte NUMERIC DEFAULT 0`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banco_cuenta VARCHAR(100)`);
 
         // --- Migraciones de Remisiones para Fase 2 ---
         await client.query(`ALTER TABLE remisiones ADD COLUMN IF NOT EXISTS assigned_operario_id VARCHAR(50)`);
@@ -469,6 +503,10 @@ const mapInvoice = r => ({
     paidAmount: Number(r.paid_amount || 0),
     paymentType: r.payment_type || null,
     paymentMethod: r.payment_method || null,
+    transporte: Number(r.transporte || 0),
+    descuentoMonto: Number(r.descuento_monto || 0),
+    descuentoTipo: r.descuento_tipo || null,
+    descuentoValor: Number(r.descuento_valor || 0),
     cortes: r.cortes || [],
     abonos: r.abonos || []
 });
@@ -815,11 +853,11 @@ app.get('/api/invoices', async (req, res) => {
 
 app.post('/api/invoices', async (req, res) => {
     try {
-        const { id, clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType, paymentMethod, cortes, abonos } = req.body;
+        const { id, clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType, paymentMethod, transporte, descuentoMonto, descuentoTipo, descuentoValor, cortes, abonos } = req.body;
         await pool.query(
-            `INSERT INTO invoices(id, client_id, obra_id, amount, status, date, paid_date, items, cotizacion_id, remision_enabled, remision_creada, paid_amount, payment_type, payment_method, cortes, abonos) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+            `INSERT INTO invoices(id, client_id, obra_id, amount, status, date, paid_date, items, cotizacion_id, remision_enabled, remision_creada, paid_amount, payment_type, payment_method, transporte, descuento_monto, descuento_tipo, descuento_valor, cortes, abonos) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
             [id, clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
-                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, paymentMethod || null, JSON.stringify(cortes || []), JSON.stringify(abonos || [])]
+                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, paymentMethod || null, transporte || 0, descuentoMonto || 0, descuentoTipo || null, descuentoValor || 0, JSON.stringify(cortes || []), JSON.stringify(abonos || [])]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -827,11 +865,11 @@ app.post('/api/invoices', async (req, res) => {
 
 app.put('/api/invoices/:id', async (req, res) => {
     try {
-        const { clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType, paymentMethod, cortes, abonos } = req.body;
+        const { clientId, obraId, amount, status, date, paidDate, items, cotizacionId, remisionEnabled, remisionCreada, paidAmount, paymentType, paymentMethod, transporte, descuentoMonto, descuentoTipo, descuentoValor, cortes, abonos } = req.body;
         await pool.query(
-            `UPDATE invoices SET client_id = $1, obra_id = $2, amount = $3, status = $4, date = $5, paid_date = $6, items = $7, cotizacion_id = $8, remision_enabled = $9, remision_creada = $10, paid_amount = $11, payment_type = $12, payment_method = $13, cortes = $14, abonos = $15 WHERE id = $16`,
+            `UPDATE invoices SET client_id = $1, obra_id = $2, amount = $3, status = $4, date = $5, paid_date = $6, items = $7, cotizacion_id = $8, remision_enabled = $9, remision_creada = $10, paid_amount = $11, payment_type = $12, payment_method = $13, transporte = $14, descuento_monto = $15, descuento_tipo = $16, descuento_valor = $17, cortes = $18, abonos = $19 WHERE id = $20`,
             [clientId, obraId, amount, status, date || null, paidDate || null, JSON.stringify(items || []),
-                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, paymentMethod || null, JSON.stringify(cortes || []), JSON.stringify(abonos || []), req.params.id]
+                cotizacionId || null, remisionEnabled || false, remisionCreada || false, paidAmount || 0, paymentType || null, paymentMethod || null, transporte || 0, descuentoMonto || 0, descuentoTipo || null, descuentoValor || 0, JSON.stringify(cortes || []), JSON.stringify(abonos || []), req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1166,13 +1204,13 @@ app.get('/api/gastos-mantenimiento', async (req, res) => {
 });
 
 app.post('/api/gastos-mantenimiento', async (req, res) => {
-    const { id, id_maquina, tipo_gasto, subtipo_gasto, descripcion, costo, fecha_gasto, proveedor_beneficiario, referencia_soporte } = req.body;
+    const { id, id_maquina, tipo_gasto, subtipo_gasto, descripcion, costo, fecha_gasto, proveedor_beneficiario, referencia_soporte, metadata, metodo_pago } = req.body;
     try {
         const { rows } = await pool.query(`
-            INSERT INTO gastos_mantenimiento (id, id_maquina, tipo_gasto, subtipo_gasto, descripcion, costo, fecha_gasto, proveedor_beneficiario, referencia_soporte)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO gastos_mantenimiento (id, id_maquina, tipo_gasto, subtipo_gasto, descripcion, costo, fecha_gasto, proveedor_beneficiario, referencia_soporte, metadata, metodo_pago)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *
-        `, [id, id_maquina || null, tipo_gasto, subtipo_gasto || null, descripcion, Number(costo) || 0, fecha_gasto, proveedor_beneficiario || null, referencia_soporte || null]);
+        `, [id, id_maquina || null, tipo_gasto, subtipo_gasto || null, descripcion, Number(costo) || 0, fecha_gasto, proveedor_beneficiario || null, referencia_soporte || null, metadata || null, metodo_pago || null]);
         res.status(201).json(rows[0]);
     } catch (e) {
         console.error('ERROR CREATING GASTO MANTENIMIENTO:', e.message);
@@ -1182,14 +1220,14 @@ app.post('/api/gastos-mantenimiento', async (req, res) => {
 
 app.put('/api/gastos-mantenimiento/:id', async (req, res) => {
     const { id } = req.params;
-    const { id_maquina, tipo_gasto, subtipo_gasto, descripcion, costo, fecha_gasto, proveedor_beneficiario, referencia_soporte } = req.body;
+    const { id_maquina, tipo_gasto, subtipo_gasto, descripcion, costo, fecha_gasto, proveedor_beneficiario, referencia_soporte, metadata, metodo_pago } = req.body;
     try {
         const { rows } = await pool.query(`
             UPDATE gastos_mantenimiento
-            SET id_maquina = $1, tipo_gasto = $2, subtipo_gasto = $3, descripcion = $4, costo = $5, fecha_gasto = $6, proveedor_beneficiario = $7, referencia_soporte = $8
-            WHERE id = $9
+            SET id_maquina = $1, tipo_gasto = $2, subtipo_gasto = $3, descripcion = $4, costo = $5, fecha_gasto = $6, proveedor_beneficiario = $7, referencia_soporte = $8, metadata = $9, metodo_pago = $10
+            WHERE id = $11
             RETURNING *
-        `, [id_maquina || null, tipo_gasto, subtipo_gasto || null, descripcion, Number(costo) || 0, fecha_gasto, proveedor_beneficiario || null, referencia_soporte || null, id]);
+        `, [id_maquina || null, tipo_gasto, subtipo_gasto || null, descripcion, Number(costo) || 0, fecha_gasto, proveedor_beneficiario || null, referencia_soporte || null, metadata || null, metodo_pago || null, id]);
         if (rows.length === 0) return res.status(404).json({ error: 'Gasto de mantenimiento no encontrado' });
         res.json(rows[0]);
     } catch (e) {
@@ -1269,6 +1307,65 @@ app.delete('/api/ingresos-caja-menor/:id', async (req, res) => {
     }
 });
 
+// ─── RETIROS DE CAJA MENOR CRUD (salidas de efectivo, no son gastos) ─────────
+app.get('/api/retiros-caja-menor', async (req, res) => {
+    try {
+        const { rows } = await pool.query(`
+            SELECT * FROM retiros_caja_menor
+            ORDER BY fecha_retiro DESC, fecha_registro DESC
+        `);
+        res.json(rows);
+    } catch (e) {
+        console.error('ERROR GETTING RETIROS CAJA MENOR:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/retiros-caja-menor', async (req, res) => {
+    const { id, concepto, descripcion, monto, fecha_retiro, destino, responsable, referencia_soporte } = req.body;
+    try {
+        const { rows } = await pool.query(`
+            INSERT INTO retiros_caja_menor (id, concepto, descripcion, monto, fecha_retiro, destino, responsable, referencia_soporte)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+        `, [id, concepto, descripcion || null, Number(monto) || 0, fecha_retiro, destino || null, responsable || null, referencia_soporte || null]);
+        res.status(201).json(rows[0]);
+    } catch (e) {
+        console.error('ERROR CREATING RETIRO CAJA MENOR:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put('/api/retiros-caja-menor/:id', async (req, res) => {
+    const { id } = req.params;
+    const { concepto, descripcion, monto, fecha_retiro, destino, responsable, referencia_soporte } = req.body;
+    try {
+        const { rows } = await pool.query(`
+            UPDATE retiros_caja_menor
+            SET concepto = $1, descripcion = $2, monto = $3, fecha_retiro = $4, destino = $5, responsable = $6, referencia_soporte = $7
+            WHERE id = $8
+            RETURNING *
+        `, [concepto, descripcion || null, Number(monto) || 0, fecha_retiro, destino || null, responsable || null, referencia_soporte || null, id]);
+        if (rows.length === 0) return res.status(404).json({ error: 'Retiro de caja menor no encontrado' });
+        res.json(rows[0]);
+    } catch (e) {
+        console.error('ERROR UPDATING RETIRO CAJA MENOR:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.delete('/api/retiros-caja-menor/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const { rowCount } = await pool.query('DELETE FROM retiros_caja_menor WHERE id = $1', [id]);
+        if (rowCount === 0) return res.status(404).json({ error: 'Retiro de caja menor no encontrado' });
+        res.json({ success: true });
+    } catch (e) {
+        console.error('ERROR DELETING RETIRO CAJA MENOR:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // ─── LOGS TRACER CRUD (NO DELETE ENDPOINT) ──────────────────────────────────
 app.get('/api/logs', async (req, res) => {
     try {
@@ -1325,7 +1422,7 @@ app.post('/api/auth/login', async (req, res) => {
 // ─── USER MANAGEMENT ENDPOINTS ────────────────────────────────────────────────
 app.get('/api/users', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT id, username, name, role, avatar FROM users ORDER BY name ASC');
+        const { rows } = await pool.query('SELECT id, username, name, role, avatar, cargo, documento, salario_base, auxilio_transporte, banco_cuenta FROM users ORDER BY name ASC');
         res.json(rows);
     } catch (e) {
         console.error('ERROR EN GET USERS:', e.message);
@@ -1334,7 +1431,7 @@ app.get('/api/users', async (req, res) => {
 });
 
 app.post('/api/users', async (req, res) => {
-    const { username, password, name, role, avatar } = req.body;
+    const { username, password, name, role, avatar, cargo, documento, salario_base, auxilio_transporte, banco_cuenta } = req.body;
     if (!username || !password || !name || !role) {
         return res.status(400).json({ error: 'Todos los campos son requeridos' });
     }
@@ -1355,10 +1452,34 @@ app.post('/api/users', async (req, res) => {
         const hash = crypto.createHash('sha256').update(password).digest('hex');
         
         await pool.query(
-            `INSERT INTO users(id, username, password, name, role, avatar) VALUES($1, $2, $3, $4, $5, $6)`,
-            [newId, username.trim().toLowerCase(), hash, name.trim(), role, avatar || name.charAt(0).toUpperCase()]
+            `INSERT INTO users(id, username, password, name, role, avatar, cargo, documento, salario_base, auxilio_transporte, banco_cuenta) 
+             VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [
+                newId, 
+                username.trim().toLowerCase(), 
+                hash, 
+                name.trim(), 
+                role, 
+                avatar || name.charAt(0).toUpperCase(),
+                cargo || null,
+                documento || null,
+                Number(salario_base) || 0,
+                Number(auxilio_transporte) || 0,
+                banco_cuenta || null
+            ]
         );
-        res.status(201).json({ id: newId, username: username.trim().toLowerCase(), name, role, avatar });
+        res.status(201).json({ 
+            id: newId, 
+            username: username.trim().toLowerCase(), 
+            name, 
+            role, 
+            avatar,
+            cargo,
+            documento,
+            salario_base: Number(salario_base) || 0,
+            auxilio_transporte: Number(auxilio_transporte) || 0,
+            banco_cuenta
+        });
     } catch (e) {
         console.error('ERROR EN CREAR USER:', e.message);
         if (e.code === '23505' || e.message.includes('unique') || e.message.includes('duplicado')) {
@@ -1366,6 +1487,31 @@ app.post('/api/users', async (req, res) => {
         } else {
             res.status(500).json({ error: e.message });
         }
+    }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+    const { id } = req.params;
+    const { username, name, role, avatar, cargo, documento, salario_base, auxilio_transporte, banco_cuenta, password } = req.body;
+    try {
+        if (password) {
+            const hash = crypto.createHash('sha256').update(password).digest('hex');
+            await pool.query(
+                `UPDATE users SET name=$1, role=$2, avatar=$3, cargo=$4, documento=$5, salario_base=$6, auxilio_transporte=$7, banco_cuenta=$8, password=$9 WHERE id=$10`,
+                [name.trim(), role, avatar || name.charAt(0).toUpperCase(), cargo || null, documento || null, Number(salario_base) || 0, Number(auxilio_transporte) || 0, banco_cuenta || null, hash, id]
+            );
+        } else {
+            await pool.query(
+                `UPDATE users SET name=$1, role=$2, avatar=$3, cargo=$4, documento=$5, salario_base=$6, auxilio_transporte=$7, banco_cuenta=$8 WHERE id=$9`,
+                [name.trim(), role, avatar || name.charAt(0).toUpperCase(), cargo || null, documento || null, Number(salario_base) || 0, Number(auxilio_transporte) || 0, banco_cuenta || null, id]
+            );
+        }
+
+        const { rows } = await pool.query('SELECT id, username, name, role, avatar, cargo, documento, salario_base, auxilio_transporte, banco_cuenta FROM users WHERE id = $1', [id]);
+        res.json(rows[0]);
+    } catch (e) {
+        console.error('ERROR EN ACTUALIZAR USER:', e.message);
+        res.status(500).json({ error: e.message });
     }
 });
 

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Building2, Upload, Phone, Mail, FileText, MapPin, Users, UserPlus, Trash2, KeyRound } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Settings as SettingsIcon, Save, Building2, Upload, Phone, Mail, FileText, MapPin, Users, UserPlus, Trash2, KeyRound, Edit2, DollarSign, Briefcase, CreditCard, User, IdCard, Eye, EyeOff, ShieldCheck, HardHat, Wallet, X, CheckCircle2, AlertCircle, Image as ImageIcon, Info } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import Swal from 'sweetalert2';
 
 export default function Settings() {
-  const { settings, updateSettings, isAdmin, users, addUser, deleteUser, currentUser } = useAppContext();
+  const { settings, updateSettings, isAdmin, users, addUser, updateUser, deleteUser, currentUser } = useAppContext();
   const [activeTab, setActiveTab] = useState('company'); // 'company' or 'users'
   const [formData, setFormData] = useState({
     companyName: '',
@@ -22,14 +22,22 @@ export default function Settings() {
   const [message, setMessage] = useState({ type: '', text: '' });
 
   // State for user profiles form
+  const [editingUserId, setEditingUserId] = useState(null);
   const [userForm, setUserForm] = useState({
     name: '',
     username: '',
     password: '',
-    role: 'operativo'
+    role: 'operativo',
+    cargo: '',
+    documento: '',
+    salario_base: '',
+    auxilio_transporte: 162000,
+    banco_cuenta: ''
   });
   const [userSaving, setUserSaving] = useState(false);
   const [userMessage, setUserMessage] = useState({ type: '', text: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const userFormRef = useRef(null);
 
   useEffect(() => {
     if (settings) {
@@ -72,29 +80,66 @@ export default function Settings() {
     }
   };
 
-  const handleCreateUser = async (e) => {
+  const handleSaveUser = async (e) => {
     e.preventDefault();
-    if (!userForm.name.trim() || !userForm.username.trim() || !userForm.password) {
-      setUserMessage({ type: 'error', text: 'Todos los campos son requeridos' });
+    if (!userForm.name.trim() || !userForm.username.trim() || (!editingUserId && !userForm.password)) {
+      setUserMessage({ type: 'error', text: 'Nombre, usuario y contraseña son requeridos' });
       return;
     }
     setUserSaving(true);
     setUserMessage({ type: '', text: '' });
     try {
-      await addUser({
+      const payload = {
         name: userForm.name.trim(),
         username: userForm.username.trim().toLowerCase(),
-        password: userForm.password,
-        role: userForm.role
-      });
-      setUserMessage({ type: 'success', text: 'Perfil de usuario creado correctamente' });
-      setUserForm({ name: '', username: '', password: '', role: 'operativo' });
+        role: userForm.role,
+        cargo: userForm.cargo.trim(),
+        documento: userForm.documento.trim(),
+        salario_base: Number(userForm.salario_base) || 0,
+        auxilio_transporte: Number(userForm.auxilio_transporte) || 0,
+        banco_cuenta: userForm.banco_cuenta.trim()
+      };
+      if (userForm.password) {
+        payload.password = userForm.password;
+      }
+
+      if (editingUserId) {
+        await updateUser(editingUserId, payload);
+        setUserMessage({ type: 'success', text: 'Perfil de usuario actualizado correctamente' });
+      } else {
+        await addUser(payload);
+        setUserMessage({ type: 'success', text: 'Perfil de usuario creado correctamente' });
+      }
+      cancelEditUser();
     } catch (err) {
-      setUserMessage({ type: 'error', text: err.message || 'Error al crear el perfil' });
+      setUserMessage({ type: 'error', text: err.message || 'Error al guardar el perfil' });
     } finally {
       setUserSaving(false);
       setTimeout(() => setUserMessage({ type: '', text: '' }), 4000);
     }
+  };
+
+  const startEditUser = (u) => {
+    setEditingUserId(u.id);
+    setShowPassword(false);
+    userFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setUserForm({
+      name: u.name || '',
+      username: u.username || '',
+      password: '',
+      role: u.role || 'operativo',
+      cargo: u.cargo || '',
+      documento: u.documento || '',
+      salario_base: u.salario_base || '',
+      auxilio_transporte: u.auxilio_transporte ?? 162000,
+      banco_cuenta: u.banco_cuenta || ''
+    });
+  };
+
+  const cancelEditUser = () => {
+    setEditingUserId(null);
+    setShowPassword(false);
+    setUserForm({ name: '', username: '', password: '', role: 'operativo', cargo: '', documento: '', salario_base: '', auxilio_transporte: 162000, banco_cuenta: '' });
   };
 
   const handleDeleteUser = async (userId, userName) => {
@@ -148,8 +193,18 @@ export default function Settings() {
     }
   };
 
+  const ROLE_OPTIONS = [
+    { value: 'operativo', label: 'Operativo', desc: 'Operarios en campo', Icon: HardHat },
+    { value: 'gerente', label: 'Gerente', desc: 'Supervisión y reportes', Icon: Briefcase },
+    { value: 'admin', label: 'Administrador', desc: 'Acceso total', Icon: ShieldCheck }
+  ];
+
+  const formatMoney = (value) => `$${Number(value || 0).toLocaleString('es-CO')}`;
+
+  const editingUser = editingUserId ? users.find(u => u.id === editingUserId) : null;
+
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+    <div style={{ maxWidth: activeTab === 'users' ? '1220px' : '1020px', margin: '0 auto', transition: 'max-width 0.25s ease' }}>
       <header style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
         <div style={{
           padding: '0.75rem',
@@ -215,346 +270,620 @@ export default function Settings() {
 
       {activeTab === 'company' ? (
         /* Tab: Company Settings */
-        <div className="card">
-          <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-            
-            {/* Logo Section */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-              <section>
-                <h3 style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Upload size={18} /> Logo para Documentos (PDF)
-                </h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                  <div style={{
-                    width: '100px',
-                    height: '100px',
-                    borderRadius: '12px',
-                    border: '2px dashed var(--surface-border)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    background: 'var(--surface)'
-                  }}>
-                    {formData.logo ? (
-                      <img src={formData.logo} alt="Logo Doc" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    ) : (
-                      <Building2 size={32} style={{ color: 'var(--text-muted)' }} />
-                    )}
-                  </div>
-                  <div>
-                    <input
-                      type="file"
-                      id="logo-upload"
-                      accept="image/*"
-                      onChange={(e) => handleLogoChange(e, 'logo')}
-                      style={{ display: 'none' }}
-                    />
-                    <label htmlFor="logo-upload" className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                      <Upload size={16} /> Subir Logo PDF
-                    </label>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Fondo blanco recomendado</p>
-                  </div>
-                </div>
-              </section>
+        <form onSubmit={handleSave} className="cfg-company-layout">
 
-              <section>
-                <h3 style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Upload size={18} /> Logo para Interfaz (App)
-                </h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                  <div style={{
-                    width: '100px',
-                    height: '100px',
-                    borderRadius: '12px',
-                    border: '2px dashed var(--surface-border)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    background: 'var(--surface)'
-                  }}>
-                    {formData.logoUI ? (
-                      <img src={formData.logoUI} alt="Logo UI" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    ) : (
-                      <Building2 size={32} style={{ color: 'var(--text-muted)' }} />
-                    )}
-                  </div>
-                  <div>
-                    <input
-                      type="file"
-                      id="logo-ui-upload"
-                      accept="image/*"
-                      onChange={(e) => handleLogoChange(e, 'logoUI')}
-                      style={{ display: 'none' }}
-                    />
-                    <label htmlFor="logo-ui-upload" className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                      <Upload size={16} /> Subir Logo App
-                    </label>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Utilizado en Login y Menú Lateral</p>
-                  </div>
-                </div>
-              </section>
-            </div>
-
-            <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.05)' }} />
-
-            {/* Form Fields */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-              <div className="input-group">
-                <label><Building2 size={14} /> Nombre Corto / Identificador</label>
-                <input 
-                  type="text" 
-                  value={formData.shortName || ''} 
-                  onChange={e => {
-                    const val = e.target.value;
-                    setFormData({...formData, shortName: val, companyName: `${val} ${formData.nameComplement || ''}`.trim()});
-                  }}
-                  placeholder="Ej: CIELO"
-                  required
-                />
-              </div>
-              <div className="input-group">
-                <label><Building2 size={14} /> Complemento de Razón Social</label>
-                <input 
-                  type="text" 
-                  value={formData.nameComplement || ''} 
-                  onChange={e => {
-                    const val = e.target.value;
-                    setFormData({...formData, nameComplement: val, companyName: `${formData.shortName || ''} ${val}`.trim()});
-                  }}
-                  placeholder="Ej: ALQUILER DE EQUIPOS"
-                />
-              </div>
-              <div className="input-group" style={{ gridColumn: 'span 2' }}>
-                <label><Building2 size={14} /> Razón Social Completa (como aparecerá en documentos)</label>
-                <input 
-                  type="text" 
-                  value={formData.companyName || ''} 
-                  onChange={e => setFormData({...formData, companyName: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="input-group">
-                <label><FileText size={14} /> NIT / Identificación Fiscal</label>
-                <input 
-                  type="text" 
-                  value={formData.nit || ''} 
-                  onChange={e => setFormData({...formData, nit: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="input-group">
-                <label><Phone size={14} /> Teléfono de Contacto</label>
-                <input 
-                  type="text" 
-                  value={formData.phone || ''} 
-                  onChange={e => setFormData({...formData, phone: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="input-group">
-                <label><Mail size={14} /> Correo Electrónico</label>
-                <input 
-                  type="email" 
-                  value={formData.email || ''} 
-                  onChange={e => setFormData({...formData, email: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="input-group" style={{ gridColumn: 'span 2' }}>
-                <label><MapPin size={14} /> Dirección Principal</label>
-                <input 
-                  type="text" 
-                  value={formData.address || ''} 
-                  onChange={e => setFormData({...formData, address: e.target.value})}
-                  required
-                />
-              </div>
-              <div className="input-group" style={{ gridColumn: 'span 2' }}>
-                <label><FileText size={14} /> Información Adicional en Cabezote (Ej: Resolución, Régimen, Slogan)</label>
-                <input 
-                  type="text" 
-                  value={formData.headerExtra || ''} 
-                  onChange={e => setFormData({...formData, headerExtra: e.target.value})}
-                  placeholder="Aparecerá debajo del complemento de nombre en los documentos"
-                />
+          {/* Panel: Identidad visual */}
+          <div className="cfg-panel">
+            <div className="cfg-panel__header">
+              <div className="cfg-panel__icon"><ImageIcon size={20} /></div>
+              <div className="cfg-panel__heading">
+                <h2 className="cfg-panel__title">Identidad Visual</h2>
+                <p className="cfg-panel__subtitle">Logos que se usan en los documentos PDF y dentro de la aplicación</p>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem' }}>
-              {message.text && (
-                <span style={{ 
-                  color: message.type === 'success' ? '#10b981' : '#ef4444',
-                  fontSize: '0.9rem',
-                  fontWeight: 500
-                }}>
-                  {message.text}
-                </span>
-              )}
-              <button 
-                type="submit" 
-                className="btn btn-primary" 
-                disabled={isSaving}
-                style={{ padding: '0.75rem 2rem', gap: '0.75rem' }}
-              >
-                <Save size={18} /> {isSaving ? 'Guardando...' : 'Guardar Cambios'}
-              </button>
+            <div className="cfg-panel__body">
+              <div className="cfg-logo-grid">
+                {[
+                  {
+                    field: 'logo',
+                    inputId: 'logo-upload',
+                    title: 'Logo para Documentos (PDF)',
+                    hint: 'Se imprime en cotizaciones, remisiones y facturas. Se recomienda fondo blanco y formato PNG horizontal.',
+                    alt: 'Logo Doc'
+                  },
+                  {
+                    field: 'logoUI',
+                    inputId: 'logo-ui-upload',
+                    title: 'Logo para Interfaz (App)',
+                    hint: 'Se muestra en la pantalla de Login y en el menú lateral. Idealmente PNG con fondo transparente.',
+                    alt: 'Logo UI'
+                  }
+                ].map(({ field, inputId, title, hint, alt }) => (
+                  <div key={field} className="cfg-logo-card">
+                    <div className={`cfg-logo-preview${formData[field] ? ' has-image' : ''}`}>
+                      {formData[field] ? (
+                        <img src={formData[field]} alt={alt} />
+                      ) : (
+                        <Building2 size={30} />
+                      )}
+                    </div>
+                    <div className="cfg-logo-info">
+                      <span className="cfg-logo-title"><Upload size={14} /> {title}</span>
+                      <span className="cfg-logo-hint">{hint}</span>
+                      <input
+                        type="file"
+                        id={inputId}
+                        accept="image/*"
+                        onChange={(e) => handleLogoChange(e, field)}
+                        style={{ display: 'none' }}
+                      />
+                      <div className="cfg-logo-actions">
+                        <label htmlFor={inputId} className="cfg-upload-btn">
+                          <Upload size={14} /> {formData[field] ? 'Cambiar imagen' : 'Subir imagen'}
+                        </label>
+                        {formData[field] && (
+                          <button
+                            type="button"
+                            className="cfg-ghost-btn"
+                            onClick={() => setFormData({ ...formData, [field]: '' })}
+                          >
+                            <Trash2 size={14} /> Quitar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </form>
-        </div>
+          </div>
+
+          {/* Panel: Datos de la empresa */}
+          <div className="cfg-panel">
+            <div className="cfg-panel__header">
+              <div className="cfg-panel__icon"><Building2 size={20} /></div>
+              <div className="cfg-panel__heading">
+                <h2 className="cfg-panel__title">Datos de la Empresa</h2>
+                <p className="cfg-panel__subtitle">Información legal y de contacto que aparecerá en todos los documentos</p>
+              </div>
+            </div>
+
+            <div className="cfg-panel__body">
+              <div className="cfg-form">
+
+                {/* Sección: Razón social */}
+                <section className="cfg-section">
+                  <div className="cfg-section__head">
+                    <span className="cfg-section__title"><Building2 size={13} /> Razón Social</span>
+                  </div>
+
+                  <div className="cfg-grid">
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="empresa-corto">
+                        <Building2 size={13} /> Nombre Corto / Identificador <span className="cfg-field__required">*</span>
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="empresa-corto"
+                          className="cfg-input"
+                          type="text"
+                          value={formData.shortName || ''}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setFormData({...formData, shortName: val, companyName: `${val} ${formData.nameComplement || ''}`.trim()});
+                          }}
+                          placeholder="Ej: CIELO"
+                          required
+                        />
+                      </div>
+                      <span className="cfg-field__hint">Se usa como identificador corto de la marca.</span>
+                    </div>
+
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="empresa-complemento">
+                        <Building2 size={13} /> Complemento de Razón Social
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="empresa-complemento"
+                          className="cfg-input"
+                          type="text"
+                          value={formData.nameComplement || ''}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setFormData({...formData, nameComplement: val, companyName: `${formData.shortName || ''} ${val}`.trim()});
+                          }}
+                          placeholder="Ej: ALQUILER DE EQUIPOS"
+                        />
+                      </div>
+                      <span className="cfg-field__hint">Se combina automáticamente con el nombre corto.</span>
+                    </div>
+
+                    <div className="cfg-field cfg-grid__full">
+                      <label className="cfg-field__label" htmlFor="empresa-razon">
+                        <FileText size={13} /> Razón Social Completa <span className="cfg-field__required">*</span>
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="empresa-razon"
+                          className="cfg-input"
+                          type="text"
+                          value={formData.companyName || ''}
+                          onChange={e => setFormData({...formData, companyName: e.target.value})}
+                          required
+                        />
+                      </div>
+                      <span className="cfg-field__hint">Puede editarla manualmente si el nombre legal difiere de la combinación anterior.</span>
+                    </div>
+
+                    <div className="cfg-preview-box">
+                      <div className="cfg-preview-box__label"><FileText size={12} /> Vista previa del cabezote</div>
+                      <div className="cfg-preview-box__value">{formData.companyName || 'Nombre de la empresa'}</div>
+                      {formData.headerExtra && <div className="cfg-preview-box__extra">{formData.headerExtra}</div>}
+                      <div className="cfg-preview-box__extra">
+                        {[formData.nit && `NIT ${formData.nit}`, formData.phone, formData.email].filter(Boolean).join('  ·  ') || 'NIT · Teléfono · Correo'}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Sección: Identificación y contacto */}
+                <section className="cfg-section">
+                  <div className="cfg-section__head">
+                    <span className="cfg-section__title"><Phone size={13} /> Identificación y Contacto</span>
+                  </div>
+
+                  <div className="cfg-grid">
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="empresa-nit">
+                        <FileText size={13} /> NIT / Identificación Fiscal <span className="cfg-field__required">*</span>
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="empresa-nit"
+                          className="cfg-input"
+                          type="text"
+                          value={formData.nit || ''}
+                          onChange={e => setFormData({...formData, nit: e.target.value})}
+                          placeholder="Ej: 901234567-8"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="empresa-telefono">
+                        <Phone size={13} /> Teléfono de Contacto <span className="cfg-field__required">*</span>
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="empresa-telefono"
+                          className="cfg-input"
+                          type="text"
+                          value={formData.phone || ''}
+                          onChange={e => setFormData({...formData, phone: e.target.value})}
+                          placeholder="Ej: 320 000 0000"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="empresa-email">
+                        <Mail size={13} /> Correo Electrónico <span className="cfg-field__required">*</span>
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="empresa-email"
+                          className="cfg-input"
+                          type="email"
+                          value={formData.email || ''}
+                          onChange={e => setFormData({...formData, email: e.target.value})}
+                          placeholder="Ej: contacto@empresa.com"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="empresa-direccion">
+                        <MapPin size={13} /> Dirección Principal <span className="cfg-field__required">*</span>
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="empresa-direccion"
+                          className="cfg-input"
+                          type="text"
+                          value={formData.address || ''}
+                          onChange={e => setFormData({...formData, address: e.target.value})}
+                          placeholder="Ej: Calle 10 # 5-20, Neiva"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Sección: Documentos */}
+                <section className="cfg-section">
+                  <div className="cfg-section__head">
+                    <span className="cfg-section__title"><FileText size={13} /> Personalización de Documentos</span>
+                  </div>
+
+                  <div className="cfg-grid">
+                    <div className="cfg-field cfg-grid__full">
+                      <label className="cfg-field__label" htmlFor="empresa-cabezote">
+                        <FileText size={13} /> Información Adicional en Cabezote <span className="cfg-field__optional">(opcional)</span>
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="empresa-cabezote"
+                          className="cfg-input"
+                          type="text"
+                          value={formData.headerExtra || ''}
+                          onChange={e => setFormData({...formData, headerExtra: e.target.value})}
+                          placeholder="Ej: Resolución DIAN, Régimen, Slogan..."
+                        />
+                      </div>
+                      <span className="cfg-field__hint">Aparecerá debajo del complemento de nombre en cotizaciones, remisiones y facturas.</span>
+                    </div>
+                  </div>
+                </section>
+
+              </div>
+            </div>
+          </div>
+
+          {/* Barra de guardado */}
+          <div className="cfg-save-bar">
+            {message.text ? (
+              <div className={`cfg-alert cfg-alert--${message.type === 'success' ? 'success' : 'error'}`}>
+                {message.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                {message.text}
+              </div>
+            ) : (
+              <span className="cfg-save-bar__note">
+                <Info size={14} /> Los cambios se aplican a todos los documentos generados a partir de ahora.
+              </span>
+            )}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={isSaving}
+            >
+              <Save size={18} /> {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+            </button>
+          </div>
+        </form>
       ) : (
         /* Tab: User Profiles / Users manager */
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '2rem', alignItems: 'start' }}>
-          
+        <div className="cfg-users-layout">
+
           {/* User List Panel */}
-          <div className="card">
-            <h2 style={{ color: 'var(--text-primary)', fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Users size={18} color="#2365AB" /> Perfiles Registrados
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {users.map(u => (
-                <div key={u.id} style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'space-between',
-                  padding: '1rem',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: '12px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ 
-                      width: '40px', 
-                      height: '40px', 
-                      borderRadius: '50%', 
-                      background: 'rgba(35, 101, 171, 0.1)', 
-                      color: '#2365AB',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 'bold',
-                      fontSize: '1.1rem'
-                    }}>
-                      {u.avatar || u.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 'bold', color: 'var(--text-primary)', fontSize: '0.95rem' }}>{u.name}</div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>@{u.username}</div>
-                    </div>
-                  </div>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <span style={{ 
-                      padding: '0.25rem 0.6rem',
-                      borderRadius: '12px',
-                      fontSize: '0.75rem',
-                      fontWeight: '600',
-                      ...getRoleBadgeStyle(u.role)
-                    }}>
-                      {getRoleLabel(u.role)}
-                    </span>
-                    <button 
-                      onClick={() => handleDeleteUser(u.id, u.name)}
-                      disabled={u.id === currentUser?.id || u.id === 'U-001'}
-                      style={{ 
-                        background: 'none', 
-                        border: 'none', 
-                        color: (u.id === currentUser?.id || u.id === 'U-001') ? 'rgba(255,255,255,0.05)' : '#ef4444', 
-                        cursor: (u.id === currentUser?.id || u.id === 'U-001') ? 'not-allowed' : 'pointer',
-                        padding: '6px'
-                      }}
-                      title={(u.id === currentUser?.id) ? 'Sesión activa' : (u.id === 'U-001') ? 'Admin principal' : 'Eliminar usuario'}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+          <div className="cfg-panel">
+            <div className="cfg-panel__header">
+              <div className="cfg-panel__icon"><Users size={20} /></div>
+              <div className="cfg-panel__heading">
+                <h2 className="cfg-panel__title">Perfiles Registrados</h2>
+                <p className="cfg-panel__subtitle">Usuarios con acceso al sistema y sus datos de nómina</p>
+              </div>
+              <span className="cfg-chip">{users.length} {users.length === 1 ? 'perfil' : 'perfiles'}</span>
+            </div>
+
+            <div className="cfg-panel__body">
+              {users.length === 0 ? (
+                <div className="cfg-empty">
+                  <Users size={28} style={{ opacity: 0.4, marginBottom: '0.5rem' }} />
+                  <p style={{ fontSize: '0.85rem' }}>Aún no hay perfiles registrados. Cree el primero desde el formulario.</p>
                 </div>
-              ))}
+              ) : (
+                <div className="cfg-profile-list">
+                  {users.map(u => {
+                    const isLocked = u.id === currentUser?.id || u.id === 'U-001';
+                    return (
+                      <div key={u.id} className={`cfg-profile-card${editingUserId === u.id ? ' is-editing' : ''}`}>
+                        <div className="cfg-profile-card__top">
+                          <div className="cfg-profile-card__identity">
+                            <div className="cfg-avatar">
+                              {u.avatar || u.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div className="cfg-profile-card__name">{u.name}</div>
+                              <div className="cfg-profile-card__user">@{u.username}</div>
+                            </div>
+                          </div>
+
+                          <div className="cfg-profile-card__actions">
+                            <span className="cfg-role-badge" style={getRoleBadgeStyle(u.role)}>
+                              {getRoleLabel(u.role)}
+                            </span>
+                            <button
+                              type="button"
+                              className="cfg-icon-btn"
+                              onClick={() => startEditUser(u)}
+                              title="Editar datos salariales y perfil"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              className="cfg-icon-btn cfg-icon-btn--danger"
+                              onClick={() => handleDeleteUser(u.id, u.name)}
+                              disabled={isLocked}
+                              title={(u.id === currentUser?.id) ? 'Sesión activa' : (u.id === 'U-001') ? 'Admin principal' : 'Eliminar usuario'}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Payroll / Worker Info Sub-panel */}
+                        <div className="cfg-profile-meta">
+                          <div className="cfg-profile-meta__item">
+                            <span className="cfg-profile-meta__label">Cargo</span>
+                            <span className="cfg-profile-meta__value" title={u.cargo || 'Sin asignar'}>{u.cargo || 'Sin asignar'}</span>
+                          </div>
+                          <div className="cfg-profile-meta__item">
+                            <span className="cfg-profile-meta__label">Cédula / Doc.</span>
+                            <span className="cfg-profile-meta__value">{u.documento || '—'}</span>
+                          </div>
+                          <div className="cfg-profile-meta__item">
+                            <span className="cfg-profile-meta__label">Salario Base</span>
+                            <span className="cfg-profile-meta__value cfg-profile-meta__value--money">{formatMoney(u.salario_base)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
           {/* User Registration Form */}
-          <div className="card">
-            <h2 style={{ color: 'var(--text-primary)', fontSize: '1.1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <UserPlus size={18} color="#2365AB" /> Crear Nuevo Perfil
-            </h2>
-            <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div className="input-group">
-                <label>Nombre Completo</label>
-                <input 
-                  type="text" 
-                  value={userForm.name} 
-                  onChange={e => setUserForm({...userForm, name: e.target.value})}
-                  placeholder="Ej: Andres Polanco"
-                  required
-                />
+          <div className="cfg-panel" ref={userFormRef}>
+            <div className="cfg-panel__header">
+              <div className="cfg-panel__icon">{editingUserId ? <Edit2 size={18} /> : <UserPlus size={20} />}</div>
+              <div className="cfg-panel__heading">
+                <h2 className="cfg-panel__title">{editingUserId ? 'Editar Perfil Registrado' : 'Crear Nuevo Perfil'}</h2>
+                <p className="cfg-panel__subtitle">
+                  {editingUserId
+                    ? `Actualizando los datos de ${editingUser?.name || 'este usuario'}`
+                    : 'Defina el acceso y las variables de nómina del colaborador'}
+                </p>
               </div>
-              <div className="input-group">
-                <label>Usuario (nombre de acceso)</label>
-                <input 
-                  type="text" 
-                  value={userForm.username} 
-                  onChange={e => setUserForm({...userForm, username: e.target.value})}
-                  placeholder="Ej: andresp"
-                  required
-                />
-              </div>
-              <div className="input-group">
-                <label><KeyRound size={12} /> Contraseña</label>
-                <input 
-                  type="password" 
-                  value={userForm.password} 
-                  onChange={e => setUserForm({...userForm, password: e.target.value})}
-                  placeholder="Defina una contraseña..."
-                  required
-                />
-              </div>
-              <div className="input-group">
-                <label>Rol / Perfil de Acceso</label>
-                <select 
-                  value={userForm.role}
-                  onChange={e => setUserForm({...userForm, role: e.target.value})}
-                  style={{
-                    width: '100%',
-                    padding: '0.65rem 0.75rem',
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid var(--surface-border)',
-                    borderRadius: '8px',
-                    color: 'var(--text-primary)',
-                    fontSize: '0.9rem',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                >
-                  <option value="operativo" style={{ background: 'var(--surface)' }}>Operativo (Operarios)</option>
-                  <option value="gerente" style={{ background: 'var(--surface)' }}>Gerente</option>
-                  <option value="admin" style={{ background: 'var(--surface)' }}>Administrativo (Admin)</option>
-                </select>
-              </div>
-
-              {userMessage.text && (
-                <div style={{ 
-                  color: userMessage.type === 'success' ? '#10b981' : '#ef4444',
-                  fontSize: '0.85rem',
-                  fontWeight: 500,
-                  marginTop: '0.5rem'
-                }}>
-                  {userMessage.text}
-                </div>
+              {editingUserId && (
+                <button type="button" className="cfg-chip cfg-chip--edit" onClick={cancelEditUser} style={{ cursor: 'pointer' }}>
+                  <X size={13} /> Cancelar
+                </button>
               )}
+            </div>
 
-              <button 
-                type="submit" 
-                className="btn btn-primary" 
-                disabled={userSaving}
-                style={{ width: '100%', marginTop: '1rem', justifyContent: 'center' }}
-              >
-                <UserPlus size={16} /> {userSaving ? 'Creando perfil...' : 'Crear Perfil'}
-              </button>
-            </form>
+            <div className="cfg-panel__body">
+              <form onSubmit={handleSaveUser} className="cfg-form">
+
+                {/* Sección: Datos de acceso */}
+                <section className="cfg-section">
+                  <div className="cfg-section__head">
+                    <span className="cfg-section__title"><KeyRound size={13} /> Datos de Acceso</span>
+                  </div>
+
+                  <div className="cfg-grid">
+                    <div className="cfg-field cfg-grid__full">
+                      <label className="cfg-field__label" htmlFor="perfil-nombre">
+                        <User size={13} /> Nombre Completo <span className="cfg-field__required">*</span>
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="perfil-nombre"
+                          className="cfg-input"
+                          type="text"
+                          value={userForm.name}
+                          onChange={e => setUserForm({...userForm, name: e.target.value})}
+                          placeholder="Ej: Andres Polanco"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="perfil-usuario">
+                        <IdCard size={13} /> Usuario de acceso <span className="cfg-field__required">*</span>
+                      </label>
+                      <div className="cfg-field__control cfg-field__control--addon">
+                        <span className="cfg-field__addon">@</span>
+                        <input
+                          id="perfil-usuario"
+                          className="cfg-input"
+                          type="text"
+                          value={userForm.username}
+                          onChange={e => setUserForm({...userForm, username: e.target.value})}
+                          placeholder="andresp"
+                          disabled={!!editingUserId}
+                          required
+                        />
+                      </div>
+                      <span className="cfg-field__hint">
+                        {editingUserId ? 'El usuario no puede modificarse.' : 'Se guardará en minúsculas.'}
+                      </span>
+                    </div>
+
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="perfil-password">
+                        <KeyRound size={13} /> Contraseña {editingUserId
+                          ? <span className="cfg-field__optional">(opcional)</span>
+                          : <span className="cfg-field__required">*</span>}
+                      </label>
+                      <div className="cfg-field__control cfg-field__control--action">
+                        <input
+                          id="perfil-password"
+                          className="cfg-input"
+                          type={showPassword ? 'text' : 'password'}
+                          value={userForm.password}
+                          onChange={e => setUserForm({...userForm, password: e.target.value})}
+                          placeholder={editingUserId ? 'Dejar en blanco para no cambiar' : 'Defina una contraseña...'}
+                          required={!editingUserId}
+                        />
+                        <button
+                          type="button"
+                          className="cfg-input-action"
+                          onClick={() => setShowPassword(v => !v)}
+                          title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                        >
+                          {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <span className="cfg-field__hint">
+                        {editingUserId ? 'Solo se actualiza si escribe una nueva.' : 'Será la clave de ingreso al sistema.'}
+                      </span>
+                    </div>
+
+                    <div className="cfg-field cfg-grid__full">
+                      <label className="cfg-field__label">
+                        <ShieldCheck size={13} /> Rol / Perfil de Acceso
+                      </label>
+                      <div className="cfg-roles">
+                        {ROLE_OPTIONS.map(opt => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            className={`cfg-role${userForm.role === opt.value ? ' is-active' : ''}`}
+                            onClick={() => setUserForm({...userForm, role: opt.value})}
+                            aria-pressed={userForm.role === opt.value}
+                          >
+                            <span className="cfg-role__icon"><opt.Icon size={16} /></span>
+                            <span className="cfg-role__name">{opt.label}</span>
+                            <span className="cfg-role__desc">{opt.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Sección: Variables de nómina */}
+                <section className="cfg-section">
+                  <div className="cfg-section__head">
+                    <span className="cfg-section__title"><Wallet size={13} /> Variables de Nómina y Salario</span>
+                  </div>
+
+                  <div className="cfg-grid">
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="perfil-cargo">
+                        <Briefcase size={13} /> Cargo / Puesto
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="perfil-cargo"
+                          className="cfg-input"
+                          type="text"
+                          value={userForm.cargo}
+                          onChange={e => setUserForm({...userForm, cargo: e.target.value})}
+                          placeholder="Ej: Operario de Bodega"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="perfil-documento">
+                        <FileText size={13} /> Documento / Cédula
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="perfil-documento"
+                          className="cfg-input"
+                          type="text"
+                          value={userForm.documento}
+                          onChange={e => setUserForm({...userForm, documento: e.target.value})}
+                          placeholder="Ej: 101829384"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="perfil-salario">
+                        <DollarSign size={13} /> Salario Base Mensual
+                      </label>
+                      <div className="cfg-field__control cfg-field__control--addon">
+                        <span className="cfg-field__addon">$</span>
+                        <input
+                          id="perfil-salario"
+                          className="cfg-input"
+                          type="number"
+                          value={userForm.salario_base}
+                          onChange={e => setUserForm({...userForm, salario_base: e.target.value})}
+                          placeholder="1300000"
+                        />
+                      </div>
+                      <span className="cfg-field__hint">
+                        {userForm.salario_base ? <>Equivale a <strong>{formatMoney(userForm.salario_base)}</strong></> : 'Valor mensual sin auxilios.'}
+                      </span>
+                    </div>
+
+                    <div className="cfg-field">
+                      <label className="cfg-field__label" htmlFor="perfil-auxilio">
+                        <DollarSign size={13} /> Aux. Transporte
+                      </label>
+                      <div className="cfg-field__control cfg-field__control--addon">
+                        <span className="cfg-field__addon">$</span>
+                        <input
+                          id="perfil-auxilio"
+                          className="cfg-input"
+                          type="number"
+                          value={userForm.auxilio_transporte}
+                          onChange={e => setUserForm({...userForm, auxilio_transporte: e.target.value})}
+                          placeholder="162000"
+                        />
+                      </div>
+                      <span className="cfg-field__hint">
+                        {userForm.auxilio_transporte ? <>Equivale a <strong>{formatMoney(userForm.auxilio_transporte)}</strong></> : 'Deje en 0 si no aplica.'}
+                      </span>
+                    </div>
+
+                    <div className="cfg-field cfg-grid__full">
+                      <label className="cfg-field__label" htmlFor="perfil-banco">
+                        <CreditCard size={13} /> Banco y Cuenta de Pago
+                      </label>
+                      <div className="cfg-field__control">
+                        <input
+                          id="perfil-banco"
+                          className="cfg-input"
+                          type="text"
+                          value={userForm.banco_cuenta}
+                          onChange={e => setUserForm({...userForm, banco_cuenta: e.target.value})}
+                          placeholder="Ej: Bancolombia Ahorros #123456789"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {userMessage.text && (
+                  <div className={`cfg-alert cfg-alert--${userMessage.type === 'success' ? 'success' : 'error'}`}>
+                    {userMessage.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                    {userMessage.text}
+                  </div>
+                )}
+
+                <div className="cfg-form__footer">
+                  {editingUserId && (
+                    <button type="button" className="btn btn-secondary" onClick={cancelEditUser} style={{ flex: '0 0 auto' }}>
+                      <X size={16} /> Cancelar
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={userSaving}
+                  >
+                    <UserPlus size={16} /> {userSaving ? 'Guardando...' : (editingUserId ? 'Actualizar Perfil' : 'Crear Perfil')}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-          
+
         </div>
       )}
     </div>

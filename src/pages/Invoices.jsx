@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight, ArrowUp, ArrowDown, ChevronDown, Clock, TrendingUp } from 'lucide-react';
+import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight, ArrowUp, ArrowDown, ChevronDown, Clock, TrendingUp, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { format, parseISO } from 'date-fns';
@@ -33,7 +33,10 @@ export default function Invoices({ hideHeader = false } = {}) {
     // Pay Invoice Modal
     const [showPayModal, setShowPayModal] = useState(false);
     const [payingInvoice, setPayingInvoice] = useState(null);
-    const [paymentMethod, setPaymentMethod] = useState('Transferencia');
+    // Sin valor por defecto: el método debe elegirse explícitamente en cada pago,
+    // de lo contrario todo cobro quedaba como "Transferencia" y el efectivo nunca
+    // llegaba a la caja menor.
+    const [paymentMethod, setPaymentMethod] = useState('');
     const [paymentOption, setPaymentOption] = useState('Contado'); // Contado, Abono, Fiado
     const [abonoAmount, setAbonoAmount] = useState(0);
     const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -174,7 +177,7 @@ export default function Invoices({ hideHeader = false } = {}) {
 
     const handleOpenPayModal = (invoice) => {
         setPayingInvoice(invoice);
-        setPaymentMethod('Transferencia');
+        setPaymentMethod('');
         setPaymentOption('Contado');
         setAbonoAmount(invoice.amount);
         setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
@@ -957,14 +960,26 @@ export default function Invoices({ hideHeader = false } = {}) {
 
                                 {paymentOption !== 'Fiado' && (
                                     <div className="input-group">
-                                        <label className="input-label">Método de Pago</label>
-                                        <select className="input-base" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
-                                            <option value="Transferencia">Transferencia Bancaria</option>
+                                        <label className="input-label">Método de Pago * (¿cómo se recibió el dinero?)</label>
+                                        <select className="input-base" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
+                                            style={{ borderColor: paymentMethod ? undefined : '#fca5a5' }}>
+                                            <option value="">— Seleccione el método —</option>
                                             <option value="Efectivo">Efectivo</option>
+                                            <option value="Transferencia">Transferencia Bancaria</option>
                                             <option value="Cheque">Cheque</option>
                                             <option value="Tarjeta">Tarjeta de Crédito/Débito</option>
                                             <option value="Otro">Otro</option>
                                         </select>
+                                        {paymentMethod === 'Efectivo' && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem', fontSize: '0.78rem', color: '#c2410c', fontWeight: 600 }}>
+                                                <Wallet size={14} /> Este pago ingresará a la caja menor.
+                                            </div>
+                                        )}
+                                        {!paymentMethod && (
+                                            <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#dc2626' }}>
+                                                Seleccione el método para poder confirmar el pago.
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -983,7 +998,8 @@ export default function Invoices({ hideHeader = false } = {}) {
                                 <button className="btn btn-secondary" onClick={() => setShowPayModal(false)}>Cancelar</button>
                                 <button
                                     className="btn btn-sm"
-                                    style={{ background: '#10b981', color: 'white', boxShadow: '0 4px 14px rgba(16,185,129,0.35)', padding: '0.75rem 1.75rem', fontSize: '1rem' }}
+                                    disabled={paymentOption !== 'Fiado' && !paymentMethod}
+                                    style={{ background: '#10b981', color: 'white', boxShadow: '0 4px 14px rgba(16,185,129,0.35)', padding: '0.75rem 1.75rem', fontSize: '1rem', opacity: (paymentOption !== 'Fiado' && !paymentMethod) ? 0.5 : 1, cursor: (paymentOption !== 'Fiado' && !paymentMethod) ? 'not-allowed' : 'pointer' }}
                                     onClick={handleConfirmPayment}
                                 >
                                     <CheckCircle size={18} /> Confirmar {paymentOption}

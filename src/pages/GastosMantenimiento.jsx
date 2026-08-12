@@ -1,10 +1,15 @@
-import React, { useState } from 'react';
-import { Calculator, Plus, Trash2, Edit3, X, TrendingUp, AlertTriangle, Clock, Package, Wrench, Receipt } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { Calculator, Plus, Trash2, Edit3, X, TrendingUp, AlertTriangle, Clock, Package, Wrench, Receipt, Users, Download, Wallet, ArrowUpFromLine } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { applyStandardLayout } from './pdfTheme';
+import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
+import NominaModal from './NominaModal';
+import RetiroCajaMenorModal from './RetiroCajaMenorModal';
+import { generateComprobanteNominaPDF } from './NominaHelpers';
+import { buildMovimientosCajaMenor, resumirMovimientos, fmtCOP, METODOS_PAGO } from './cajaMenorUtils';
 
 const CATEGORIES_MAP = {
     'Compra de Máquina o Herramienta': [
@@ -83,33 +88,47 @@ const safeFormatDate = (dateStr, targetFormat = 'dd/MM/yyyy') => {
 };
 
 export default function GastosMantenimiento() {
-    const { 
-        gastosMantenimiento, 
-        addGastoMantenimiento, 
-        editGastoMantenimiento, 
-        deleteGastoMantenimiento, 
+    const {
+        gastosMantenimiento,
+        addGastoMantenimiento,
+        editGastoMantenimiento,
+        deleteGastoMantenimiento,
         products,
-        settings
+        settings,
+        users,
+        invoices = [],
+        clients = [],
+        ingresosCajaMenor = [],
+        retirosCajaMenor = []
     } = useAppContext();
 
     const [showModal, setShowModal] = useState(false);
+    const [showNominaModal, setShowNominaModal] = useState(false);
+    const [showRetiroModal, setShowRetiroModal] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState({
-        id_maquina: '', 
-        tipo_gasto: 'Mantenimiento', 
-        subtipo_gasto: 'Mantenimiento Preventivo', 
-        descripcion: '', 
-        costo: '', 
+        id_maquina: '',
+        tipo_gasto: 'Mantenimiento',
+        subtipo_gasto: 'Mantenimiento Preventivo',
+        descripcion: '',
+        costo: '',
         fecha_gasto: format(new Date(), 'yyyy-MM-dd'),
         proveedor_beneficiario: '',
-        referencia_soporte: ''
+        referencia_soporte: '',
+        metodo_pago: 'Efectivo'
     });
-    
+
     const [search, setSearch] = useState('');
     const [filtroFechaInicio, setFiltroFechaInicio] = useState('');
     const [filtroFechaFin, setFiltroFechaFin] = useState('');
     const [filtroCategoria, setFiltroCategoria] = useState('Todos');
     const [filtroSubcategoria, setFiltroSubcategoria] = useState('Todos');
+    const [filtroMetodoPago, setFiltroMetodoPago] = useState('Todos');
+
+    // Saldo real de la caja menor, visible al registrar egresos y retiros.
+    const saldoCajaMenor = useMemo(() => resumirMovimientos(buildMovimientosCajaMenor({
+        invoices, clients, ingresosCajaMenor, gastosMantenimiento, retirosCajaMenor
+    })).saldo, [invoices, clients, ingresosCajaMenor, gastosMantenimiento, retirosCajaMenor]);
 
     // Filtered data
     const filteredGastos = gastosMantenimiento.filter(g => {
@@ -135,8 +154,12 @@ export default function GastosMantenimiento() {
         
         // Subcategory match
         const matchesSubcategory = filtroSubcategoria === 'Todos' || g.subtipo_gasto === filtroSubcategoria;
-        
-        return matchesSearch && matchesStartDate && matchesEndDate && matchesCategory && matchesSubcategory;
+
+        // Payment method match ('Sin especificar' cubre los registros históricos sin método)
+        const matchesMetodoPago = filtroMetodoPago === 'Todos' ||
+            (filtroMetodoPago === 'Sin especificar' ? !g.metodo_pago : g.metodo_pago === filtroMetodoPago);
+
+        return matchesSearch && matchesStartDate && matchesEndDate && matchesCategory && matchesSubcategory && matchesMetodoPago;
     });
 
     // KPIs based on filtered data
@@ -161,7 +184,8 @@ export default function GastosMantenimiento() {
             costo: Number(form.costo) || 0,
             fecha_gasto: form.fecha_gasto,
             proveedor_beneficiario: form.proveedor_beneficiario || '',
-            referencia_soporte: form.referencia_soporte || ''
+            referencia_soporte: form.referencia_soporte || '',
+            metodo_pago: form.metodo_pago || null
         };
 
         try {
@@ -187,7 +211,8 @@ export default function GastosMantenimiento() {
             costo: gasto.costo,
             fecha_gasto: safeFormatDate(gasto.fecha_gasto, 'yyyy-MM-dd'),
             proveedor_beneficiario: gasto.proveedor_beneficiario || '',
-            referencia_soporte: gasto.referencia_soporte || ''
+            referencia_soporte: gasto.referencia_soporte || '',
+            metodo_pago: gasto.metodo_pago || ''
         });
         setShowModal(true);
     };
@@ -213,13 +238,14 @@ export default function GastosMantenimiento() {
             costo: '', 
             fecha_gasto: format(new Date(), 'yyyy-MM-dd'),
             proveedor_beneficiario: '',
-            referencia_soporte: ''
+            referencia_soporte: '',
+            metodo_pago: 'Efectivo'
         });
         setShowModal(false);
     };
 
     const exportToCSV = () => {
-        const headers = ['ID', 'Categoria Principal', 'Subcategoria / Concepto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripcion', 'Costo', 'Fecha Gasto'];
+        const headers = ['ID', 'Categoria Principal', 'Subcategoria / Concepto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripcion', 'Metodo de Pago', 'Costo', 'Fecha Gasto'];
         const rows = filteredGastos.map(g => [
             g.id,
             g.tipo_gasto,
@@ -227,6 +253,7 @@ export default function GastosMantenimiento() {
             g.proveedor_beneficiario || '',
             g.referencia_soporte || '',
             (g.descripcion || '').replace(/"/g, '""'),
+            g.metodo_pago || 'Sin especificar',
             g.costo || 0,
             safeFormatDate(g.fecha_gasto, 'dd/MM/yyyy')
         ]);
@@ -257,6 +284,7 @@ export default function GastosMantenimiento() {
         if (filtroFechaFin) filterSummary.push(`Hasta: ${filtroFechaFin}`);
         if (filtroCategoria !== 'Todos') filterSummary.push(`Cat: ${filtroCategoria}`);
         if (filtroSubcategoria !== 'Todos') filterSummary.push(`Subcat: ${filtroSubcategoria}`);
+        if (filtroMetodoPago !== 'Todos') filterSummary.push(`Metodo: ${filtroMetodoPago}`);
         if (search) filterSummary.push(`Busqueda: "${search}"`);
         
         if (filterSummary.length > 0) {
@@ -271,6 +299,7 @@ export default function GastosMantenimiento() {
             g.proveedor_beneficiario || '—',
             g.referencia_soporte || '—',
             g.descripcion || '—',
+            g.metodo_pago || 'Sin especificar',
             `$${Math.round(g.costo || 0).toLocaleString()}`,
             safeFormatDate(g.fecha_gasto, 'dd/MM/yyyy')
         ]);
@@ -279,13 +308,13 @@ export default function GastosMantenimiento() {
 
         autoTable(doc, {
             startY: y + 17,
-            head: [['ID', 'Categoria', 'Subcategoria', 'Proveedor', 'Ref. Soporte', 'Descripcion', 'Costo', 'Fecha']],
+            head: [['ID', 'Categoria', 'Subcategoria', 'Proveedor', 'Ref. Soporte', 'Descripcion', 'Metodo', 'Costo', 'Fecha']],
             body: [
                 ...bodyData,
-                ['', '', '', '', '', 'TOTAL FILTRADO:', `$${Math.round(totalCosto).toLocaleString()}`, '']
+                ['', '', '', '', '', '', 'TOTAL FILTRADO:', `$${Math.round(totalCosto).toLocaleString()}`, '']
             ],
             headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
-            styles: { fontSize: 7.5, cellPadding: 3 },
+            styles: { fontSize: 7, cellPadding: 2.5 },
             footStyles: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [30, 41, 59] },
             margin: { left: margin, right: margin },
         });
@@ -293,13 +322,102 @@ export default function GastosMantenimiento() {
         doc.save(`Reporte_Gastos_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`);
     };
 
+    const handleDownloadNominaPDF = (gasto) => {
+        try {
+            let userObj = null;
+            let calcObj = null;
+            let periodoStr = null;
+
+            if (gasto.metadata) {
+                try {
+                    const parsed = typeof gasto.metadata === 'string' ? JSON.parse(gasto.metadata) : gasto.metadata;
+                    if (parsed.user) userObj = parsed.user;
+                    if (parsed.calc) calcObj = parsed.calc;
+                    if (parsed.periodo) periodoStr = parsed.periodo;
+                } catch (e) {
+                    console.warn("Could not parse gasto metadata:", e);
+                }
+            }
+
+            const workerName = gasto.proveedor_beneficiario || 'Trabajador';
+            if (!userObj) {
+                userObj = users?.find(u => u.name === workerName || u.id === gasto.referencia_soporte?.split('-')?.[1]) || {
+                    name: workerName,
+                    cargo: 'TRABAJADOR / OPERATIVO',
+                    documento: 'No registrado',
+                    banco_cuenta: 'Pago Directo'
+                };
+            }
+
+            if (!periodoStr) {
+                const matchPeriod = gasto.descripcion?.match(/\((\d{4}-\d{2})\)/);
+                periodoStr = matchPeriod ? matchPeriod[1] : safeFormatDate(gasto.fecha_gasto, 'yyyy-MM');
+            }
+
+            if (!calcObj) {
+                const costoNeto = Number(gasto.costo) || 0;
+                const base = Number(userObj.salario_base) || costoNeto;
+                const auxTrans = Number(userObj.auxilio_transporte) || 0;
+                const devBase = Math.round(base);
+                const valSalud = Math.round(devBase * 0.04);
+                const valPension = Math.round(devBase * 0.04);
+                const totalDevengado = Math.max(costoNeto, devBase + auxTrans);
+                const totalDeducciones = valSalud + valPension;
+
+                calcObj = {
+                    devBase,
+                    auxTransProp: auxTrans,
+                    extrasBreakdown: [],
+                    bonif: 0,
+                    valSalud,
+                    valPension,
+                    otrDed: 0,
+                    totalDevengado,
+                    totalDeducciones,
+                    netoAPagar: costoNeto,
+                    diasTrabajados: 30,
+                    porcSalud: 4,
+                    porcPension: 4
+                };
+            }
+
+            generateComprobanteNominaPDF({
+                user: userObj,
+                calc: calcObj,
+                periodo: periodoStr,
+                settings,
+                fechaPago: gasto.fecha_gasto,
+                refNo: gasto.referencia_soporte || `NOM-${gasto.id || 'REG'}`
+            });
+        } catch (e) {
+            console.error("Error generating Payroll PDF from table:", e);
+        }
+    };
+
     return (
         <>
             {/* Header */}
-            <div className="flex justify-end mb-6">
+            <div className="flex justify-end mb-6" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* Saldo de caja menor siempre a la vista al registrar salidas de dinero */}
+                <Link to="/caja-menor" title="Ver libro de caja menor"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginRight: 'auto', textDecoration: 'none', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '0.45rem 0.9rem' }}>
+                    <Wallet size={18} style={{ color: '#0369a1' }} />
+                    <div>
+                        <div style={{ fontSize: '0.68rem', color: '#0369a1', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1.2 }}>Saldo Caja Menor</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: saldoCajaMenor < 0 ? '#dc2626' : '#0c4a6e', lineHeight: 1.3 }}>{fmtCOP(saldoCajaMenor)}</div>
+                    </div>
+                </Link>
                 <button className="btn btn-primary" onClick={() => setShowModal(true)}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <Plus size={16} /> Registrar Egresos
+                </button>
+                <button className="btn" onClick={() => setShowNominaModal(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#2365AB', color: 'white', border: 'none', borderRadius: '8px', padding: '0.55rem 1.25rem', fontWeight: 600, cursor: 'pointer' }}>
+                    <Users size={16} /> Nómina
+                </button>
+                <button className="btn" onClick={() => setShowRetiroModal(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f97316', color: 'white', border: 'none', borderRadius: '8px', padding: '0.55rem 1.25rem', fontWeight: 600, cursor: 'pointer' }}>
+                    <ArrowUpFromLine size={16} /> Retiro de Caja Menor
                 </button>
             </div>
 
@@ -401,9 +519,21 @@ export default function GastosMantenimiento() {
                         </select>
                     </div>
                     <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#104166', fontWeight: 700, marginBottom: '0.25rem' }}>Método de Pago</label>
+                        <select
+                            value={filtroMetodoPago}
+                            onChange={e => setFiltroMetodoPago(e.target.value)}
+                            style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: '#104166', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
+                        >
+                            <option value="Todos">Todos los métodos</option>
+                            {METODOS_PAGO.map(m => <option key={m} value={m}>{m}</option>)}
+                            <option value="Sin especificar">Sin especificar</option>
+                        </select>
+                    </div>
+                    <div>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#104166', fontWeight: 700, marginBottom: '0.25rem' }}>Texto de Búsqueda</label>
-                        <input 
-                            type="text" 
+                        <input
+                            type="text"
                             placeholder="Buscar por tipo, subconcepto, máquina, proveedor o descripción..."
                             value={search}
                             onChange={e => setSearch(e.target.value)}
@@ -422,7 +552,7 @@ export default function GastosMantenimiento() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                    {['ID', 'Clasificación Gasto', 'Subconcepto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripción', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
+                                    {['ID', 'Clasificación Gasto', 'Subconcepto', 'Proveedor / Beneficiario', 'Referencia Soporte', 'Descripción', 'Método de Pago', 'Costo', 'Fecha Gasto', 'Acciones'].map(h => (
                                         <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.85rem', color: '#104166', fontWeight: 'bold', textTransform: 'none' }}>{h}</th>
                                     ))}
                                 </tr>
@@ -430,6 +560,10 @@ export default function GastosMantenimiento() {
                             <tbody>
                                 {filteredGastos.map(g => {
                                     const config = TIPO_CONFIG[g.tipo_gasto] || TIPO_CONFIG['Otros Gastos'];
+                                    const isNomina = g.subtipo_gasto === 'Nómina Operativa' || 
+                                                     (g.referencia_soporte && g.referencia_soporte.startsWith('NOM-')) ||
+                                                     (g.tipo_gasto === 'Gastos de Sostenimiento' && g.subtipo_gasto?.toLowerCase().includes('nómina'));
+
                                     return (
                                         <tr key={g.id} style={{ borderBottom: '1px solid var(--surface-border)', transition: 'background 0.15s' }}
                                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
@@ -450,6 +584,18 @@ export default function GastosMantenimiento() {
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#104166', fontWeight: 'normal' }} title={g.descripcion}>
                                                 {g.descripcion || 'Sin descripción'}
                                             </td>
+                                            <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 'normal', whiteSpace: 'nowrap' }}>
+                                                {g.metodo_pago === 'Efectivo' ? (
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 10px', borderRadius: 999, background: 'rgba(249,115,22,0.12)', color: '#c2410c', fontSize: '0.75rem', fontWeight: 700 }}
+                                                        title="Descuenta de la caja menor">
+                                                        <Wallet size={11} /> Efectivo
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: g.metodo_pago ? '#104166' : '#94a3b8' }}>
+                                                        {g.metodo_pago || 'Sin especificar'}
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: 'normal', color: '#104166' }}>
                                                 ${Math.round(g.costo || 0).toLocaleString()}
                                             </td>
@@ -457,7 +603,12 @@ export default function GastosMantenimiento() {
                                                 {safeFormatDate(g.fecha_gasto, 'dd/MM/yyyy')}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
-                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                    {isNomina && (
+                                                        <button onClick={() => handleDownloadNominaPDF(g)} className="btn btn-secondary" style={{ padding: '0.3rem 0.5rem', background: '#e0f2fe', border: '1px solid #7dd3fc', borderRadius: '6px', color: '#0284c7', display: 'flex', alignItems: 'center', cursor: 'pointer' }} title="Descargar Comprobante de Nómina (PDF)">
+                                                            <Download size={14} />
+                                                        </button>
+                                                    )}
                                                     <button onClick={() => openEdit(g)} className="btn btn-secondary" style={{ padding: '0.3rem 0.5rem', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#263777', display: 'flex', alignItems: 'center', cursor: 'pointer' }} title="Editar">
                                                         <Edit3 size={14} />
                                                     </button>
@@ -570,6 +721,24 @@ export default function GastosMantenimiento() {
                             </div>
                             
                             <div>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Método de Pago</label>
+                                <select
+                                    value={form.metodo_pago}
+                                    onChange={e => setForm(f => ({ ...f, metodo_pago: e.target.value }))}
+                                    style={{ width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#104166', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+                                >
+                                    {METODOS_PAGO.map(m => <option key={m} value={m}>{m}</option>)}
+                                    <option value="">Sin especificar</option>
+                                </select>
+                                {form.metodo_pago === 'Efectivo' && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.45rem', fontSize: '0.75rem', color: '#c2410c' }}>
+                                        <Wallet size={13} />
+                                        Este egreso se descontará de la caja menor (saldo actual: {fmtCOP(saldoCajaMenor)}).
+                                    </div>
+                                )}
+                            </div>
+
+                            <div>
                                 <label style={{ display: 'block', fontSize: '0.8rem', color: '#263777', fontWeight: 600, marginBottom: '0.4rem' }}>Descripción</label>
                                 <textarea value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} required rows={3}
                                     placeholder="Detalles sobre el gasto..."
@@ -583,6 +752,21 @@ export default function GastosMantenimiento() {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Modal de Liquidación de Nómina */}
+            {showNominaModal && (
+                <NominaModal
+                    onClose={() => setShowNominaModal(false)}
+                    users={users}
+                    addGastoMantenimiento={addGastoMantenimiento}
+                    settings={settings}
+                />
+            )}
+
+            {/* Modal de Retiro de Caja Menor */}
+            {showRetiroModal && (
+                <RetiroCajaMenorModal onClose={() => setShowRetiroModal(false)} />
             )}
         </>
     );

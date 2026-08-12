@@ -42,8 +42,24 @@ const emptyForm = {
 export default function IngresosTab({ actionSlot }) {
     const {
         invoices = [], clients = [], settings,
-        ingresosCajaMenor = [], addIngresoCajaMenor, editIngresoCajaMenor, deleteIngresoCajaMenor
+        ingresosCajaMenor = [], addIngresoCajaMenor, editIngresoCajaMenor, deleteIngresoCajaMenor,
+        actualizarMetodoPagoAbono
     } = useAppContext();
+
+    // Corrección del método de un pago ya registrado, para que los cobros que
+    // fueron en efectivo lleguen a la caja menor aunque se hayan grabado mal.
+    const [editandoMetodo, setEditandoMetodo] = useState(null);
+
+    const handleCambiarMetodo = async (row, nuevoMetodo) => {
+        setEditandoMetodo(null);
+        if (nuevoMetodo === (row.metodoPago || '')) return;
+        try {
+            await actualizarMetodoPagoAbono(row.invoiceId, row.abonoIdx, nuevoMetodo);
+        } catch (err) {
+            console.error('Error corrigiendo el método de pago:', err);
+            alert('No se pudo actualizar el método de pago.');
+        }
+    };
 
     const [showModal, setShowModal] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -71,6 +87,8 @@ export default function IngresosTab({ actionSlot }) {
                 metodoPago: ab.metodoPago || null,
                 monto: Number(ab.monto) || 0,
                 esManual: false,
+                invoiceId: inv.id,
+                abonoIdx: idx,
             }));
         });
 
@@ -342,7 +360,32 @@ export default function IngresosTab({ actionSlot }) {
                                             <td style={{ padding: '0.75rem 1rem', ...CELL_TEXT }}>{row.refId}</td>
                                             <td style={{ padding: '0.75rem 1rem', ...CELL_TEXT }}>{row.cliente}</td>
                                             <td style={{ padding: '0.75rem 1rem', ...CELL_TEXT }}>{row.tipoPago}</td>
-                                            <td style={{ padding: '0.75rem 1rem', ...CELL_TEXT }}>{row.metodoPago || 'Sin especificar'}</td>
+                                            <td style={{ padding: '0.75rem 1rem', ...CELL_TEXT }}>
+                                                {editandoMetodo === row.key ? (
+                                                    <select
+                                                        autoFocus
+                                                        defaultValue={row.metodoPago || ''}
+                                                        onBlur={() => setEditandoMetodo(null)}
+                                                        onChange={e => handleCambiarMetodo(row, e.target.value)}
+                                                        style={{ padding: '0.25rem 0.4rem', border: '1px solid #cbd5e1', borderRadius: 6, fontSize: '0.8rem', color: '#104166', background: '#fff', cursor: 'pointer' }}
+                                                    >
+                                                        <option value="">Sin especificar</option>
+                                                        {METODOS_PAGO.map(m => <option key={m} value={m}>{m}</option>)}
+                                                    </select>
+                                                ) : row.esManual ? (
+                                                    row.metodoPago || 'Sin especificar'
+                                                ) : (
+                                                    <button
+                                                        onClick={() => setEditandoMetodo(row.key)}
+                                                        title="Clic para corregir el método de pago"
+                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 999, cursor: 'pointer', fontSize: '0.8rem', fontWeight: row.metodoPago === 'Efectivo' ? 700 : 400, background: row.metodoPago === 'Efectivo' ? 'rgba(249,115,22,0.12)' : '#f1f5f9', color: row.metodoPago === 'Efectivo' ? '#c2410c' : (row.metodoPago ? '#104166' : '#94a3b8'), border: '1px solid ' + (row.metodoPago === 'Efectivo' ? '#fdba74' : '#e2e8f0') }}
+                                                    >
+                                                        {row.metodoPago === 'Efectivo' && <Banknote size={12} />}
+                                                        {row.metodoPago || 'Sin especificar'}
+                                                        <Edit3 size={11} style={{ opacity: 0.5 }} />
+                                                    </button>
+                                                )}
+                                            </td>
                                             <td style={{ padding: '0.75rem 1rem', ...CELL_TEXT }}>{fmtCOP(row.monto)}</td>
                                             <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
                                                 {row.esManual && (
