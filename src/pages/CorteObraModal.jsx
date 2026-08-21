@@ -321,6 +321,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     const [customDays, setCustomDays] = useState({}); // key -> number
     const [customDates, setCustomDates] = useState({}); // key -> string YYYY-MM-DD
     const [customFestivos, setCustomFestivos] = useState({}); // key -> number
+    const [aplicarFestivos, setAplicarFestivos] = useState(false);
     const [customHorasInicio, setCustomHorasInicio] = useState({}); // key -> string HH:mm
     const [customHorasFin, setCustomHorasFin] = useState({}); // key -> string HH:mm
     const [descuentoTipo, setDescuentoTipo] = useState('porcentaje');
@@ -383,12 +384,12 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         ).sort((a, b) => b.fecha.localeCompare(a.fecha));
     }, [clientId, obraId, remisiones, invoices]);
 
-    // Reset when base client/obra/dates change
+    // Reset when base client/obra/dates/festivos change
     React.useEffect(() => {
         setCustomDays({});
         setCustomDates({});
         setCustomFestivos({});
-    }, [clientId, obraId, fechaInicio, fechaCorte]);
+    }, [clientId, obraId, fechaInicio, fechaCorte, aplicarFestivos]);
 
     // Update selection when filters change
     React.useEffect(() => {
@@ -569,9 +570,9 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                             }
 
                             const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
-                            const clampedDays = isHora ? finalDays : Math.min(dDays, Math.max(0, finalDays));
+                            const clampedDays = Math.max(0, finalDays);
                             
-                            const autoFestivos = (isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
+                            const autoFestivos = (!aplicarFestivos || isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
                             const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
                             const clampedFestivos = isHora ? 0 : Math.min(clampedDays, Math.max(0, festivos));
                             const netDays = clampedDays - clampedFestivos;
@@ -637,9 +638,9 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         }
 
                         const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
-                        const clampedDays = isHora ? finalDays : Math.min(dDays, Math.max(0, finalDays));
+                        const clampedDays = Math.max(0, finalDays);
 
-                        const autoFestivos = (isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
+                        const autoFestivos = (!aplicarFestivos || isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
                         const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
                         const clampedFestivos = isHora ? 0 : Math.min(clampedDays, Math.max(0, festivos));
                         const netDays = clampedDays - clampedFestivos;
@@ -703,9 +704,9 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         }
 
                         const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
-                        const clampedDays = isHora ? finalDays : Math.min(dDays, Math.max(0, finalDays));
+                        const clampedDays = Math.max(0, finalDays);
 
-                        const autoFestivos = (isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
+                        const autoFestivos = (!aplicarFestivos || isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
                         const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
                         const clampedFestivos = isHora ? 0 : Math.min(clampedDays, Math.max(0, festivos));
                         const netDays = clampedDays - clampedFestivos;
@@ -782,7 +783,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             porcIVA, 
             porcRet 
         };
-    }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient, customDays, customDates, customFestivos, descuentoTipo, descuentoValor]);
+    }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient, customDays, customDates, customFestivos, descuentoTipo, descuentoValor, aplicarFestivos]);
 
     const handleGenerate = () => { if (resultado) setGenerado(true); };
     const handleSaveInvoice = async () => {
@@ -995,6 +996,48 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                         </div>
                                     </div>
                                     <div>
+                                        <label style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            padding: '0.6rem 0.8rem',
+                                            borderRadius: 8,
+                                            background: aplicarFestivos ? '#eff6ff' : '#f8fafc',
+                                            border: `1px solid ${aplicarFestivos ? '#3b82f6' : '#e2e8f0'}`,
+                                            cursor: 'pointer',
+                                            userSelect: 'none',
+                                            transition: 'all 0.2s',
+                                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                                <input 
+                                                    type="checkbox"
+                                                    checked={aplicarFestivos}
+                                                    onChange={e => {
+                                                        setAplicarFestivos(e.target.checked);
+                                                        setCustomFestivos({});
+                                                        setGenerado(false);
+                                                        setSaved(false);
+                                                    }}
+                                                    style={{ width: 17, height: 17, cursor: 'pointer', accentColor: '#2563eb', margin: 0 }}
+                                                />
+                                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: aplicarFestivos ? '#1e40af' : '#475569' }}>
+                                                    Aplicar Días Festivos
+                                                </span>
+                                            </div>
+                                            <span style={{
+                                                fontSize: '0.65rem',
+                                                fontWeight: 800,
+                                                padding: '2px 8px',
+                                                borderRadius: '999px',
+                                                background: aplicarFestivos ? '#dbeafe' : '#f1f5f9',
+                                                color: aplicarFestivos ? '#1d4ed8' : '#64748b'
+                                            }}>
+                                                {aplicarFestivos ? 'ACTIVADO' : 'EN CERO (0)'}
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <div>
                                         <label style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>Descuento</label>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                                             <select value={descuentoTipo} onChange={e => { setDescuentoTipo(e.target.value); setGenerado(false); setSaved(false); }} style={selectStyle}>
@@ -1191,12 +1234,11 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                                                      type="number" 
                                                                                      step={l.isHora ? "0.5" : "1"}
                                                                                      min="0"
-                                                                                     max={l.isHora ? undefined : l.maxDays}
                                                                                      value={l.diasBase} 
                                                                                      onChange={e => {
                                                                                          const val = e.target.value;
                                                                                          const numeric = val === '' ? 0 : parseFloat(val);
-                                                                                         const clamped = l.isHora ? Math.max(0, isNaN(numeric) ? 0 : numeric) : Math.min(l.maxDays, Math.max(0, isNaN(numeric) ? 0 : numeric));
+                                                                                         const clamped = Math.max(0, isNaN(numeric) ? 0 : numeric);
                                                                                          setCustomDays(prev => ({ ...prev, [l.key]: clamped }));
                                                                                          if (l.isHora && l.horaInicio && clamped > 0) {
                                                                                              const hFin = calcularHoraFin(l.horaInicio, clamped);
