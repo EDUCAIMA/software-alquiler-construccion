@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
-        name: 'Cielo Constructores',
-        short_name: 'Cielo',
+        name: 'CIELO - Alquiler de Equipos y Herramientas',
+        short_name: 'CIELO',
         description: 'Gestión Inteligente de Maquinaria y Construcción',
         theme_color: '#1a3a5c',
         background_color: '#0f2640',

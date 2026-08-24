@@ -23,7 +23,7 @@ const calculateBillableDays = (start, end, scheme, billedPeriods = []) => {
             let isBillable = true;
             if (isSunday(d)) isBillable = false;
             else if (scheme === 'Lunes-Viernes' && isSaturday(d)) isBillable = false;
-            
+
             if (isBillable) {
                 count++;
             }
@@ -52,7 +52,7 @@ const getEasterSunday = (year) => {
 
 const getColombianHolidaysMap = (year) => {
     const holidays = new Set();
-    
+
     const formatDate = (d) => {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -91,23 +91,23 @@ const getColombianHolidaysMap = (year) => {
 
     // Easter holidays
     const easter = getEasterSunday(year);
-    
+
     const juevesSanto = new Date(easter);
     juevesSanto.setDate(easter.getDate() - 3);
     addHoliday(juevesSanto);
-    
+
     const viernesSanto = new Date(easter);
     viernesSanto.setDate(easter.getDate() - 2);
     addHoliday(viernesSanto);
-    
+
     const ascension = new Date(easter);
     ascension.setDate(easter.getDate() + 43);
     addHoliday(ascension);
-    
+
     const corpus = new Date(easter);
     corpus.setDate(easter.getDate() + 64);
     addHoliday(corpus);
-    
+
     const corazon = new Date(easter);
     corazon.setDate(easter.getDate() + 71);
     addHoliday(corazon);
@@ -134,7 +134,7 @@ const countColombianHolidays = (start, end, scheme, billedPeriods = []) => {
             let isBilled = true;
             if (isSunday(d)) isBilled = false;
             else if (scheme === 'Lunes-Viernes' && isSaturday(d)) isBilled = false;
-            
+
             if (isBilled) {
                 const year = d.getFullYear();
                 const holidays = getHolidaysForYear(year);
@@ -180,12 +180,12 @@ function generateCortePDF(resultado, client, obra, settings, remisiones, invoice
     Object.entries(grouped).forEach(([remId, lines]) => {
         const remObj = remisiones.find(r => String(r.id) === String(remId));
         let displayId = remObj?.cotizacionId;
-        
+
         if (!displayId && remObj?.facturaId) {
             const linkedInv = invoices.find(inv => String(inv.id) === String(remObj.facturaId));
             if (linkedInv?.cotizacionId) displayId = linkedInv.cotizacionId;
         }
-        
+
         if (!displayId) displayId = remId;
 
         // Add a sub-header for the remission
@@ -223,19 +223,19 @@ function generateCortePDF(resultado, client, obra, settings, remisiones, invoice
             }),
             didDrawCell: tagger.didDrawCell,
             theme: 'grid',
-            headStyles: { 
-                fillColor: [241, 245, 249], 
-                textColor: [30, 41, 59], 
-                fontSize: 7.5, 
-                fontStyle: 'bold', 
+            headStyles: {
+                fillColor: [241, 245, 249],
+                textColor: [30, 41, 59],
+                fontSize: 7.5,
+                fontStyle: 'bold',
                 halign: 'center',
                 lineWidth: 0.1,
                 lineColor: [200, 200, 200]
             },
-            styles: { 
-                fontSize: 7.5, 
-                cellPadding: 2, 
-                textColor: [30, 41, 59], 
+            styles: {
+                fontSize: 7.5,
+                cellPadding: 2,
+                textColor: [30, 41, 59],
                 halign: 'center',
                 lineWidth: 0.1,
                 lineColor: [200, 200, 200]
@@ -249,7 +249,7 @@ function generateCortePDF(resultado, client, obra, settings, remisiones, invoice
                 5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
             }
         });
-        
+
         y = doc.lastAutoTable.finalY + 10;
 
         // Check for page break if there are more remissions
@@ -317,7 +317,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     const [generado, setGenerado] = useState(false);
     const [saved, setSaved] = useState(false);
     const [selectedRemIds, setSelectedRemIds] = useState([]);
-    
+
     const [customDays, setCustomDays] = useState({}); // key -> number
     const [customDates, setCustomDates] = useState({}); // key -> string YYYY-MM-DD
     const [customFestivos, setCustomFestivos] = useState({}); // key -> number
@@ -373,9 +373,9 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             });
         });
 
-        return remisiones.filter(r => 
-            r.clientId === clientId && 
-            (!obraId || r.obraId === obraId) && 
+        return remisiones.filter(r =>
+            r.clientId === clientId &&
+            (!obraId || r.obraId === obraId) &&
             r.estado !== 'Cancelada' &&
             !(r.estado === 'Cerrada' && (
                 remisionesPagadas.has(String(r.id)) ||
@@ -409,9 +409,9 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
 
         const fStart = parseUTCDate(fechaInicio);
         const fEnd = parseUTCDate(fechaCorte);
-        
-        const relatedInvoices = invoices.filter(inv => 
-            inv.clientId === clientId && 
+
+        const relatedInvoices = invoices.filter(inv =>
+            inv.clientId === clientId &&
             (!obraId || inv.obraId === obraId) &&
             inv.status !== 'Cancelada'
         );
@@ -512,21 +512,21 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             rem.items.forEach(item => {
                 const prod = products.find(p => p.id === item.productId);
                 if (item.cantidad > 0) {
-                    const equipStart = rDate; 
+                    const equipStart = rDate;
                     const scheme = prod?.esquemaCobro || 'Calendario';
                     const tarifa = Number((item.tarifaDia !== undefined && item.tarifaDia !== null) ? item.tarifaDia : ((item.price !== undefined && item.price !== null) ? item.price : (prod?.value || 0)));
 
-                    const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') || 
-                                   (item.tipoCobro || '').toLowerCase().includes('única') ||
-                                   (prod?.category || '').toLowerCase().includes('servicio') ||
-                                   (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
-                                   (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                    const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') ||
+                        (item.tipoCobro || '').toLowerCase().includes('única') ||
+                        (prod?.category || '').toLowerCase().includes('servicio') ||
+                        (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                        (prod?.esquemaCobro || '').toLowerCase().includes('única');
                     const isHora = (item.tipoCobro || '').toLowerCase() === 'hora' || (prod?.tipoCobro || '').toLowerCase() === 'hora';
 
                     if (isServ) {
                         const inRange = rDate >= fStart && rDate <= fEnd;
-                        const isAlreadyBilled = billedServices.has(`${rem.id}-${item.productId}`) || 
-                                                billedServices.has(`${rem.id}-${item.nombre || item.productId}`);
+                        const isAlreadyBilled = billedServices.has(`${rem.id}-${item.productId}`) ||
+                            billedServices.has(`${rem.id}-${item.nombre || item.productId}`);
                         if (!inRange || isAlreadyBilled) return;
                     }
 
@@ -571,7 +571,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
 
                             const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
                             const clampedDays = Math.max(0, finalDays);
-                            
+
                             const autoFestivos = (!aplicarFestivos || isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
                             const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
                             const clampedFestivos = isHora ? 0 : Math.min(clampedDays, Math.max(0, festivos));
@@ -678,7 +678,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         const effectiveDevFecha = customDates[lineKey] || fechaCorte;
                         const dDate = parseUTCDate(effectiveDevFecha);
                         const effectiveStart = equipStart > fStart ? equipStart : fStart;
-                        const effectiveEnd = dDate; 
+                        const effectiveEnd = dDate;
 
                         const effectiveHoraInicio = customHorasInicio[lineKey] !== undefined ? customHorasInicio[lineKey] : (item.horaInicio || '');
                         const effectiveHoraFin = customHorasFin[lineKey] !== undefined ? customHorasFin[lineKey] : (item.horaFin || '');
@@ -750,8 +750,8 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         const remisionesConCobro = new Set(selectedLineas.map(l => String(l.remId)));
         const subtotalTotalFiltered = selectedLineas.reduce((s, l) => s + l.subtotal, 0);
         const totalTransporteFiltered = rems.filter(r => remisionesConCobro.has(String(r.id))).reduce((s, r) => {
-             const rDate = parseUTCDate(r.fecha);
-             return (rDate >= fStart && rDate <= fEnd) ? s + (r.transporte || 0) : s;
+            const rDate = parseUTCDate(r.fecha);
+            return (rDate >= fStart && rDate <= fEnd) ? s + (r.transporte || 0) : s;
         }, 0);
 
         const valorDescuento = Math.max(0, Number(descuentoValor) || 0);
@@ -763,25 +763,25 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         const porcRet = selectedClient?.porcRetencion || 0;
         const iva = Math.round(subtotalConDescuento * porcIVA / 100);
         const retencion = Math.round(subtotalConDescuento * porcRet / 100);
-        
+
         const totalAntesDePagos = subtotalConDescuento + iva + retencion + totalTransporteFiltered;
         const pagosPrevios = 0;
         const totalNeto = totalAntesDePagos;
 
-        return { 
+        return {
             lineas, // All lines for UI
             selectedLineas, // Only selected for PDF/Invoice
-            subtotal: subtotalTotalFiltered, 
+            subtotal: subtotalTotalFiltered,
             descuento,
             subtotalConDescuento,
-            iva, 
-            retencion, 
-            transporte: totalTransporteFiltered, 
-            totalAntesDePagos, 
-            pagosPrevios, 
-            totalNeto, 
-            porcIVA, 
-            porcRet 
+            iva,
+            retencion,
+            transporte: totalTransporteFiltered,
+            totalAntesDePagos,
+            pagosPrevios,
+            totalNeto,
+            porcIVA,
+            porcRet
         };
     }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient, customDays, customDates, customFestivos, descuentoTipo, descuentoValor, aplicarFestivos]);
 
@@ -789,11 +789,11 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     const handleSaveInvoice = async () => {
         if (!resultado || saved) return;
 
-        const itemsToFacturar = resultado.selectedLineas.map(l => ({ 
-            productId: l.equipo, 
-            nombre: l.equipo, 
-            quantity: l.cantidad, 
-            days: l.dias, 
+        const itemsToFacturar = resultado.selectedLineas.map(l => ({
+            productId: l.equipo,
+            nombre: l.equipo,
+            quantity: l.cantidad,
+            days: l.dias,
             price: l.tarifaDia,
             remId: l.remId,
             remFecha: l.remFecha
@@ -818,7 +818,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                     status: 'Pendiente'
                 }]
             });
-            
+
             // Download Invoice PDF
             if (newInvoice) {
                 generateInvoicePDF(newInvoice, selectedClient, products, settings);
@@ -826,7 +826,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
 
             // Also download the Corte PDF (Liquidación)
             generateCortePDF({ ...resultado, lineas: resultado.selectedLineas, fechaInicio, fechaCorte }, selectedClient, selectedObra, settings, remisiones, invoices);
-            
+
             setSaved(true);
         } catch (e) {
             console.error('Error saving invoice:', e);
@@ -851,19 +851,19 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
 
     return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '1rem' }} onClick={onClose}>
-            <div style={{ 
-                background: '#f8fafc', 
-                borderRadius: 24, 
-                width: '95vw', 
-                maxWidth: '1600px', 
-                height: '90vh', 
-                display: 'flex', 
-                flexDirection: 'column', 
-                overflow: 'hidden', 
+            <div style={{
+                background: '#f8fafc',
+                borderRadius: 24,
+                width: '95vw',
+                maxWidth: '1600px',
+                height: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
                 boxShadow: '0 30px 100px -12px rgba(0,0,0,0.5)',
                 position: 'relative'
             }} onClick={e => e.stopPropagation()}>
-                
+
                 {/* Header */}
                 <div style={{ background: '#ffffff', padding: '1.25rem 2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#104166', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
@@ -1010,7 +1010,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                             boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                                         }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                                                <input 
+                                                <input
                                                     type="checkbox"
                                                     checked={aplicarFestivos}
                                                     onChange={e => {
@@ -1103,18 +1103,18 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                         {/* ── Main Panel: Results ── */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
                             {!generado ? (
-                                <div style={{ 
-                                    background: 'white', 
-                                    border: '2px dashed #e2e8f0', 
-                                    borderRadius: '24px', 
+                                <div style={{
+                                    background: 'white',
+                                    border: '2px dashed #e2e8f0',
+                                    borderRadius: '24px',
                                     flex: 1,
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     padding: '4rem',
-                                    textAlign: 'center', 
-                                    color: '#94a3b8' 
+                                    textAlign: 'center',
+                                    color: '#94a3b8'
                                 }}>
                                     <div style={{ background: '#f8fafc', width: 100, height: 100, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
                                         <Calculator size={50} style={{ opacity: 0.3 }} />
@@ -1138,21 +1138,21 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                 const isSelected = selectedRemIds.includes(remId);
                                                 const remObj = remisiones.find(r => String(r.id) === String(remId));
                                                 let displayId = remObj?.cotizacionId;
-                                                
+
                                                 // Fallback: search via linked invoice if cotizacionId is missing
                                                 if (!displayId && remObj?.facturaId) {
                                                     const linkedInv = invoices.find(inv => String(inv.id) === String(remObj.facturaId));
                                                     if (linkedInv?.cotizacionId) displayId = linkedInv.cotizacionId;
                                                 }
-                                                
+
                                                 if (!displayId) displayId = remId;
 
                                                 return (
-                                                    <div key={remId} style={{ 
-                                                        background: 'white', 
-                                                        border: isSelected ? '1px solid #3b82f6' : '1px solid #e2e8f0', 
-                                                        borderRadius: '20px', 
-                                                        overflow: 'hidden', 
+                                                    <div key={remId} style={{
+                                                        background: 'white',
+                                                        border: isSelected ? '1px solid #3b82f6' : '1px solid #e2e8f0',
+                                                        borderRadius: '20px',
+                                                        overflow: 'hidden',
                                                         boxShadow: isSelected ? '0 10px 25px -5px rgba(59, 130, 246, 0.1)' : '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
                                                         opacity: isSelected ? 1 : 0.65,
                                                         transition: 'all 0.3s ease',
@@ -1172,8 +1172,8 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                                     <span style={{ fontSize: '0.7rem', fontWeight: 800, color: isSelected ? '#2563eb' : '#64748b' }}>
                                                                         {isSelected ? 'INCLUIR EN CORTE' : 'EXCLUIR DEL CORTE'}
                                                                     </span>
-                                                                    <input 
-                                                                        type="checkbox" 
+                                                                    <input
+                                                                        type="checkbox"
                                                                         checked={isSelected}
                                                                         onChange={() => setSelectedRemIds(prev => prev.includes(remId) ? prev.filter(id => id !== remId) : [...prev, remId])}
                                                                         style={{ width: 18, height: 18, cursor: 'pointer', margin: 0, accentColor: '#2563eb' }}
@@ -1181,7 +1181,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                                 </label>
                                                             </div>
                                                         </div>
-                                                        
+
                                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem', tableLayout: 'fixed', filter: isSelected ? 'none' : 'grayscale(1) opacity(0.5)' }}>
                                                             <thead>
                                                                 <tr style={{ background: '#ffffff', borderBottom: '1px solid #f1f5f9' }}>
@@ -1195,170 +1195,170 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
-                                                                 {lines.map((l, idx) => (
-                                                                     <React.Fragment key={idx}>
-                                                                         <tr style={{ borderBottom: (idx === lines.length - 1 && !l.isHora) ? 'none' : '1px solid #f1f5f9' }}>
-                                                                             <td style={{ padding: '0.85rem 1.5rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                                 {l.equipo}
-                                                                                 {l.isHora && (
-                                                                                     <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: 4, fontWeight: 700, marginLeft: 6 }}>
-                                                                                         Por Horas
-                                                                                     </span>
-                                                                                 )}
-                                                                             </td>
-                                                                             <td style={{ padding: '0.85rem 1.5rem', textAlign: 'center' }}>{l.cantidad}</td>
-                                                                             <td style={{ padding: '0.4rem 1.5rem', textAlign: 'center' }}>
-                                                                                 <input 
-                                                                                     type="date" 
-                                                                                     value={l.devFecha || ''} 
-                                                                                     onChange={e => {
-                                                                                         const newDate = e.target.value;
-                                                                                         setCustomDates(prev => ({ ...prev, [l.key]: newDate }));
-                                                                                     }}
-                                                                                     style={{ 
-                                                                                         padding: '0.35rem 0.5rem', 
-                                                                                         fontSize: '0.8rem', 
-                                                                                         border: '1px solid #cbd5e1', 
-                                                                                         borderRadius: '6px', 
-                                                                                         color: '#1e293b', 
-                                                                                         width: '100%',
-                                                                                         maxWidth: '140px',
-                                                                                         boxSizing: 'border-box',
-                                                                                         outline: 'none',
-                                                                                         background: 'white'
-                                                                                     }}
-                                                                                 />
-                                                                             </td>
-                                                                             <td style={{ padding: '0.4rem 1.5rem', textAlign: 'center' }}>
-                                                                                 <input 
-                                                                                     type="number" 
-                                                                                     step={l.isHora ? "0.5" : "1"}
-                                                                                     min="0"
-                                                                                     value={l.diasBase} 
-                                                                                     onChange={e => {
-                                                                                         const val = e.target.value;
-                                                                                         const numeric = val === '' ? 0 : parseFloat(val);
-                                                                                         const clamped = Math.max(0, isNaN(numeric) ? 0 : numeric);
-                                                                                         setCustomDays(prev => ({ ...prev, [l.key]: clamped }));
-                                                                                         if (l.isHora && l.horaInicio && clamped > 0) {
-                                                                                             const hFin = calcularHoraFin(l.horaInicio, clamped);
-                                                                                             if (hFin) setCustomHorasFin(prev => ({ ...prev, [l.key]: hFin }));
-                                                                                         }
-                                                                                     }}
-                                                                                     style={{ 
-                                                                                         padding: '0.35rem 0.5rem', 
-                                                                                         fontSize: '0.8rem', 
-                                                                                         border: '1px solid #cbd5e1', 
-                                                                                         borderRadius: '6px', 
-                                                                                         color: '#1e293b', 
-                                                                                         width: '100%',
-                                                                                         maxWidth: '75px', 
-                                                                                         textAlign: 'center',
-                                                                                         fontWeight: 'bold',
-                                                                                         boxSizing: 'border-box',
-                                                                                         outline: 'none',
-                                                                                         background: 'white'
-                                                                                     }}
-                                                                                 />
-                                                                             </td>
-                                                                             <td style={{ padding: '0.4rem 1.5rem', textAlign: 'center' }}>
-                                                                                 <input 
-                                                                                     type="number" 
-                                                                                     min="0"
-                                                                                     disabled={l.isHora}
-                                                                                     max={l.diasBase}
-                                                                                     value={l.festivos} 
-                                                                                     onChange={e => {
-                                                                                         const val = e.target.value;
-                                                                                         const numeric = val === '' ? 0 : parseInt(val);
-                                                                                         const clamped = Math.min(l.diasBase, Math.max(0, isNaN(numeric) ? 0 : numeric));
-                                                                                         setCustomFestivos(prev => ({ ...prev, [l.key]: clamped }));
-                                                                                     }}
-                                                                                     style={{ 
-                                                                                         padding: '0.35rem 0.5rem', 
-                                                                                         fontSize: '0.8rem', 
-                                                                                         border: '1px solid #cbd5e1', 
-                                                                                         borderRadius: '6px', 
-                                                                                         color: '#f97316', 
-                                                                                         width: '100%',
-                                                                                         maxWidth: '75px', 
-                                                                                         textAlign: 'center',
-                                                                                         fontWeight: 'bold',
-                                                                                         boxSizing: 'border-box',
-                                                                                         outline: 'none',
-                                                                                         background: l.isHora ? '#f1f5f9' : 'white'
-                                                                                     }}
-                                                                                 />
-                                                                             </td>
-                                                                             <td style={{ padding: '0.85rem 1.5rem', color: '#64748b' }}>{fmtCOP(l.tarifaDia)}</td>
-                                                                             <td style={{ padding: '0.85rem 1.5rem', fontWeight: 800, textAlign: 'right', color: '#1e293b' }}>{fmtCOP(l.subtotal)}</td>
-                                                                         </tr>
-                                                                         {l.isHora && (
-                                                                             <tr key={`${idx}-time`} style={{ borderBottom: '1px solid #f1f5f9', background: '#fcfcfd' }}>
-                                                                                 <td colSpan={7} style={{ padding: '0.4rem 1.5rem 0.65rem 1.5rem' }}>
-                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: '#ffffff', padding: '0.4rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', width: 'fit-content', flexWrap: 'wrap' }}>
-                                                                                         <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>Hora Alquiler:</span>
-                                                                                         <input 
-                                                                                             type="time" 
-                                                                                             value={l.horaInicio || ''} 
-                                                                                             onChange={e => {
-                                                                                                 const hIni = e.target.value;
-                                                                                                 if (!hIni || !/^\d{2}:\d{2}$/.test(hIni)) return;
-                                                                                                 setCustomHorasInicio(prev => ({ ...prev, [l.key]: hIni }));
-                                                                                                 if (l.horaFin && /^\d{2}:\d{2}$/.test(l.horaFin)) {
-                                                                                                     const hrs = calcularHorasAlquiler(hIni, l.horaFin);
-                                                                                                     if (hrs > 0) setCustomDays(prev => ({ ...prev, [l.key]: hrs }));
-                                                                                                 } else if (l.dias > 0) {
-                                                                                                     const hFin = calcularHoraFin(hIni, l.dias);
-                                                                                                     if (hFin) setCustomHorasFin(prev => ({ ...prev, [l.key]: hFin }));
-                                                                                                 }
-                                                                                             }} 
-                                                                                             onBlur={e => {
-                                                                                                 if (!e.target.value) {
-                                                                                                     setCustomHorasInicio(prev => {
-                                                                                                         const next = { ...prev };
-                                                                                                         delete next[l.key];
-                                                                                                         return next;
-                                                                                                     });
-                                                                                                 }
-                                                                                             }}
-                                                                                             style={{ padding: '0.2rem 0.4rem', fontSize: '0.8rem', border: '1px solid #cbd5e1', borderRadius: '4px', outline: 'none' }} 
-                                                                                         />
-                                                                                         <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>Hora Devolución:</span>
-                                                                                         <input 
-                                                                                             type="time" 
-                                                                                             value={l.horaFin || ''} 
-                                                                                             onChange={e => {
-                                                                                                 const hFin = e.target.value;
-                                                                                                 if (!hFin || !/^\d{2}:\d{2}$/.test(hFin)) return;
-                                                                                                 setCustomHorasFin(prev => ({ ...prev, [l.key]: hFin }));
-                                                                                                 if (l.horaInicio && /^\d{2}:\d{2}$/.test(l.horaInicio)) {
-                                                                                                     const hrs = calcularHorasAlquiler(l.horaInicio, hFin);
-                                                                                                     if (hrs > 0) setCustomDays(prev => ({ ...prev, [l.key]: hrs }));
-                                                                                                 }
-                                                                                             }} 
-                                                                                             onBlur={e => {
-                                                                                                 if (!e.target.value) {
-                                                                                                     setCustomHorasFin(prev => {
-                                                                                                         const next = { ...prev };
-                                                                                                         delete next[l.key];
-                                                                                                         return next;
-                                                                                                     });
-                                                                                                 }
-                                                                                             }}
-                                                                                             style={{ padding: '0.2rem 0.4rem', fontSize: '0.8rem', border: '1px solid #cbd5e1', borderRadius: '4px', outline: 'none' }} 
-                                                                                         />
-                                                                                         {l.dias > 0 && (
-                                                                                             <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#2365AB', background: '#eff6ff', padding: '2px 8px', borderRadius: '12px' }}>
-                                                                                                 ⏱️ {l.dias} {l.dias === 1 ? 'Hora' : 'Horas'}
-                                                                                             </span>
-                                                                                         )}
-                                                                                     </div>
-                                                                                 </td>
-                                                                             </tr>
-                                                                         )}
-                                                                     </React.Fragment>
-                                                                 ))}
+                                                                {lines.map((l, idx) => (
+                                                                    <React.Fragment key={idx}>
+                                                                        <tr style={{ borderBottom: (idx === lines.length - 1 && !l.isHora) ? 'none' : '1px solid #f1f5f9' }}>
+                                                                            <td style={{ padding: '0.85rem 1.5rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                                {l.equipo}
+                                                                                {l.isHora && (
+                                                                                    <span style={{ fontSize: '0.65rem', background: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: 4, fontWeight: 700, marginLeft: 6 }}>
+                                                                                        Por Horas
+                                                                                    </span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td style={{ padding: '0.85rem 1.5rem', textAlign: 'center' }}>{l.cantidad}</td>
+                                                                            <td style={{ padding: '0.4rem 1.5rem', textAlign: 'center' }}>
+                                                                                <input
+                                                                                    type="date"
+                                                                                    value={l.devFecha || ''}
+                                                                                    onChange={e => {
+                                                                                        const newDate = e.target.value;
+                                                                                        setCustomDates(prev => ({ ...prev, [l.key]: newDate }));
+                                                                                    }}
+                                                                                    style={{
+                                                                                        padding: '0.35rem 0.5rem',
+                                                                                        fontSize: '0.8rem',
+                                                                                        border: '1px solid #cbd5e1',
+                                                                                        borderRadius: '6px',
+                                                                                        color: '#1e293b',
+                                                                                        width: '100%',
+                                                                                        maxWidth: '140px',
+                                                                                        boxSizing: 'border-box',
+                                                                                        outline: 'none',
+                                                                                        background: 'white'
+                                                                                    }}
+                                                                                />
+                                                                            </td>
+                                                                            <td style={{ padding: '0.4rem 1.5rem', textAlign: 'center' }}>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    step={l.isHora ? "0.5" : "1"}
+                                                                                    min="0"
+                                                                                    value={l.diasBase}
+                                                                                    onChange={e => {
+                                                                                        const val = e.target.value;
+                                                                                        const numeric = val === '' ? 0 : parseFloat(val);
+                                                                                        const clamped = Math.max(0, isNaN(numeric) ? 0 : numeric);
+                                                                                        setCustomDays(prev => ({ ...prev, [l.key]: clamped }));
+                                                                                        if (l.isHora && l.horaInicio && clamped > 0) {
+                                                                                            const hFin = calcularHoraFin(l.horaInicio, clamped);
+                                                                                            if (hFin) setCustomHorasFin(prev => ({ ...prev, [l.key]: hFin }));
+                                                                                        }
+                                                                                    }}
+                                                                                    style={{
+                                                                                        padding: '0.35rem 0.5rem',
+                                                                                        fontSize: '0.8rem',
+                                                                                        border: '1px solid #cbd5e1',
+                                                                                        borderRadius: '6px',
+                                                                                        color: '#1e293b',
+                                                                                        width: '100%',
+                                                                                        maxWidth: '75px',
+                                                                                        textAlign: 'center',
+                                                                                        fontWeight: 'bold',
+                                                                                        boxSizing: 'border-box',
+                                                                                        outline: 'none',
+                                                                                        background: 'white'
+                                                                                    }}
+                                                                                />
+                                                                            </td>
+                                                                            <td style={{ padding: '0.4rem 1.5rem', textAlign: 'center' }}>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    min="0"
+                                                                                    disabled={l.isHora}
+                                                                                    max={l.diasBase}
+                                                                                    value={l.festivos}
+                                                                                    onChange={e => {
+                                                                                        const val = e.target.value;
+                                                                                        const numeric = val === '' ? 0 : parseInt(val);
+                                                                                        const clamped = Math.min(l.diasBase, Math.max(0, isNaN(numeric) ? 0 : numeric));
+                                                                                        setCustomFestivos(prev => ({ ...prev, [l.key]: clamped }));
+                                                                                    }}
+                                                                                    style={{
+                                                                                        padding: '0.35rem 0.5rem',
+                                                                                        fontSize: '0.8rem',
+                                                                                        border: '1px solid #cbd5e1',
+                                                                                        borderRadius: '6px',
+                                                                                        color: '#f97316',
+                                                                                        width: '100%',
+                                                                                        maxWidth: '75px',
+                                                                                        textAlign: 'center',
+                                                                                        fontWeight: 'bold',
+                                                                                        boxSizing: 'border-box',
+                                                                                        outline: 'none',
+                                                                                        background: l.isHora ? '#f1f5f9' : 'white'
+                                                                                    }}
+                                                                                />
+                                                                            </td>
+                                                                            <td style={{ padding: '0.85rem 1.5rem', color: '#64748b' }}>{fmtCOP(l.tarifaDia)}</td>
+                                                                            <td style={{ padding: '0.85rem 1.5rem', fontWeight: 800, textAlign: 'right', color: '#1e293b' }}>{fmtCOP(l.subtotal)}</td>
+                                                                        </tr>
+                                                                        {l.isHora && (
+                                                                            <tr key={`${idx}-time`} style={{ borderBottom: '1px solid #f1f5f9', background: '#fcfcfd' }}>
+                                                                                <td colSpan={7} style={{ padding: '0.4rem 1.5rem 0.65rem 1.5rem' }}>
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: '#ffffff', padding: '0.4rem 0.75rem', borderRadius: '8px', border: '1px solid #cbd5e1', width: 'fit-content', flexWrap: 'wrap' }}>
+                                                                                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>Hora Alquiler:</span>
+                                                                                        <input
+                                                                                            type="time"
+                                                                                            value={l.horaInicio || ''}
+                                                                                            onChange={e => {
+                                                                                                const hIni = e.target.value;
+                                                                                                if (!hIni || !/^\d{2}:\d{2}$/.test(hIni)) return;
+                                                                                                setCustomHorasInicio(prev => ({ ...prev, [l.key]: hIni }));
+                                                                                                if (l.horaFin && /^\d{2}:\d{2}$/.test(l.horaFin)) {
+                                                                                                    const hrs = calcularHorasAlquiler(hIni, l.horaFin);
+                                                                                                    if (hrs > 0) setCustomDays(prev => ({ ...prev, [l.key]: hrs }));
+                                                                                                } else if (l.dias > 0) {
+                                                                                                    const hFin = calcularHoraFin(hIni, l.dias);
+                                                                                                    if (hFin) setCustomHorasFin(prev => ({ ...prev, [l.key]: hFin }));
+                                                                                                }
+                                                                                            }}
+                                                                                            onBlur={e => {
+                                                                                                if (!e.target.value) {
+                                                                                                    setCustomHorasInicio(prev => {
+                                                                                                        const next = { ...prev };
+                                                                                                        delete next[l.key];
+                                                                                                        return next;
+                                                                                                    });
+                                                                                                }
+                                                                                            }}
+                                                                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.8rem', border: '1px solid #cbd5e1', borderRadius: '4px', outline: 'none' }}
+                                                                                        />
+                                                                                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>Hora Devolución:</span>
+                                                                                        <input
+                                                                                            type="time"
+                                                                                            value={l.horaFin || ''}
+                                                                                            onChange={e => {
+                                                                                                const hFin = e.target.value;
+                                                                                                if (!hFin || !/^\d{2}:\d{2}$/.test(hFin)) return;
+                                                                                                setCustomHorasFin(prev => ({ ...prev, [l.key]: hFin }));
+                                                                                                if (l.horaInicio && /^\d{2}:\d{2}$/.test(l.horaInicio)) {
+                                                                                                    const hrs = calcularHorasAlquiler(l.horaInicio, hFin);
+                                                                                                    if (hrs > 0) setCustomDays(prev => ({ ...prev, [l.key]: hrs }));
+                                                                                                }
+                                                                                            }}
+                                                                                            onBlur={e => {
+                                                                                                if (!e.target.value) {
+                                                                                                    setCustomHorasFin(prev => {
+                                                                                                        const next = { ...prev };
+                                                                                                        delete next[l.key];
+                                                                                                        return next;
+                                                                                                    });
+                                                                                                }
+                                                                                            }}
+                                                                                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.8rem', border: '1px solid #cbd5e1', borderRadius: '4px', outline: 'none' }}
+                                                                                        />
+                                                                                        {l.dias > 0 && (
+                                                                                            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#2365AB', background: '#eff6ff', padding: '2px 8px', borderRadius: '12px' }}>
+                                                                                                ⏱️ {l.dias} {l.dias === 1 ? 'Hora' : 'Horas'}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        )}
+                                                                    </React.Fragment>
+                                                                ))}
                                                             </tbody>
                                                             <tfoot>
                                                                 <tr style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>

@@ -1421,6 +1421,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                             <th style={{ padding: '0.55rem 1rem', textAlign: 'center', color: '#64748b', fontWeight: 700, width: '90px' }}>Cantidad</th>
                                                                             <th style={{ padding: '0.55rem 1rem', textAlign: 'left', color: '#64748b', fontWeight: 700 }}>Descripción</th>
                                                                             <th style={{ padding: '0.55rem 1rem', textAlign: 'center', color: '#64748b', fontWeight: 700 }}>Estado (Alquiler o Devuelto)</th>
+                                                                            <th style={{ padding: '0.55rem 1rem', textAlign: 'center', color: '#64748b', fontWeight: 700 }}>Fecha Devolución</th>
                                                                             <th style={{ padding: '0.55rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>V. Unitario</th>
                                                                             <th style={{ padding: '0.55rem 1rem', textAlign: 'right', color: '#64748b', fontWeight: 700 }}>V. al día de hoy</th>
                                                                         </tr>
@@ -1428,7 +1429,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                     <tbody>
                                                                         {(rem.items || []).length === 0 ? (
                                                                             <tr>
-                                                                                <td colSpan={5} style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#94a3b8' }}>No hay ítems registrados en esta remisión.</td>
+                                                                                <td colSpan={6} style={{ padding: '0.85rem 1rem', textAlign: 'center', color: '#94a3b8' }}>No hay ítems registrados en esta remisión.</td>
                                                                             </tr>
                                                                         ) : (
                                                                             rem.items.map((it, iIdx) => {
@@ -1444,6 +1445,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                                                (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
                                                                                                (prod?.esquemaCobro || '').toLowerCase().includes('única');
                                                                                 const vHoy = enCampo > 0 ? (enCampo * tarifa * (isServ ? 1 : diasCalc)) : 0;
+                                                                                const devoluciones = it.devoluciones || [];
 
                                                                                 return (
                                                                                     <tr key={iIdx} style={{ borderBottom: '1px solid #f1f5f9', background: iIdx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
@@ -1468,6 +1470,23 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                                                 <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', marginLeft: '6px' }}>
                                                                                                     Devuelto ({cantDev})
                                                                                                 </span>
+                                                                                            )}
+                                                                                        </td>
+                                                                                        <td style={{ padding: '0.55rem 1rem', textAlign: 'center', color: '#475569', fontWeight: 600 }}>
+                                                                                            {devoluciones.length > 0 ? (
+                                                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
+                                                                                                    {devoluciones.map((dev, dIdx) => (
+                                                                                                        <span key={dIdx}>
+                                                                                                            {dev.fecha || rem.fecha} {dev.cantidad ? `(${dev.cantidad})` : ''}
+                                                                                                        </span>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            ) : cantDev > 0 ? (
+                                                                                                <span>
+                                                                                                    {rem.fecha} ({cantDev})
+                                                                                                </span>
+                                                                                            ) : (
+                                                                                                <span style={{ color: '#94a3b8' }}>—</span>
                                                                                             )}
                                                                                         </td>
                                                                                         <td style={{ padding: '0.55rem 1rem', textAlign: 'right', color: '#475569', fontWeight: 600 }}>

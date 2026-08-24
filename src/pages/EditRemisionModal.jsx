@@ -15,6 +15,7 @@ export default function EditRemisionModal({ remision, onClose, onSave, products 
             nombre: i.nombre || i.name || '',
             cantidad: Number(i.cantidad) || 1,
             cantidadDevuelta: Number(i.cantidadDevuelta) || 0,
+            devoluciones: i.devoluciones || [],
             tarifaDia: Number(i.tarifaDia) || 0,
             tipoCobro: i.tipoCobro || '',
             category: i.category || '',
