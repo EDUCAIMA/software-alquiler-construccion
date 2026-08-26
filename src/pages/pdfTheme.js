@@ -175,6 +175,7 @@ export const createEquipoTagger = (doc, { fontSize = 8, basePadding = 2, columnI
             if (isTransportOrService) {
                 // Si es un servicio o transporte y no tiene fecha de devolución de equipo real, se dibuja limpio sin tag 'EN OBRA'
                 if (!annotation || !/^\(DEV/i.test(annotation)) {
+                    delete tagsByRow[rowIndex];
                     return {
                         content: cleanName + extraLines,
                         styles: {
