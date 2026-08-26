@@ -732,6 +732,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                             subtotal: sub,
                             estado: rem.estado,
                             esquema: isHora ? 'Por Horas' : (isServ ? 'Cobro Único' : scheme),
+                            isServ,
                             isHora,
                             horaInicio: effectiveHoraInicio,
                             horaFin: effectiveHoraFin

@@ -156,15 +156,20 @@ export const createEquipoTagger = (doc, { fontSize = 8, basePadding = 2, columnI
             const annotation = match ? match[1] : '';
             const cleanName = match ? upper.replace(DATE_TAG_RE, '') : upper;
 
+            // Normalizar texto sin tildes para coincidencias seguras
+            const normalized = cleanName.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
             // No aplicar tag 'EN OBRA' a items de transporte o servicios generales a menos que tengan devolución explícita
             const isTransportOrService = options.noTag || 
-                cleanName.includes('TRANSPORTE') || 
-                cleanName.includes('FLETE') || 
-                cleanName.includes('ACARREO') || 
-                cleanName.includes('DESPACHO') || 
-                cleanName.includes('RECOGIDA') || 
-                cleanName.includes('ENTREGA') ||
-                cleanName.includes('SERVICIO DE');
+                normalized.includes('TRANSPORTE') || 
+                normalized.includes('FLETE') || 
+                normalized.includes('ACARREO') || 
+                normalized.includes('DESPACHO') || 
+                normalized.includes('RECOGIDA') || 
+                normalized.includes('ENTREGA') ||
+                normalized.includes('RECOLECCION') ||
+                normalized.includes('ENVIO') ||
+                normalized.includes('SERVICIO');
 
             if (isTransportOrService && !annotation) {
                 return {
