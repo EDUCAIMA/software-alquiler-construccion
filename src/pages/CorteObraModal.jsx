@@ -214,7 +214,7 @@ function generateCortePDF(resultado, client, obra, settings, remisiones, invoice
 
                 return [
                     idx + 1,
-                    tagger.cell(idx, l.equipo, horario),
+                    tagger.cell(idx, l.equipo, horario, { noTag: l.isServ }),
                     l.cantidad,
                     l.isHora ? `${l.dias} hrs` : l.dias,
                     l.tarifaDia.toLocaleString('es-CO'),
@@ -597,6 +597,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                 subtotal: sub,
                                 estado: rem.estado,
                                 esquema: isHora ? 'Por Horas' : (isServ ? 'Cobro Único' : scheme),
+                                isServ,
                                 isHora,
                                 horaInicio: effectiveHoraInicio,
                                 horaFin: effectiveHoraFin

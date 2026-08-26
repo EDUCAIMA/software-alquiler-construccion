@@ -148,12 +148,32 @@ export const createEquipoTagger = (doc, { fontSize = 8, basePadding = 2, columnI
          * @param {number} rowIndex índice de la fila dentro del body de la tabla
          * @param {string} name nombre del equipo (puede traer la anotación)
          * @param {string} extraLines líneas adicionales a añadir bajo el nombre
+         * @param {object} options opciones adicionales { noTag: boolean }
          */
-        cell: (rowIndex, name, extraLines = '') => {
+        cell: (rowIndex, name, extraLines = '', options = {}) => {
             const upper = (name || '').toUpperCase();
             const match = upper.match(DATE_TAG_RE);
             const annotation = match ? match[1] : '';
             const cleanName = match ? upper.replace(DATE_TAG_RE, '') : upper;
+
+            // No aplicar tag 'EN OBRA' a items de transporte o servicios generales a menos que tengan devolución explícita
+            const isTransportOrService = options.noTag || 
+                cleanName.includes('TRANSPORTE') || 
+                cleanName.includes('FLETE') || 
+                cleanName.includes('ACARREO') || 
+                cleanName.includes('DESPACHO') || 
+                cleanName.includes('RECOGIDA') || 
+                cleanName.includes('ENTREGA') ||
+                cleanName.includes('SERVICIO DE');
+
+            if (isTransportOrService && !annotation) {
+                return {
+                    content: cleanName + extraLines,
+                    styles: {
+                        cellPadding: { top: basePadding, right: basePadding, bottom: basePadding, left: basePadding }
+                    }
+                };
+            }
 
             const tag = /^\(DEV/i.test(annotation)
                 ? { text: annotation, color: COLOR_DEVUELTO }

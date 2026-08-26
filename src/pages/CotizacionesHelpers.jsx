@@ -1042,14 +1042,20 @@ export function generateInvoicePDF(invoice, client, products, settings) {
             margin: { left: margin, right: margin, bottom: 18 },
             head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
             body: groupItems.map((item, gIdx) => {
-                const productName = item.nombre || item.name || products.find(p => p.id === item.productId)?.name || 'EQUIPO';
+                const prod = products.find(p => p.id === item.productId);
+                const productName = item.nombre || item.name || prod?.name || 'EQUIPO';
                 const qty = Number(item.quantity || item.cantidad || 0);
                 const days = Number(item.days || item.dias || 1);
                 const price = Number(item.price || item.tarifaDia || 0);
+                const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') ||
+                    (item.tipoCobro || '').toLowerCase().includes('única') ||
+                    (prod?.category || '').toLowerCase().includes('servicio') ||
+                    (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                    (prod?.esquemaCobro || '').toLowerCase().includes('única');
 
                 return [
                     gIdx + 1,
-                    tagger ? tagger.cell(gIdx, productName) : productName.toUpperCase(),
+                    tagger ? tagger.cell(gIdx, productName, '', { noTag: isServ }) : productName.toUpperCase(),
                     qty,
                     days,
                     `$${price.toLocaleString('es-CO')}`,
