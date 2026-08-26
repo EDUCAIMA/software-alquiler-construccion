@@ -159,25 +159,29 @@ export const createEquipoTagger = (doc, { fontSize = 8, basePadding = 2, columnI
             // Normalizar texto sin tildes para coincidencias seguras
             const normalized = cleanName.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-            // No aplicar tag 'EN OBRA' a items de transporte o servicios generales a menos que tengan devolución explícita
+            // No aplicar tag 'EN OBRA' ni etiquetas de corte a items de transporte o servicios generales
             const isTransportOrService = options.noTag || 
                 normalized.includes('TRANSPORTE') || 
                 normalized.includes('FLETE') || 
                 normalized.includes('ACARREO') || 
                 normalized.includes('DESPACHO') || 
                 normalized.includes('RECOGIDA') || 
-                normalized.includes('ENTREGA') ||
-                normalized.includes('RECOLECCION') ||
-                normalized.includes('ENVIO') ||
+                normalized.includes('ENTREGA') || 
+                normalized.includes('RECOLECCION') || 
+                normalized.includes('ENVIO') || 
+                normalized.includes('LOGISTICA') || 
                 normalized.includes('SERVICIO');
 
-            if (isTransportOrService && !annotation) {
-                return {
-                    content: cleanName + extraLines,
-                    styles: {
-                        cellPadding: { top: basePadding, right: basePadding, bottom: basePadding, left: basePadding }
-                    }
-                };
+            if (isTransportOrService) {
+                // Si es un servicio o transporte y no tiene fecha de devolución de equipo real, se dibuja limpio sin tag 'EN OBRA'
+                if (!annotation || !/^\(DEV/i.test(annotation)) {
+                    return {
+                        content: cleanName + extraLines,
+                        styles: {
+                            cellPadding: { top: basePadding, right: basePadding, bottom: basePadding, left: basePadding }
+                        }
+                    };
+                }
             }
 
             const tag = /^\(DEV/i.test(annotation)

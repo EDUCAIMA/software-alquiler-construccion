@@ -666,6 +666,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                             subtotal: sub,
                             estado: rem.estado,
                             esquema: isHora ? 'Por Horas' : (isServ ? 'Cobro Único' : scheme),
+                            isServ,
                             isHora,
                             horaInicio: effectiveHoraInicio,
                             horaFin: effectiveHoraFin
@@ -797,6 +798,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             quantity: l.cantidad,
             days: l.dias,
             price: l.tarifaDia,
+            tipoCobro: l.isServ ? 'Servicio' : undefined,
             remId: l.remId,
             remFecha: l.remFecha
         }));
