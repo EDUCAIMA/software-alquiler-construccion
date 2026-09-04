@@ -2,12 +2,14 @@ import React, { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import {
     FilePlus, CheckCircle, X, ChevronRight, ChevronDown,
-    MapPin, Package, Search, Plus, Minus, Trash2
+    MapPin, Package, Search, Plus, Minus, Trash2, Flame
 } from 'lucide-react';
 import { fmtCOP, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
+import { useAppContext } from '../context/AppContext';
 import Swal from 'sweetalert2';
 
 export default function NuevaCotizacionModal({ onClose, onSave, clients, products, initialData }) {
+    const { remisiones = [], cotizaciones = [] } = useAppContext();
     const [step, setStep] = useState(1);
     const [clientId, setClientId] = useState(initialData?.clientId || '');
     const [obraId, setObraId] = useState(initialData?.obraId || '');
@@ -28,6 +30,43 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
     const selectedClient = clients.find(c => c.id === clientId);
     const obras = selectedClient?.obras || [];
 
+    // ─── Mapa de Popularidad / Veces Alquilado ──────────────────────────────────
+    // Se computa la cantidad total alquilada y despachada para cada producto
+    const popularidadMap = useMemo(() => {
+        const counts = new Map();
+
+        // 1. Contabilizar desde Remisiones (despachos reales / alquileres en curso e históricos)
+        (remisiones || []).forEach(rem => {
+            (rem.items || []).forEach(it => {
+                const pId = it.productId;
+                const qty = Number(it.cantidad) || 1;
+                if (pId) {
+                    counts.set(pId, (counts.get(pId) || 0) + qty);
+                }
+                // Si el item tiene nombre pero no productId exacto, buscar por coincidencia
+                if (it.nombre) {
+                    const normName = it.nombre.trim().toLowerCase();
+                    counts.set(normName, (counts.get(normName) || 0) + qty);
+                }
+            });
+        });
+
+        // 2. Contabilizar también desde Cotizaciones Aprobadas / Activas
+        (cotizaciones || []).forEach(cot => {
+            if (['Aprobada', 'Facturada', 'En Ejecución', 'Activa', 'Completada'].includes(cot.estado)) {
+                (cot.items || []).forEach(it => {
+                    const pId = it.productId;
+                    const qty = Number(it.cantidad) || 1;
+                    if (pId) {
+                        counts.set(pId, (counts.get(pId) || 0) + qty);
+                    }
+                });
+            }
+        });
+
+        return counts;
+    }, [remisiones, cotizaciones]);
+
     const filteredClients = useMemo(() => {
         if (!clients || !Array.isArray(clients)) return [];
         const query = clientSearch.trim().toLowerCase();
@@ -46,14 +85,26 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
     };
 
     const filteredProducts = useMemo(() => {
-        return (products || []).filter(p => {
+        const list = (products || []).filter(p => {
             const isBaja = p.estado === 'Dado de baja';
             const matchesQuery = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.id.toLowerCase().includes(searchTerm.toLowerCase());
             const isTerceros = p.tipoPropiedad === 'Terceros';
             const matchesPropiedad = filterPropiedad === 'Todos' ? true : (filterPropiedad === 'Propio' ? !isTerceros : isTerceros);
             return !isBaja && matchesQuery && matchesPropiedad;
         });
-    }, [products, searchTerm, filterPropiedad]);
+
+        // Ordenamiento dinámico descendente: primero los más alquilados
+        return list.sort((a, b) => {
+            const countA = popularidadMap.get(a.id) || popularidadMap.get((a.name || '').trim().toLowerCase()) || 0;
+            const countB = popularidadMap.get(b.id) || popularidadMap.get((b.name || '').trim().toLowerCase()) || 0;
+            
+            if (countB !== countA) {
+                return countB - countA; // Mayor número de alquileres primero
+            }
+            // Si tienen la misma cantidad de alquileres, ordenar alfabéticamente
+            return (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' });
+        });
+    }, [products, searchTerm, filterPropiedad, popularidadMap]);
 
     const subtotal = items.reduce((s, i) => {
         const prod = (products || []).find(p => p && p.id === i.productId);
@@ -425,32 +476,44 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                             <div style={{ 
                                                 width: '100%', height: '85px', background: '#f8fafc', borderRadius: 8, 
                                                 overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                border: '1px solid #f1f5f9', position: 'relative'
+                                                border: '1px solid #f1f5f9'
                                             }}>
                                                 {p.image ? (
                                                     <img src={p.image} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                                                 ) : (
                                                     <Package size={28} color="#cbd5e1" strokeWidth={1.5} />
                                                 )}
-                                                <span style={{
-                                                    position: 'absolute', top: 4, right: 4, fontSize: '0.6rem', fontWeight: 800,
-                                                    padding: '2px 5px', borderRadius: 4,
-                                                    background: isTerceros ? '#fef3c7' : '#e0f2fe',
-                                                    color: isTerceros ? '#b45309' : '#0369a1',
-                                                    border: isTerceros ? '1px solid #fde68a' : '1px solid #bae6fd'
-                                                }}>
-                                                    {isTerceros ? 'Terceros' : 'Propio'}
-                                                </span>
                                             </div>
                                             <div>
-                                                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', lineHeight: 1.1, marginBottom: '0.2rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#10b981' }}>{fmtCOP(p.value)}<span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 400 }}>/d</span></div>
-                                                    {inList && (
-                                                        <div style={{ background: '#2365AB', color: 'white', width: 22, height: 22, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 800 }}>
-                                                            {inList.cantidad}
-                                                        </div>
-                                                    )}
+                                                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', lineHeight: 1.1, marginBottom: '0.35rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.35rem' }}>
+                                                    <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#10b981', whiteSpace: 'nowrap' }}>
+                                                        {fmtCOP(p.value)}<span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 400 }}>/d</span>
+                                                    </div>
+                                                    
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                                                        {/* Tarjeta de Stock Disponible con borde de 0.2px */}
+                                                        <span style={{
+                                                            fontSize: '0.65rem',
+                                                            fontWeight: 700,
+                                                            padding: '1px 5px',
+                                                            borderRadius: 4,
+                                                            background: '#ffffff',
+                                                            color: (p.availableStock ?? p.stock) > 0 ? '#10b981' : '#ef4444',
+                                                            border: (p.availableStock ?? p.stock) > 0 ? '0.2px solid #10b981' : '0.2px solid #ef4444',
+                                                            lineHeight: '1.2',
+                                                            whiteSpace: 'nowrap',
+                                                            display: 'inline-block'
+                                                        }}>
+                                                            {(p.availableStock ?? p.stock ?? 0)} disp.
+                                                        </span>
+
+                                                        {inList && (
+                                                            <div style={{ background: '#2365AB', color: 'white', minWidth: 20, height: 20, padding: '0 4px', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 800 }}>
+                                                                {inList.cantidad}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

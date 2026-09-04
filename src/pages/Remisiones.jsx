@@ -4,7 +4,7 @@ import {
     AlertTriangle, Clock, X, ChevronRight, Filter, FileText,
     MapPin, ArrowDownCircle, Info, CreditCard,
     ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Trash2, Ban,
-    Printer, Download, Activity, TrendingUp, Edit3
+    Printer, Download, Activity, TrendingUp, Edit3, BarChart2
 } from 'lucide-react';
 import { generateRemisionPDF, generateDevolucionPDF, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
 import { useAppContext } from '../context/AppContext';
@@ -12,6 +12,7 @@ import { format, differenceInDays } from 'date-fns';
 import Swal from 'sweetalert2';
 import DevolucionModal from './DevolucionModal';
 import EditRemisionModal from './EditRemisionModal';
+import ReportesRemisionesModal from './ReportesRemisionesModal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ESTADO_CFG = {
@@ -609,6 +610,7 @@ export default function Remisiones() {
     const [showVerifyModal, setShowVerifyModal] = useState(false);
     const [verifyTarget, setVerifyTarget] = useState(null);
     const [editingRemisionTarget, setEditingRemisionTarget] = useState(null);
+    const [showReportesModal, setShowReportesModal] = useState(false);
     const [blockMsg, setBlockMsg] = useState('');
 
     React.useEffect(() => {
@@ -786,9 +788,30 @@ export default function Remisiones() {
                     </div>
                 </div>
 
-                <button className="btn btn-primary" onClick={() => { setFacturaPreload(null); setShowNueva(true); }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', height: 'fit-content', padding: '0.7rem 1.25rem' }}>
-                    <Plus size={18} /> Nueva Remisión
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <button 
+                        className="btn btn-secondary" 
+                        onClick={() => setShowReportesModal(true)} 
+                        style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '0.45rem', 
+                            whiteSpace: 'nowrap', 
+                            height: 'fit-content', 
+                            padding: '0.7rem 1.15rem',
+                            fontWeight: 700,
+                            background: 'rgba(35, 101, 171, 0.08)',
+                            color: '#2365AB',
+                            border: '1px solid rgba(35, 101, 171, 0.25)'
+                        }}
+                    >
+                        <BarChart2 size={18} /> Generar Reporte
+                    </button>
+
+                    <button className="btn btn-primary" onClick={() => { setFacturaPreload(null); setShowNueva(true); }} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap', height: 'fit-content', padding: '0.7rem 1.25rem' }}>
+                        <Plus size={18} /> Nueva Remisión
+                    </button>
+                </div>
             </div>
 
             {/* ─── Facturas Pagadas Pendientes de Remisión ─────────────────────── */}
@@ -859,6 +882,27 @@ export default function Remisiones() {
                     <option value="">Todos los clientes</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+                <button
+                    onClick={() => setShowReportesModal(true)}
+                    className="btn btn-secondary"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.45rem',
+                        padding: '0.55rem 1rem',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        background: '#2365AB',
+                        color: '#ffffff',
+                        border: 'none',
+                        cursor: 'pointer',
+                        borderRadius: 8,
+                        boxShadow: '0 2px 4px rgba(35,101,171,0.2)'
+                    }}
+                    title="Abrir generador de informes y reportes con filtros y PDF"
+                >
+                    <BarChart2 size={16} /> Generar Reporte
+                </button>
             </div>
 
             {/* Table */}
@@ -1194,6 +1238,17 @@ export default function Remisiones() {
                     onSave={editRemision}
                     products={products}
                     clients={clients}
+                />
+            )}
+
+            {showReportesModal && (
+                <ReportesRemisionesModal
+                    onClose={() => setShowReportesModal(false)}
+                    remisiones={remisiones}
+                    clients={clients}
+                    products={products}
+                    invoices={invoices}
+                    settings={settings}
                 />
             )}
         </>

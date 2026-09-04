@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight, ArrowUp, ArrowDown, ChevronDown, Clock, TrendingUp, Wallet } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { FileText, Plus, Eye, Filter, Download, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User, Package, CheckCircle, CreditCard, DollarSign, AlertCircle, ArrowRight, ArrowUp, ArrowDown, ChevronDown, Clock, TrendingUp, Wallet, BarChart2, Check, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { format, parseISO } from 'date-fns';
@@ -8,6 +8,7 @@ import autoTable from 'jspdf-autotable';
 import { applyStandardLayout, drawInfoGrid } from './pdfTheme';
 import { generateInvoicePDF } from './CotizacionesHelpers';
 import IngresosTab from './IngresosTab';
+import ReportesRemisionesModal from './ReportesRemisionesModal';
 
 export default function Invoices({ hideHeader = false } = {}) {
     const { invoices, clients, products, settings, createInvoice, payInvoice, deleteInvoice, remisiones = [] } = useAppContext();
@@ -16,6 +17,7 @@ export default function Invoices({ hideHeader = false } = {}) {
     // Submenu de pestañas: Remisiones/Cobros vs. Ingresos
     const [tab, setTab] = useState('remisiones');
     const [ingresosActionSlot, setIngresosActionSlot] = useState(null);
+    const [showReportesModal, setShowReportesModal] = useState(false);
 
     // New Invoice Modal
     const [showModal, setShowModal] = useState(false);
@@ -44,8 +46,35 @@ export default function Invoices({ hideHeader = false } = {}) {
     // Filters
     const [filterClient, setFilterClient] = useState('');
     const [filterObra, setFilterObra] = useState('');
-    const [filterStatus, setFilterStatus] = useState('');
-    const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
+    const [selectedStatuses, setSelectedStatuses] = useState([]); // Selección múltiple de estados: ['Pending', 'Partial', 'Paid']
+    const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+    const statusDropdownRef = useRef(null);
+
+    const STATUS_OPTIONS = [
+        { value: 'Pending', label: 'Pendiente' },
+        { value: 'Partial', label: 'Abono' },
+        { value: 'Paid', label: 'Pagada' }
+    ];
+
+    // Cerrar dropdown al hacer click fuera
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
+                setIsStatusDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const toggleStatusFilter = (val) => {
+        setSelectedStatuses(prev => 
+            prev.includes(val) ? prev.filter(s => s !== val) : [...prev, val]
+        );
+    };
+
+    const sortConfigInit = { key: 'id', direction: 'desc' };
+    const [sortConfig, setSortConfig] = useState(sortConfigInit);
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -61,10 +90,17 @@ export default function Invoices({ hideHeader = false } = {}) {
             if (!client) return false;
             const matchClient = filterClient ? client.id === filterClient : true;
             const matchObra = filterObra ? invoice.obraId === filterObra : true;
-            const matchStatus = filterStatus ? invoice.status === filterStatus : true;
+            
+            const matchStatus = selectedStatuses.length === 0 || selectedStatuses.some(st => {
+                if (st === 'Pending') return invoice.status === 'Pending' || invoice.status === 'Pendiente';
+                if (st === 'Partial') return invoice.status === 'Partial' || invoice.status === 'Abonada' || invoice.status === 'Abono';
+                if (st === 'Paid') return invoice.status === 'Paid' || invoice.status === 'Pagada';
+                return invoice.status === st;
+            });
+
             return matchClient && matchObra && matchStatus;
         });
-    }, [invoices, clients, filterClient, filterObra, filterStatus]);
+    }, [invoices, clients, filterClient, filterObra, selectedStatuses]);
 
     const sortedInvoices = useMemo(() => {
         let sortable = [...filteredInvoices];
@@ -235,10 +271,11 @@ export default function Invoices({ hideHeader = false } = {}) {
 
     return (
         <>
-            {/* Submenu: Remisiones / Cobros vs. Ingresos */}
+            {/* Submenu: Remisiones / Cobros vs. Ingresos y Botones de Acción */}
             {!hideHeader && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                    <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(255,255,255,0.04)', padding: '0.3rem', borderRadius: 12, border: '1px solid var(--surface-border)', width: '100%', maxWidth: 480 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                    {/* Pestañas izquierda */}
+                    <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(255,255,255,0.04)', padding: '0.3rem', borderRadius: 12, border: '1px solid var(--surface-border)', width: '100%', maxWidth: 440 }}>
                         {[
                             { id: 'remisiones', label: 'Remisiones / Cobros', icon: FileText },
                             { id: 'ingresos', label: 'Ingresos', icon: TrendingUp },
@@ -253,28 +290,38 @@ export default function Invoices({ hideHeader = false } = {}) {
                             );
                         })}
                     </div>
-                    <div ref={setIngresosActionSlot}></div>
+
+                    {/* Botones de Acción a la derecha en la misma fila */}
+                    {tab === 'remisiones' ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <button 
+                                className="btn btn-secondary" 
+                                onClick={() => setShowReportesModal(true)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700 }}
+                            >
+                                <BarChart2 size={18} /> Reportes / Informes
+                            </button>
+                            <button className="btn btn-primary" onClick={handleOpenNew} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700 }}>
+                                <Plus size={18} /> Crear Remisión / Cobro
+                            </button>
+                        </div>
+                    ) : (
+                        <div ref={setIngresosActionSlot}></div>
+                    )}
                 </div>
             )}
 
             {tab === 'ingresos' && !hideHeader ? <IngresosTab actionSlot={ingresosActionSlot} /> : (
             <>
-            {/* Header – oculto cuando se embebe en Comercial */}
-            {!hideHeader && (
-                <div className="flex justify-end gap-4 mb-6">
-                    <button className="btn btn-secondary" onClick={handleGenerateReport}>
-                        <Download size={20} /> Reporte
-                    </button>
-                    <button className="btn btn-primary" onClick={handleOpenNew}>
-                        <Plus size={20} /> Crear Remisión / Cobro
-                    </button>
-                </div>
-            )}
             {/* Botón Crear Factura en modo embedded */}
             {hideHeader && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                    <button className="btn btn-secondary" onClick={handleGenerateReport}>
-                        <Download size={18} /> Reporte PDF
+                    <button 
+                        className="btn btn-secondary" 
+                        onClick={() => setShowReportesModal(true)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700 }}
+                    >
+                        <BarChart2 size={16} /> Reportes / Informes
                     </button>
                     <button className="btn btn-primary" onClick={handleOpenNew}>
                         <Plus size={18} /> Crear Remisión / Cobro
@@ -282,23 +329,142 @@ export default function Invoices({ hideHeader = false } = {}) {
                 </div>
             )}
 
-            {/* Filters */}
-            <div className="glass-panel p-6 mb-6 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <Filter size={18} style={{ color: 'var(--text-muted)' }} />
-                    <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Filtros:</span>
+            {/* Filters (Compacto y estilizado con alto z-index para superponer sobre la tabla) */}
+            <div className="glass-panel mb-4 flex items-center justify-between" style={{ padding: '0.6rem 1.25rem', minHeight: 'auto', position: 'relative', zIndex: 50 }}>
+                <div className="flex items-center gap-3">
+                    <Filter size={16} style={{ color: 'var(--text-muted)' }} />
+                    <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Filtros:</span>
                 </div>
-                <div className="flex gap-4">
-                    <select className="input-base" style={{ width: '190px' }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                        <option value="">Todos los Estados</option>
-                        <option value="Pending">⏳ Pendiente</option>
-                        <option value="Paid">✅ Pagada</option>
-                    </select>
-                    <select className="input-base" style={{ width: '190px' }} value={filterClient} onChange={e => setFilterClient(e.target.value)}>
+                <div className="flex items-center" style={{ gap: '1rem' }}>
+                    {/* Filtro Selección Múltiple de Estados */}
+                    <div ref={statusDropdownRef} style={{ position: 'relative', zIndex: 60 }}>
+                        <div
+                            onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                            className="input-base"
+                            style={{
+                                width: '190px',
+                                padding: '0.4rem 0.75rem',
+                                fontSize: '0.85rem',
+                                height: '36px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                cursor: 'pointer',
+                                userSelect: 'none',
+                                boxSizing: 'border-box',
+                                background: selectedStatuses.length > 0 ? 'rgba(35, 101, 171, 0.06)' : 'inherit',
+                                borderColor: selectedStatuses.length > 0 ? 'var(--primary)' : 'var(--surface-border)'
+                            }}
+                        >
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 6 }}>
+                                {selectedStatuses.length === 0 ? (
+                                    <span style={{ color: 'var(--text-muted)' }}>Todos los Estados</span>
+                                ) : selectedStatuses.length === 1 ? (
+                                    <span style={{ color: 'var(--primary)', fontWeight: 700 }}>
+                                        {STATUS_OPTIONS.find(o => o.value === selectedStatuses[0])?.label}
+                                    </span>
+                                ) : (
+                                    <span style={{ color: 'var(--primary)', fontWeight: 700 }}>
+                                        {selectedStatuses.length} estados sel.
+                                    </span>
+                                )}
+                            </div>
+                            <ChevronDown 
+                                size={14} 
+                                style={{ 
+                                    color: 'var(--text-muted)', 
+                                    flexShrink: 0,
+                                    transform: isStatusDropdownOpen ? 'rotate(180deg)' : 'none', 
+                                    transition: 'transform 0.2s ease' 
+                                }} 
+                            />
+                        </div>
+
+                        {/* Menú Flotante de Estados */}
+                        {isStatusDropdownOpen && (
+                            <div style={{
+                                position: 'absolute',
+                                top: 'calc(100% + 6px)',
+                                left: 0,
+                                width: '210px',
+                                background: 'var(--surface-card, #ffffff)',
+                                border: '1px solid var(--surface-border)',
+                                borderRadius: 10,
+                                boxShadow: '0 14px 35px rgba(0,0,0,0.22), 0 4px 10px rgba(0,0,0,0.08)',
+                                zIndex: 9999,
+                                padding: '0.5rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.2rem'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.2rem 0.4rem 0.4rem', borderBottom: '1px solid var(--surface-border)' }}>
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                        Estados
+                                    </span>
+                                    {selectedStatuses.length > 0 ? (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setSelectedStatuses([]); }}
+                                            style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700, padding: 0 }}
+                                        >
+                                            Limpiar ({selectedStatuses.length})
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setSelectedStatuses(STATUS_OPTIONS.map(o => o.value)); }}
+                                            style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700, padding: 0 }}
+                                        >
+                                            Seleccionar todos
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginTop: '0.3rem' }}>
+                                    {STATUS_OPTIONS.map(opt => {
+                                        const isChecked = selectedStatuses.includes(opt.value);
+                                        return (
+                                            <div
+                                                key={opt.value}
+                                                onClick={(e) => { e.stopPropagation(); toggleStatusFilter(opt.value); }}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.6rem',
+                                                    padding: '0.45rem 0.6rem',
+                                                    borderRadius: 6,
+                                                    cursor: 'pointer',
+                                                    background: isChecked ? 'rgba(35, 101, 171, 0.09)' : 'transparent',
+                                                    transition: 'background 0.15s ease'
+                                                }}
+                                                onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = 'rgba(0,0,0,0.04)'; }}
+                                                onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = 'transparent'; }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    onChange={() => {}} // Manejado por el onClick del contenedor
+                                                    style={{ cursor: 'pointer', accentColor: 'var(--primary)', width: 15, height: 15 }}
+                                                />
+                                                <span style={{ 
+                                                    fontSize: '0.85rem', 
+                                                    fontWeight: isChecked ? 700 : 500, 
+                                                    color: isChecked ? 'var(--primary)' : 'var(--text-primary)' 
+                                                }}>
+                                                    {opt.label}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <select className="input-base" style={{ width: '190px', padding: '0.4rem 0.75rem', fontSize: '0.85rem', height: '36px' }} value={filterClient} onChange={e => setFilterClient(e.target.value)}>
                         <option value="">Todos los Clientes</option>
                         {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
-                    <select className="input-base" style={{ width: '190px' }} value={filterObra} onChange={e => setFilterObra(e.target.value)}>
+                    <select className="input-base" style={{ width: '190px', padding: '0.4rem 0.75rem', fontSize: '0.85rem', height: '36px' }} value={filterObra} onChange={e => setFilterObra(e.target.value)}>
                         <option value="">Todas las Obras</option>
                         {uniqueObras.map((obra) => <option key={obra.id} value={obra.id}>{obra.nombre}</option>)}
                     </select>
@@ -1010,6 +1176,17 @@ export default function Invoices({ hideHeader = false } = {}) {
                 );
             })()}
             </>
+            )}
+
+            {showReportesModal && (
+                <ReportesRemisionesModal
+                    onClose={() => setShowReportesModal(false)}
+                    remisiones={remisiones}
+                    clients={clients}
+                    products={products}
+                    invoices={invoices}
+                    settings={settings}
+                />
             )}
         </>
     );
