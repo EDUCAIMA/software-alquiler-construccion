@@ -14,6 +14,7 @@ import { generateInvoicePDF, calcularHorasAlquiler, calcularHoraFin } from './Co
 const fmtCOP = n => `$${(n || 0).toLocaleString('es-CO')}`;
 const calculateBillableDays = (start, end, scheme, billedPeriods = []) => {
     try {
+        if (scheme === 'Única Vez' || (scheme || '').toLowerCase().includes('única')) return 1;
         const days = eachDayOfInterval({ start, end });
         let count = 0;
         days.forEach(d => {
@@ -21,8 +22,11 @@ const calculateBillableDays = (start, end, scheme, billedPeriods = []) => {
             if (isBilled) return;
 
             let isBillable = true;
-            if (isSunday(d)) isBillable = false;
-            else if (scheme === 'Lunes-Viernes' && isSaturday(d)) isBillable = false;
+            if (isSunday(d)) {
+                if (scheme === 'Lunes-Sábado' || scheme === 'Lunes-Viernes') isBillable = false;
+            } else if (isSaturday(d)) {
+                if (scheme === 'Lunes-Viernes') isBillable = false;
+            }
 
             if (isBillable) {
                 count++;
@@ -117,6 +121,7 @@ const getColombianHolidaysMap = (year) => {
 
 const countColombianHolidays = (start, end, scheme, billedPeriods = []) => {
     try {
+        if (scheme === 'Única Vez' || (scheme || '').toLowerCase().includes('única')) return 0;
         const days = eachDayOfInterval({ start, end });
         let count = 0;
         const holidaysCache = {};
@@ -132,8 +137,11 @@ const countColombianHolidays = (start, end, scheme, billedPeriods = []) => {
             if (isBilledPeriod) return;
 
             let isBilled = true;
-            if (isSunday(d)) isBilled = false;
-            else if (scheme === 'Lunes-Viernes' && isSaturday(d)) isBilled = false;
+            if (isSunday(d)) {
+                if (scheme === 'Lunes-Sábado' || scheme === 'Lunes-Viernes') isBilled = false;
+            } else if (isSaturday(d)) {
+                if (scheme === 'Lunes-Viernes') isBilled = false;
+            }
 
             if (isBilled) {
                 const year = d.getFullYear();

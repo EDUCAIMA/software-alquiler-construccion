@@ -366,9 +366,43 @@ async function initDB() {
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS short_name VARCHAR(100)`);
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS name_complement VARCHAR(255)`);
         await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS header_extra TEXT`);
-        await client.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS logo_ui TEXT`);
+        // --- Cuentas por Pagar (Subarriendo a Proveedores y compromisos) ---
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS cuentas_por_pagar(
+            id VARCHAR(50) PRIMARY KEY,
+            proveedor_id VARCHAR(50),
+            proveedor_nombre VARCHAR(255) NOT NULL,
+            remision_id VARCHAR(50),
+            client_id VARCHAR(50),
+            client_name VARCHAR(255),
+            obra_id VARCHAR(50),
+            obra_nombre VARCHAR(255),
+            product_id VARCHAR(50),
+            product_name VARCHAR(255) NOT NULL,
+            cantidad INTEGER DEFAULT 1,
+            fecha_inicio DATE DEFAULT CURRENT_DATE,
+            fecha_fin DATE,
+            dias_cobrados NUMERIC(10, 2) DEFAULT 0,
+            tipo_cobro VARCHAR(50) DEFAULT 'Día',
+            esquema_cobro VARCHAR(50) DEFAULT 'Calendario',
+            tarifa_costo NUMERIC(12, 2) DEFAULT 0,
+            monto_total NUMERIC(15, 2) DEFAULT 0,
+            monto_pagado NUMERIC(15, 2) DEFAULT 0,
+            estado VARCHAR(50) DEFAULT 'Pendiente',
+            fecha_registro TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            fecha_pago DATE,
+            metodo_pago VARCHAR(50),
+            referencia_pago VARCHAR(100),
+            notas TEXT
+          )
+        `);
+        await client.query(`ALTER TABLE cuentas_por_pagar ADD COLUMN IF NOT EXISTS cantidad INTEGER DEFAULT 1`);
+        await client.query(`ALTER TABLE cuentas_por_pagar ADD COLUMN IF NOT EXISTS dias_cobrados NUMERIC(10, 2) DEFAULT 0`);
+        await client.query(`ALTER TABLE cuentas_por_pagar ADD COLUMN IF NOT EXISTS monto_pagado NUMERIC(15, 2) DEFAULT 0`);
+        await client.query(`ALTER TABLE cuentas_por_pagar ADD COLUMN IF NOT EXISTS metodo_pago VARCHAR(50)`);
 
         // --- Crear Tabla de Usuarios ---
+
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id VARCHAR(50) PRIMARY KEY,
@@ -589,6 +623,35 @@ const mapProvider = r => ({
     contactoPrincipal: r.contacto_principal,
     joined: r.joined ? (typeof r.joined === 'string' ? r.joined : (r.joined instanceof Date ? r.joined.toISOString().split('T')[0] : r.joined)) : ''
 });
+
+const mapCuentaPorPagar = r => ({
+    id: r.id,
+    proveedorId: r.proveedor_id,
+    proveedorNombre: r.proveedor_nombre,
+    remisionId: r.remision_id,
+    clientId: r.client_id,
+    clientName: r.client_name,
+    obraId: r.obra_id,
+    obraNombre: r.obra_nombre,
+    productId: r.product_id,
+    productName: r.product_name,
+    cantidad: Number(r.cantidad || 1),
+    fechaInicio: r.fecha_inicio ? (r.fecha_inicio instanceof Date ? r.fecha_inicio.toISOString().split('T')[0] : String(r.fecha_inicio).split('T')[0]) : '',
+    fechaFin: r.fecha_fin ? (r.fecha_fin instanceof Date ? r.fecha_fin.toISOString().split('T')[0] : String(r.fecha_fin).split('T')[0]) : null,
+    diasCobrados: Number(r.dias_cobrados || 0),
+    tipoCobro: r.tipo_cobro || 'Día',
+    esquemaCobro: r.esquema_cobro || 'Calendario',
+    tarifaCosto: Number(r.tarifa_costo || 0),
+    montoTotal: Number(r.monto_total || 0),
+    montoPagado: Number(r.monto_pagado || 0),
+    estado: r.estado || 'Pendiente',
+    fechaRegistro: r.fecha_registro,
+    fechaPago: r.fecha_pago ? (r.fecha_pago instanceof Date ? r.fecha_pago.toISOString().split('T')[0] : String(r.fecha_pago).split('T')[0]) : null,
+    metodoPago: r.metodo_pago,
+    referenciaPago: r.referencia_pago,
+    notas: r.notas
+});
+
 
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
 app.get('/api/products', async (req, res) => {
@@ -1102,6 +1165,78 @@ app.put('/api/gastos/:id', async (req, res) => {
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ─── CUENTAS POR PAGAR (SUBARRIENDO A PROVEEDORES) ───────────────────────────
+app.get('/api/cuentas-por-pagar', async (req, res) => {
+    try {
+        const { rows } = await pool.query('SELECT * FROM cuentas_por_pagar ORDER BY id DESC');
+        res.json(rows.map(mapCuentaPorPagar));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/cuentas-por-pagar', async (req, res) => {
+    try {
+        const {
+            id, proveedorId, proveedorNombre, remisionId, clientId, clientName,
+            obraId, obraNombre, productId, productName, cantidad, fechaInicio,
+            fechaFin, diasCobrados, tipoCobro, esquemaCobro, tarifaCosto,
+            montoTotal, montoPagado, estado, fechaPago, metodoPago, referenciaPago, notas
+        } = req.body;
+
+        await pool.query(
+            `INSERT INTO cuentas_por_pagar(
+                id, proveedor_id, proveedor_nombre, remision_id, client_id, client_name,
+                obra_id, obra_nombre, product_id, product_name, cantidad, fecha_inicio,
+                fecha_fin, dias_cobrados, tipo_cobro, esquema_cobro, tarifa_costo,
+                monto_total, monto_pagado, estado, fecha_pago, metodo_pago, referencia_pago, notas
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
+            [
+                id, proveedorId || null, proveedorNombre, remisionId || null, clientId || null, clientName || null,
+                obraId || null, obraNombre || null, productId, productName, cantidad || 1, fechaInicio || null,
+                fechaFin || null, diasCobrados || 0, tipoCobro || 'Día', esquemaCobro || 'Calendario', tarifaCosto || 0,
+                montoTotal || 0, montoPagado || 0, estado || 'Pendiente', fechaPago || null, metodoPago || null, referenciaPago || null, notas || null
+            ]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/cuentas-por-pagar/:id', async (req, res) => {
+    try {
+        const {
+            proveedorId, proveedorNombre, remisionId, clientId, clientName,
+            obraId, obraNombre, productId, productName, cantidad, fechaInicio,
+            fechaFin, diasCobrados, tipoCobro, esquemaCobro, tarifaCosto,
+            montoTotal, montoPagado, estado, fechaPago, metodoPago, referenciaPago, notas
+        } = req.body;
+
+        await pool.query(
+            `UPDATE cuentas_por_pagar SET
+                proveedor_id = $1, proveedor_nombre = $2, remision_id = $3, client_id = $4, client_name = $5,
+                obra_id = $6, obra_nombre = $7, product_id = $8, product_name = $9, cantidad = $10,
+                fecha_inicio = $11, fecha_fin = $12, dias_cobrados = $13, tipo_cobro = $14, esquema_cobro = $15,
+                tarifa_costo = $16, monto_total = $17, monto_pagado = $18, estado = $19, fecha_pago = $20,
+                metodo_pago = $21, referencia_pago = $22, notas = $23
+            WHERE id = $24`,
+            [
+                proveedorId || null, proveedorNombre, remisionId || null, clientId || null, clientName || null,
+                obraId || null, obraNombre || null, productId, productName, cantidad || 1,
+                fechaInicio || null, fechaFin || null, diasCobrados || 0, tipoCobro || 'Día', esquemaCobro || 'Calendario',
+                tarifaCosto || 0, montoTotal || 0, montoPagado || 0, estado || 'Pendiente', fechaPago || null,
+                metodoPago || null, referenciaPago || null, notas || null, req.params.id
+            ]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/cuentas-por-pagar/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM cuentas_por_pagar WHERE id = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 // ─── EMPLEADOS ───────────────────────────────────────────────────────────────
 app.get('/api/empleados', async (req, res) => {

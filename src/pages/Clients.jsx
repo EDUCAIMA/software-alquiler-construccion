@@ -402,7 +402,8 @@ function DeleteProviderModal({ provider, onClose, onConfirm }) {
 }
 
 function ProviderInventoryModal({ provider, products, addProduct, editProduct, deleteProduct, onClose }) {
-    const { addProductBatch, editProductBatch, deleteProductBatch } = useAppContext();
+    const { addProductBatch, editProductBatch, deleteProductBatch, cuentasPorPagar = [] } = useAppContext();
+    const [tab, setTab] = useState('equipos'); // 'equipos' | 'cxp'
     const [view, setView] = useState('list'); // 'list' | 'add' | 'edit'
     const [selectedProd, setSelectedProd] = useState(null);
     const [expandedProdIds, setExpandedProdIds] = useState({});
@@ -420,6 +421,17 @@ function ProviderInventoryModal({ provider, products, addProduct, editProduct, d
         return (products || []).filter(p => p.tipoPropiedad === 'Terceros' && p.proveedor === provider.name);
     }, [products, provider.name]);
 
+    // Filter CxP belonging to this provider
+    const providerCxP = useMemo(() => {
+        return cuentasPorPagar.filter(c => c.proveedorNombre?.trim().toLowerCase() === provider.name?.trim().toLowerCase());
+    }, [cuentasPorPagar, provider.name]);
+
+    const saldoTotalPendiente = useMemo(() => {
+        return providerCxP
+            .filter(c => c.estado !== 'Pagado')
+            .reduce((s, c) => s + Math.max(0, (c.montoTotal || 0) - (c.montoPagado || 0)), 0);
+    }, [providerCxP]);
+
     return (
         <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1100 }}>
             <div 
@@ -429,16 +441,120 @@ function ProviderInventoryModal({ provider, products, addProduct, editProduct, d
             >
                 {/* Header */}
                 <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#104166', fontSize: '1.2rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ background: 'rgba(35, 101, 171,0.1)', padding: '0.5rem', borderRadius: '10px', display: 'flex' }}>
                             <Building2 size={20} style={{ color: '#2365AB' }} />
                         </div>
-                        Inventario de Terceros: {provider.name}
-                    </h3>
+                        <div>
+                            <h3 style={{ margin: 0, color: '#104166', fontSize: '1.2rem' }}>
+                                Proveedor: {provider.name}
+                            </h3>
+                            <span style={{ fontSize: '0.8rem', color: saldoTotalPendiente > 0 ? '#ef4444' : '#10b981', fontWeight: 700 }}>
+                                Saldo Pendiente por Pagar: ${Math.round(saldoTotalPendiente).toLocaleString('es-CO')}
+                            </span>
+                        </div>
+                    </div>
                     <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
                 </div>
 
-                {view === 'list' ? (
+                {/* Sub-tabs: Equipos / Cuentas por Pagar */}
+                <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', padding: '0 2rem' }}>
+                    <button
+                        onClick={() => { setTab('equipos'); setView('list'); }}
+                        style={{
+                            padding: '0.75rem 1.25rem',
+                            border: 'none',
+                            background: 'transparent',
+                            borderBottom: tab === 'equipos' ? '2px solid #2365AB' : '2px solid transparent',
+                            color: tab === 'equipos' ? '#2365AB' : '#64748b',
+                            fontWeight: tab === 'equipos' ? 700 : 500,
+                            cursor: 'pointer',
+                            fontSize: '0.9rem'
+                        }}
+                    >
+                        Equipos Asignados ({providerProducts.length})
+                    </button>
+                    <button
+                        onClick={() => { setTab('cxp'); }}
+                        style={{
+                            padding: '0.75rem 1.25rem',
+                            border: 'none',
+                            background: 'transparent',
+                            borderBottom: tab === 'cxp' ? '2px solid #2365AB' : '2px solid transparent',
+                            color: tab === 'cxp' ? '#2365AB' : '#64748b',
+                            fontWeight: tab === 'cxp' ? 700 : 500,
+                            cursor: 'pointer',
+                            fontSize: '0.9rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6
+                        }}
+                    >
+                        Cuentas por Pagar ({providerCxP.length})
+                        {saldoTotalPendiente > 0 && (
+                            <span style={{ background: '#fecaca', color: '#b91c1c', fontSize: '0.68rem', padding: '1px 6px', borderRadius: 999, fontWeight: 700 }}>
+                                Pendiente
+                            </span>
+                        )}
+                    </button>
+                </div>
+
+                {tab === 'cxp' ? (
+                    <div style={{ padding: '1.5rem 2rem', overflowY: 'auto', flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <span style={{ fontWeight: 700, color: '#104166', fontSize: '0.95rem' }}>
+                                Historial de Subarriendos y Liquidaciones
+                            </span>
+                            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                                Mostrando {providerCxP.length} registro(s)
+                            </span>
+                        </div>
+                        {providerCxP.length === 0 ? (
+                            <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b', border: '1px dashed #cbd5e1', borderRadius: 12 }}>
+                                Este proveedor aún no tiene registros de alquiler o cuentas por pagar generadas.
+                            </div>
+                        ) : (
+                            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                    <thead>
+                                        <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>
+                                            {['ID CxP', 'Equipo', 'Remisión', 'Cliente / Obra', 'Período', 'Días', 'Costo Unit.', 'Total', 'Saldo', 'Estado'].map(h => (
+                                                <th key={h} style={{ padding: '0.65rem 0.8rem', fontSize: '0.7rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {providerCxP.map(c => {
+                                            const saldo = Math.max(0, (c.montoTotal || 0) - (c.montoPagado || 0));
+                                            return (
+                                                <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '0.65rem 0.8rem', fontFamily: 'monospace', fontWeight: 700, color: '#2365AB' }}>{c.id}</td>
+                                                    <td style={{ padding: '0.65rem 0.8rem', fontWeight: 600 }}>{c.productName}</td>
+                                                    <td style={{ padding: '0.65rem 0.8rem', fontFamily: 'monospace', color: '#f97316' }}>{c.remisionId || '—'}</td>
+                                                    <td style={{ padding: '0.65rem 0.8rem', color: '#64748b' }}>{c.clientName} ({c.obraNombre})</td>
+                                                    <td style={{ padding: '0.65rem 0.8rem', fontSize: '0.78rem' }}>{c.fechaInicio} → {c.fechaFin || 'Activo'}</td>
+                                                    <td style={{ padding: '0.65rem 0.8rem', fontWeight: 600 }}>{c.diasCobrados || 1}</td>
+                                                    <td style={{ padding: '0.65rem 0.8rem' }}>${Number(c.tarifaCosto || 0).toLocaleString('es-CO')}</td>
+                                                    <td style={{ padding: '0.65rem 0.8rem', fontWeight: 700 }}>${Number(c.montoTotal || 0).toLocaleString('es-CO')}</td>
+                                                    <td style={{ padding: '0.65rem 0.8rem', fontWeight: 700, color: saldo > 0 ? '#ef4444' : '#10b981' }}>${Math.round(saldo).toLocaleString('es-CO')}</td>
+                                                    <td style={{ padding: '0.65rem 0.8rem' }}>
+                                                        <span style={{
+                                                            padding: '2px 8px', borderRadius: 999, fontSize: '0.7rem', fontWeight: 700,
+                                                            background: c.estado === 'Pagado' ? '#dcfce7' : '#fee2e2',
+                                                            color: c.estado === 'Pagado' ? '#166534' : '#991b1b'
+                                                        }}>
+                                                            {c.estado}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                ) : view === 'list' ? (
                     <>
                         {/* Toolbar */}
                         <div style={{ padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
@@ -1624,7 +1740,7 @@ export default function Clients() {
     const { 
         clients, addClient, editClient, deleteClient, addObra, editObra,
         invoices, products, addProduct, editProduct, deleteProduct, remisiones, addRemision, editRemision, maintenances, settings, checkPassword,
-        providers, addProvider, editProvider, deleteProvider
+        providers, addProvider, editProvider, deleteProvider, cuentasPorPagar = []
     } = useAppContext();
 
     const [activeTab, setActiveTab] = useState('clientes'); // 'clientes' | 'proveedores'
@@ -1963,7 +2079,7 @@ export default function Clients() {
                                             { label: 'Contacto Principal', key: 'contactoPrincipal', w: '150px' },
                                             { label: 'Teléfono', key: 'phone', w: '100px' },
                                             { label: 'Correo', key: 'email', w: '180px' },
-                                            { label: 'Ciudad', key: 'ciudad', w: '100px' },
+                                            { label: 'Saldo Pendiente CxP', key: null, w: '140px' },
                                             { label: 'Acciones', key: null, w: '130px' }
                                         ].map(({ label, key, w }) => (
                                             <th 
@@ -2014,7 +2130,24 @@ export default function Clients() {
                                                 <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{provider.email || '—'}</div>
                                             </td>
                                             <td>
-                                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{provider.ciudad || '—'}</div>
+                                                {(() => {
+                                                    const saldoProv = cuentasPorPagar
+                                                        .filter(c => c.proveedorNombre?.trim().toLowerCase() === provider.name?.trim().toLowerCase() && c.estado !== 'Pagado')
+                                                        .reduce((s, c) => s + Math.max(0, (c.montoTotal || 0) - (c.montoPagado || 0)), 0);
+                                                    return (
+                                                        <span style={{ 
+                                                            fontSize: '0.85rem', 
+                                                            fontWeight: 700, 
+                                                            color: saldoProv > 0 ? '#ef4444' : '#10b981',
+                                                            background: saldoProv > 0 ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)',
+                                                            padding: '2px 8px',
+                                                            borderRadius: 6,
+                                                            border: `1px solid ${saldoProv > 0 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`
+                                                        }}>
+                                                            ${Math.round(saldoProv).toLocaleString('es-CO')}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </td>
                                             <td>
                                                 <div style={{ display: 'flex', gap: '0.4rem' }} onClick={e => e.stopPropagation()}>

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import Swal from 'sweetalert2';
+import { calcularCostoSubarriendo } from '../pages/subarriendoUtils';
 
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
@@ -88,6 +89,7 @@ export const AppProvider = ({ children }) => {
   const [logs, setLogs] = useState([]);
   const [users, setUsers] = useState([]);
   const [providers, setProviders] = useState([]);
+  const [cuentasPorPagar, setCuentasPorPagar] = useState([]);
   const [globalPreload, setGlobalPreload] = useState(null);
   const [settings, setSettings] = useState({ 
     companyName: '', shortName: '', nameComplement: '', nit: '', phone: '', email: '', logo: '', address: '', headerExtra: '' 
@@ -115,7 +117,7 @@ export const AppProvider = ({ children }) => {
     try {
       const fetchSafe = (url, fallback) => api.get(url).catch(e => { console.error(`Error fetching ${url}:`, e); return fallback; });
       
-      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs, provs, icm, rcm] = await Promise.all([
+      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs, provs, icm, rcm, cxp] = await Promise.all([
         fetchSafe('/api/products', []),
         fetchSafe('/api/clients', []),
         fetchSafe('/api/invoices', []),
@@ -132,6 +134,7 @@ export const AppProvider = ({ children }) => {
         fetchSafe('/api/providers', []),
         fetchSafe('/api/ingresos-caja-menor', []),
         fetchSafe('/api/retiros-caja-menor', []),
+        fetchSafe('/api/cuentas-por-pagar', []),
       ]);
       
       console.log('API Data loaded:', { products: p.length, clients: c.length, settings: s });
@@ -151,6 +154,7 @@ export const AppProvider = ({ children }) => {
       setProviders(Array.isArray(provs) ? provs : []);
       setIngresosCajaMenor(Array.isArray(icm) ? icm : []);
       setRetirosCajaMenor(Array.isArray(rcm) ? rcm : []);
+      setCuentasPorPagar(Array.isArray(cxp) ? cxp : []);
       if (s && !s.error) setSettings(s);
     } catch (err) {
       console.error('Error crítico en reloadAll:', err);
@@ -158,6 +162,7 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   useEffect(() => { reloadAll(); }, [reloadAll]);
+
 
   // ─── HELPERS ─────────────────────────────────────────────────────────────
   const logAction = async (action, product, client, type) => {
@@ -586,20 +591,67 @@ export const AppProvider = ({ children }) => {
     const nueva = { ...data, id, fecha: data.fecha || format(new Date(), 'yyyy-MM-dd'), estado: 'Activa', items: data.items.map(i => ({ ...i, cantidadDevuelta: 0 })) };
     await api.post('/api/remisiones', nueva);
 
-    // Reducir stock de productos
+    // Reducir stock de productos y generar Cuentas por Pagar para equipos de Terceros
+    const client = clients.find(c => c.id === data.clientId);
+    const obra = client?.obras?.find(o => o.id === data.obraId);
+
     for (const item of nueva.items) {
       const prod = products.find(p => p.id === item.productId);
       if (prod) {
         await api.put(`/api/products/${prod.id}`, { ...prod, availableStock: Math.max(0, prod.availableStock - item.cantidad) });
+
+        // Si el equipo es de Terceros (proveedor externo), generar automáticamente la Cuenta por Pagar
+        const isTercero = prod.tipoPropiedad === 'Terceros' || Boolean(prod.proveedor);
+        if (isTercero && prod.proveedor) {
+          const prov = providers.find(pr => pr.name?.trim().toLowerCase() === prod.proveedor?.trim().toLowerCase());
+          const tarifaCosto = Number(prod.costoAdquisicion || 0);
+          const tipoCobroCosto = prod.tipoCobroCosto || prod.tipoCobro || 'Día';
+          const esquemaCobroCosto = prod.esquemaCobroCosto || prod.esquemaCobro || 'Calendario';
+          const cant = Number(item.cantidad || 1);
+
+          // Si es por horas o servicio, o estimación de 1 día inicial
+          const diasInit = (tipoCobroCosto.toLowerCase() === 'hora') ? (Number(item.horasCalculadas || item.dias || 1)) : 1;
+          const montoTotalInit = cant * diasInit * tarifaCosto;
+
+          const cxpId = nextId(cuentasPorPagar, 'CXP');
+          const nuevaCxP = {
+            id: cxpId,
+            proveedorId: prov?.id || null,
+            proveedorNombre: prod.proveedor,
+            remisionId: id,
+            clientId: data.clientId || null,
+            clientName: client?.name || 'Cliente',
+            obraId: data.obraId || null,
+            obraNombre: obra?.nombre || data.obraId || 'Obra',
+            productId: prod.id,
+            productName: prod.name,
+            cantidad: cant,
+            fechaInicio: nueva.fecha,
+            fechaFin: null,
+            diasCobrados: diasInit,
+            tipoCobro: tipoCobroCosto,
+            esquemaCobro: esquemaCobroCosto,
+            tarifaCosto: tarifaCosto,
+            montoTotal: montoTotalInit,
+            montoPagado: 0,
+            estado: 'Pendiente',
+            notas: `Generada automáticamente por Remisión ${id}`
+          };
+          try {
+            await api.post('/api/cuentas-por-pagar', nuevaCxP);
+          } catch (e) {
+            console.error('Error creando CxP automática para remisión:', e);
+          }
+        }
       }
     }
+
 
     await reloadAll();
     
     // Auto-facturación para remisiones manuales deshabilitada por solicitud de usuario.
     // La remisión se guarda en el perfil del cliente y se facturará en el Corte de Obra.
 
-    const client = clients.find(c => c.id === data.clientId);
     logAction('Remisión Creada', `${id} — ${nueva.items.length} equipo(s)`, client?.name || 'N/A', 'exit');
     return nueva;
   };
@@ -723,7 +775,7 @@ export const AppProvider = ({ children }) => {
       await api.put(`/api/remisiones/${rem.id}`, rem);
     }
 
-    // 4. Reintegrar stock de productos
+    // 4. Reintegrar stock de productos y actualizar Cuentas por Pagar asociadas
     for (const [productId, devuelto] of Object.entries(stockReintegrar)) {
       const prod = products.find(p => p.id === productId);
       if (prod && devuelto > 0) {
@@ -731,8 +783,42 @@ export const AppProvider = ({ children }) => {
             ...prod, 
             availableStock: Math.min(prod.totalStock, prod.availableStock + devuelto) 
         });
+
+        // Actualizar la CxP asociada si el equipo es de Terceros
+        const returnDate = fecha || format(new Date(), 'yyyy-MM-dd');
+        for (const remId of modifiedIds) {
+          const cxpAsociada = cuentasPorPagar.find(c => c.remisionId === remId && c.productId === productId);
+          if (cxpAsociada && cxpAsociada.estado !== 'Pagado') {
+            const fIni = cxpAsociada.fechaInicio || returnDate;
+            const esquema = cxpAsociada.esquemaCobro || prod.esquemaCobroCosto || 'Calendario';
+            const tipo = cxpAsociada.tipoCobro || prod.tipoCobroCosto || 'Día';
+            const tarifa = Number(cxpAsociada.tarifaCosto || prod.costoAdquisicion || 0);
+
+            const { diasCobrados, montoTotal } = calcularCostoSubarriendo({
+              cantidad: cxpAsociada.cantidad || 1,
+              tarifaCosto: tarifa,
+              tipoCobro: tipo,
+              esquemaCobro: esquema,
+              fechaInicio: fIni,
+              fechaFin: returnDate
+            });
+
+            try {
+              await api.put(`/api/cuentas-por-pagar/${cxpAsociada.id}`, {
+                ...cxpAsociada,
+                fechaFin: returnDate,
+                diasCobrados,
+                montoTotal,
+                notas: `${cxpAsociada.notas || ''} | Devolución registrada el ${returnDate} (${diasCobrados} días cobrados)`
+              });
+            } catch (e) {
+              console.error('Error actualizando CxP tras devolución:', e);
+            }
+          }
+        }
       }
     }
+
 
     await reloadAll();
     const client = clients.find(c => c.id === clientId);
@@ -966,9 +1052,109 @@ export const AppProvider = ({ children }) => {
     await reloadAll();
     logAction('Nómina Pagada', id, '', 'system');
   };
-  
 
+  // ─── CUENTAS POR PAGAR (SUBARRIENDO A PROVEEDORES) CRUD ─────────────────────
+  const addCuentaPorPagar = async (data) => {
+    const id = nextId(cuentasPorPagar, 'CXP');
+    const nueva = {
+      ...data,
+      id,
+      montoTotal: Number(data.montoTotal || 0),
+      montoPagado: Number(data.montoPagado || 0),
+      tarifaCosto: Number(data.tarifaCosto || 0),
+      cantidad: Number(data.cantidad || 1),
+      diasCobrados: Number(data.diasCobrados || 0),
+      estado: data.estado || 'Pendiente'
+    };
+    await api.post('/api/cuentas-por-pagar', nueva);
+    await reloadAll();
+    logAction('Cuenta por Pagar Creada', `${id} — ${nueva.productName}`, nueva.proveedorNombre || 'Proveedor', 'system');
+    return nueva;
+  };
 
+  const pagarCuentaPorPagar = async (id, { metodoPago = 'Transferencia', referenciaPago = '', notas = '' } = {}) => {
+    const current = cuentasPorPagar.find(c => c.id === id);
+    if (!current) return;
+    const fechaPago = format(new Date(), 'yyyy-MM-dd');
+    const updated = {
+      ...current,
+      estado: 'Pagado',
+      montoPagado: current.montoTotal,
+      fechaPago,
+      metodoPago,
+      referenciaPago,
+      notas: notas ? (current.notas ? `${current.notas} | ${notas}` : notas) : current.notas
+    };
+    await api.put(`/api/cuentas-por-pagar/${id}`, updated);
+
+    // Sincronizar automáticamente con Gastos como egreso contable
+    const idGasto = nextId(gastos, 'G');
+    const gastoEgreso = {
+      id: idGasto,
+      fecha: fechaPago,
+      concepto: `Subarriendo Equipo: ${current.productName} (${current.diasCobrados || 1} ${current.tipoCobro || 'días'}) — Remisión ${current.remisionId || 'S/N'}`,
+      proveedor: current.proveedorNombre || 'Proveedor Externo',
+      categoria: 'Arriendo',
+      monto: current.montoTotal,
+      iva: 0,
+      estado: 'Pagado',
+      notas: `Pago CxP ${id}. Método: ${metodoPago}${referenciaPago ? ` | Ref: ${referenciaPago}` : ''}`
+    };
+    try {
+      await api.post('/api/gastos', gastoEgreso);
+    } catch (e) {
+      console.error('Error registrando gasto automático de CxP:', e);
+    }
+
+    await reloadAll();
+    logAction('Cuenta por Pagar Liquidada', `${id} — $${current.montoTotal.toLocaleString()}`, current.proveedorNombre, 'exit');
+  };
+
+  const abonarCuentaPorPagar = async (id, abonoMonto, { metodoPago = 'Transferencia', referenciaPago = '' } = {}) => {
+    const current = cuentasPorPagar.find(c => c.id === id);
+    if (!current) return;
+    const nuevoMontoPagado = (current.montoPagado || 0) + Number(abonoMonto);
+    const nuevoEstado = nuevoMontoPagado >= current.montoTotal ? 'Pagado' : 'Parcial';
+    const fechaPago = format(new Date(), 'yyyy-MM-dd');
+
+    const updated = {
+      ...current,
+      montoPagado: nuevoMontoPagado,
+      estado: nuevoEstado,
+      fechaPago: nuevoEstado === 'Pagado' ? fechaPago : current.fechaPago,
+      metodoPago,
+      referenciaPago
+    };
+    await api.put(`/api/cuentas-por-pagar/${id}`, updated);
+
+    // Registrar el abono como gasto contable
+    const idGasto = nextId(gastos, 'G');
+    const gastoEgreso = {
+      id: idGasto,
+      fecha: fechaPago,
+      concepto: `Abono Subarriendo: ${current.productName} — CxP ${id}`,
+      proveedor: current.proveedorNombre || 'Proveedor Externo',
+      categoria: 'Arriendo',
+      monto: Number(abonoMonto),
+      iva: 0,
+      estado: 'Pagado',
+      notas: `Abono a CxP ${id}. Método: ${metodoPago}${referenciaPago ? ` | Ref: ${referenciaPago}` : ''}`
+    };
+    try {
+      await api.post('/api/gastos', gastoEgreso);
+    } catch (e) {
+      console.error('Error registrando gasto por abono CxP:', e);
+    }
+
+    await reloadAll();
+    logAction('Abono a Cuenta por Pagar', `${id} — $${Number(abonoMonto).toLocaleString()}`, current.proveedorNombre, 'exit');
+  };
+
+  const deleteCuentaPorPagar = async (id) => {
+    await api.del(`/api/cuentas-por-pagar/${id}`);
+    await reloadAll();
+    logAction('Cuenta por Pagar Eliminada', id, '', 'system');
+  };
   const updateSettings = async (data) => {
     await api.put('/api/settings', data);
     await reloadAll();
@@ -988,6 +1174,8 @@ export const AppProvider = ({ children }) => {
       clients, setClients, addClient, editClient, deleteClient, addObra, editObra,
       // Providers
       providers, setProviders, addProvider, editProvider, deleteProvider,
+      // Cuentas por Pagar (Subarriendo Proveedores)
+      cuentasPorPagar, setCuentasPorPagar, addCuentaPorPagar, pagarCuentaPorPagar, abonarCuentaPorPagar, deleteCuentaPorPagar,
       // Products
       products, setProducts, addProduct, editProduct, returnProduct, deleteProduct, darDeBajaProduct, addProductBatch, editProductBatch, deleteProductBatch,
       // Invoices

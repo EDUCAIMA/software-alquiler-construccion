@@ -558,11 +558,356 @@ function PLTab() {
     );
 }
 
+// ─── Tab: Cuentas por Pagar (Proveedores / Subarriendos) ──────────────────────
+function CuentasPorPagarTab() {
+    const { cuentasPorPagar = [], pagarCuentaPorPagar, abonarCuentaPorPagar, deleteCuentaPorPagar, providers = [], settings } = useAppContext();
+    const [filtroEstado, setFiltroEstado] = useState('Todos');
+    const [filtroProveedor, setFiltroProveedor] = useState('Todos');
+    const [search, setSearch] = useState('');
+    const [pagoModal, setPagoModal] = useState(null); // cxp object or null
+    const [abonoModal, setAbonoModal] = useState(null); // cxp object or null
+    const [metodoPago, setMetodoPago] = useState('Transferencia');
+    const [referenciaPago, setReferenciaPago] = useState('');
+    const [montoAbono, setMontoAbono] = useState('');
+    const [notasPago, setNotasPago] = useState('');
+
+    // Métricas
+    const totalPendiente = useMemo(() => {
+        return cuentasPorPagar
+            .filter(c => c.estado !== 'Pagado')
+            .reduce((s, c) => s + Math.max(0, (c.montoTotal || 0) - (c.montoPagado || 0)), 0);
+    }, [cuentasPorPagar]);
+
+    const totalPagado = useMemo(() => {
+        return cuentasPorPagar
+            .reduce((s, c) => s + (c.montoPagado || 0), 0);
+    }, [cuentasPorPagar]);
+
+    const proveedoresUnicos = useMemo(() => {
+        const setP = new Set(cuentasPorPagar.map(c => c.proveedorNombre).filter(Boolean));
+        return Array.from(setP);
+    }, [cuentasPorPagar]);
+
+    // Filtrado
+    const filteredCxP = useMemo(() => {
+        return cuentasPorPagar.filter(c => {
+            const matchesEstado = filtroEstado === 'Todos' || c.estado === filtroEstado;
+            const matchesProv = filtroProveedor === 'Todos' || c.proveedorNombre === filtroProveedor;
+            const q = search.toLowerCase();
+            const matchesQuery = (c.id || '').toLowerCase().includes(q) ||
+                (c.proveedorNombre || '').toLowerCase().includes(q) ||
+                (c.productName || '').toLowerCase().includes(q) ||
+                (c.remisionId || '').toLowerCase().includes(q) ||
+                (c.clientName || '').toLowerCase().includes(q);
+            return matchesEstado && matchesProv && matchesQuery;
+        }).sort((a, b) => (b.id || '').localeCompare(a.id || ''));
+    }, [cuentasPorPagar, filtroEstado, filtroProveedor, search]);
+
+    const handleConfirmPagar = async () => {
+        if (!pagoModal) return;
+        await pagarCuentaPorPagar(pagoModal.id, { metodoPago, referenciaPago, notas: notasPago });
+        setPagoModal(null);
+        setReferenciaPago('');
+        setNotasPago('');
+    };
+
+    const handleConfirmAbonar = async () => {
+        if (!abonoModal || !montoAbono || Number(montoAbono) <= 0) return;
+        await abonarCuentaPorPagar(abonoModal.id, Number(montoAbono), { metodoPago, referenciaPago });
+        setAbonoModal(null);
+        setMontoAbono('');
+        setReferenciaPago('');
+    };
+
+    const exportCxPPDF = () => {
+        const doc = new jsPDF();
+        const margin = 10;
+        let y = applyStandardLayout(doc, 'Reporte de Cuentas por Pagar (Subarriendo)', settings);
+
+        doc.setTextColor(100, 116, 139); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+        doc.text(`Total Pendiente por Liquidar: ${fmtCOP(totalPendiente)}  |  Total Pagado: ${fmtCOP(totalPagado)}`, margin, y + 8);
+
+        autoTable(doc, {
+            startY: y + 15,
+            head: [['ID', 'Proveedor', 'Equipo', 'Rem.', 'Tarifa Costo', 'Días/Horas', 'Total', 'Pagado', 'Saldo', 'Estado']],
+            body: filteredCxP.map(c => [
+                c.id,
+                c.proveedorNombre,
+                c.productName,
+                c.remisionId || '—',
+                fmtCOP(c.tarifaCosto),
+                `${c.diasCobrados || 1} (${c.tipoCobro || 'Día'})`,
+                fmtCOP(c.montoTotal),
+                fmtCOP(c.montoPagado),
+                fmtCOP(Math.max(0, (c.montoTotal || 0) - (c.montoPagado || 0))),
+                c.estado
+            ]),
+            headStyles: { fillColor: [16, 65, 102], textColor: 255, fontSize: 8 },
+            styles: { fontSize: 7.5, cellPadding: 3 },
+            footStyles: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [16, 65, 102] },
+            margin: { left: margin, right: margin },
+        });
+        doc.save(`Cuentas_Por_Pagar_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    };
+
+    return (
+        <>
+            {/* KPIs */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+                {[
+                    ['Total Pendiente por Pagar', fmtCOP(totalPendiente), 'red', Clock],
+                    ['Total Pagado a Proveedores', fmtCOP(totalPagado), 'emerald', CheckCircle],
+                    ['Equipos Subarrendados', cuentasPorPagar.length, 'blue', FileText],
+                    ['Proveedores con CxP', proveedoresUnicos.length, 'purple', Users],
+                ].map(([l, v, c, Ic]) => (
+                    <div key={l} className={`stat-card ${c === 'emerald' ? 'green' : c}`}>
+                        <div className={`icon-wrapper ${c === 'emerald' ? 'green' : c}`}><Ic size={20} /></div>
+                        <div><div className="stat-value">{v}</div><div className="stat-label">{l}</div></div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Toolbar */}
+            <div className="glass-panel p-4 mb-4" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
+                    <input
+                        type="text"
+                        placeholder="Buscar por ID, proveedor, equipo o remisión..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        style={{ ...IS, maxWidth: 300, background: '#ffffff', color: '#104166', border: '1px solid #cbd5e1' }}
+                    />
+                    <select
+                        value={filtroEstado}
+                        onChange={e => setFiltroEstado(e.target.value)}
+                        style={{ ...SS, maxWidth: 160, background: '#ffffff', color: '#104166', border: '1px solid #cbd5e1' }}
+                    >
+                        <option value="Todos">Todos los estados</option>
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="Parcial">Abono Parcial</option>
+                        <option value="Pagado">Pagado</option>
+                    </select>
+                    <select
+                        value={filtroProveedor}
+                        onChange={e => setFiltroProveedor(e.target.value)}
+                        style={{ ...SS, maxWidth: 190, background: '#ffffff', color: '#104166', border: '1px solid #cbd5e1' }}
+                    >
+                        <option value="Todos">Todos los proveedores</option>
+                        {proveedoresUnicos.map(p => (
+                            <option key={p} value={p}>{p}</option>
+                        ))}
+                    </select>
+                </div>
+                <div style={{ display: 'flex', gap: '0.6rem' }}>
+                    <button onClick={exportCxPPDF} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.82rem' }}>
+                        <Download size={14} /> Exportar PDF
+                    </button>
+                </div>
+            </div>
+
+            {/* Tabla CxP */}
+            <div className="glass-panel p-6">
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '2px solid var(--surface-border)' }}>
+                                {['ID CxP', 'Proveedor', 'Equipo', 'Remisión', 'Fecha Inicio', 'Fecha Fin', 'Días/Tiempo', 'Costo Unit.', 'Total Costo', 'Saldo Pendiente', 'Estado', 'Acciones'].map(h => (
+                                    <th key={h} style={{ padding: '0.65rem 0.8rem', textAlign: 'left', fontSize: '0.67rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredCxP.length === 0 ? (
+                                <tr>
+                                    <td colSpan={12} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                        No se encontraron cuentas por pagar con los filtros actuales.
+                                    </td>
+                                </tr>
+                            ) : (
+                                filteredCxP.map(c => {
+                                    const saldo = Math.max(0, (c.montoTotal || 0) - (c.montoPagado || 0));
+                                    const isPagado = c.estado === 'Pagado';
+                                    const isParcial = c.estado === 'Parcial';
+
+                                    return (
+                                        <tr key={c.id} style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                                            <td style={{ padding: '0.75rem 0.8rem', fontFamily: 'monospace', color: '#2365AB', fontSize: '0.8rem', fontWeight: 700 }}>
+                                                {c.id}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem', fontWeight: 700, color: '#104166' }}>
+                                                {c.proveedorNombre}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem', fontWeight: 600 }}>
+                                                {c.productName}
+                                                {c.cantidad > 1 && <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: 4 }}>({c.cantidad} un.)</span>}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem', fontSize: '0.82rem', fontFamily: 'monospace', color: '#f97316' }}>
+                                                {c.remisionId || '—'}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                {c.fechaInicio || '—'}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                {c.fechaFin || <span style={{ color: '#0284c7', fontWeight: 600, fontSize: '0.75rem' }}>En curso</span>}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem', fontSize: '0.82rem', fontWeight: 600 }}>
+                                                {c.diasCobrados || 1} {c.tipoCobro === 'Hora' ? 'horas' : 'días'}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem', fontSize: '0.82rem' }}>
+                                                {fmtCOP(c.tarifaCosto)}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem', fontWeight: 700, color: '#2365AB' }}>
+                                                {fmtCOP(c.montoTotal)}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem', fontWeight: 700, color: saldo > 0 ? '#ef4444' : '#10b981' }}>
+                                                {fmtCOP(saldo)}
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem' }}>
+                                                <span style={{
+                                                    padding: '2px 9px', borderRadius: 999, fontSize: '0.7rem', fontWeight: 700,
+                                                    background: isPagado ? 'rgba(16,185,129,0.12)' : (isParcial ? 'rgba(234,179,8,0.15)' : 'rgba(239,68,68,0.12)'),
+                                                    color: isPagado ? '#10b981' : (isParcial ? '#b45309' : '#ef4444'),
+                                                    border: `1px solid ${isPagado ? 'rgba(16,185,129,0.3)' : (isParcial ? 'rgba(234,179,8,0.4)' : 'rgba(239,68,68,0.3)')}`
+                                                }}>
+                                                    {c.estado}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '0.75rem 0.8rem', whiteSpace: 'nowrap' }}>
+                                                {!isPagado && (
+                                                    <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                                        <button
+                                                            onClick={() => setPagoModal(c)}
+                                                            style={{ padding: '0.3rem 0.65rem', borderRadius: 6, background: '#10b981', color: 'white', border: 'none', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}
+                                                            title="Liquidar la totalidad pendiente"
+                                                        >
+                                                            <CheckCircle size={12} /> Liquidar
+                                                        </button>
+                                                        <button
+                                                            onClick={() => { setAbonoModal(c); setMontoAbono(saldo); }}
+                                                            style={{ padding: '0.3rem 0.65rem', borderRadius: 6, background: 'rgba(35, 101, 171, 0.1)', color: '#2365AB', border: '1px solid rgba(35, 101, 171, 0.3)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700 }}
+                                                            title="Abonar parte del saldo"
+                                                        >
+                                                            Abonar
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {isPagado && (
+                                                    <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                        <CheckCircle size={14} /> Pagado ({c.fechaPago || ''})
+                                                    </span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Modal de Liquidación Completa */}
+            {pagoModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+                    <div style={{ background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', width: '100%', maxWidth: 460, display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#104166', fontSize: '1.1rem' }}>
+                                <div style={{ background: '#eff6ff', padding: '0.4rem', borderRadius: '8px', display: 'flex' }}><CreditCard size={18} style={{ color: '#2365AB' }} /></div>
+                                Liquidar Pago a Proveedor
+                            </h3>
+                            <button onClick={() => setPagoModal(null)} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={16} /></button>
+                        </div>
+                        <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Proveedor: <strong style={{ color: '#104166' }}>{pagoModal.proveedorNombre}</strong></div>
+                                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 3 }}>Equipo: <strong style={{ color: '#104166' }}>{pagoModal.productName}</strong> ({pagoModal.diasCobrados || 1} {pagoModal.tipoCobro || 'días'})</div>
+                                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#ef4444', marginTop: 8 }}>
+                                    Saldo a Liquidar: {fmtCOP((pagoModal.montoTotal || 0) - (pagoModal.montoPagado || 0))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Método de Pago *</label>
+                                <select value={metodoPago} onChange={e => setMetodoPago(e.target.value)} style={{ ...IS, background: '#ffffff', color: '#104166', border: '1px solid #cbd5e1' }}>
+                                    <option value="Transferencia">Transferencia Bancaria</option>
+                                    <option value="Efectivo">Efectivo</option>
+                                    <option value="Cheque">Cheque</option>
+                                    <option value="Tarjeta">Tarjeta</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>N° de Comprobante / Referencia Bancaria</label>
+                                <input type="text" placeholder="Ej. TR-98234 o N° de consignación" value={referenciaPago} onChange={e => setReferenciaPago(e.target.value)} style={{ ...IS, background: '#ffffff', color: '#104166', border: '1px solid #cbd5e1' }} />
+                            </div>
+
+                            <div>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Observaciones</label>
+                                <textarea placeholder="Notas adicionales sobre el desembolso..." rows={2} value={notasPago} onChange={e => setNotasPago(e.target.value)} style={{ ...IS, background: '#ffffff', color: '#104166', border: '1px solid #cbd5e1', resize: 'vertical' }} />
+                            </div>
+                        </div>
+                        <div style={{ padding: '1rem 1.5rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderRadius: '0 0 16px 16px', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                            <button className="btn btn-secondary" onClick={() => setPagoModal(null)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#263777' }}>Cancelar</button>
+                            <button className="btn btn-primary" onClick={handleConfirmPagar} style={{ background: '#10b981', borderColor: '#10b981' }}>Confirmar y Liquidar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Abono Parcial */}
+            {abonoModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+                    <div style={{ background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', width: '100%', maxWidth: 440, display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#104166', fontSize: '1.1rem' }}>
+                                <div style={{ background: '#eff6ff', padding: '0.4rem', borderRadius: '8px', display: 'flex' }}><DollarSign size={18} style={{ color: '#2365AB' }} /></div>
+                                Registrar Abono a Proveedor
+                            </h3>
+                            <button onClick={() => setAbonoModal(null)} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={16} /></button>
+                        </div>
+                        <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Proveedor: <strong style={{ color: '#104166' }}>{abonoModal.proveedorNombre}</strong></div>
+                                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: 3 }}>Saldo actual pendiente: <strong style={{ color: '#ef4444' }}>{fmtCOP((abonoModal.montoTotal || 0) - (abonoModal.montoPagado || 0))}</strong></div>
+                            </div>
+
+                            <div>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Monto del Abono ($) *</label>
+                                <input type="number" min="1" max={(abonoModal.montoTotal || 0) - (abonoModal.montoPagado || 0)} value={montoAbono} onChange={e => setMontoAbono(e.target.value)} style={{ ...IS, background: '#ffffff', color: '#104166', border: '1px solid #cbd5e1', fontWeight: 700, fontSize: '1rem' }} />
+                            </div>
+
+                            <div>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Método de Pago *</label>
+                                <select value={metodoPago} onChange={e => setMetodoPago(e.target.value)} style={{ ...IS, background: '#ffffff', color: '#104166', border: '1px solid #cbd5e1' }}>
+                                    <option value="Transferencia">Transferencia Bancaria</option>
+                                    <option value="Efectivo">Efectivo</option>
+                                    <option value="Cheque">Cheque</option>
+                                    <option value="Tarjeta">Tarjeta</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style={{ fontSize: '0.8rem', color: '#263777', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>N° de Comprobante / Referencia</label>
+                                <input type="text" placeholder="Ej. TR-98234" value={referenciaPago} onChange={e => setReferenciaPago(e.target.value)} style={{ ...IS, background: '#ffffff', color: '#104166', border: '1px solid #cbd5e1' }} />
+                            </div>
+                        </div>
+                        <div style={{ padding: '1rem 1.5rem', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderRadius: '0 0 16px 16px', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                            <button className="btn btn-secondary" onClick={() => setAbonoModal(null)} style={{ background: '#ffffff', border: '1px solid #cbd5e1', color: '#263777' }}>Cancelar</button>
+                            <button className="btn btn-primary" onClick={handleConfirmAbonar}>Registrar Abono</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+}
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function Financiero() {
-    const [tab, setTab] = useState('gastos');
+    const [tab, setTab] = useState('cuentasPorPagar');
 
     const TABS = [
+        { id: 'cuentasPorPagar', label: 'Cuentas por Pagar (Proveedores)', icon: CreditCard },
         { id: 'gastos', label: 'Gastos y Compras', icon: ShoppingBag },
         { id: 'nomina', label: 'Nómina y Empleados', icon: Users },
         { id: 'resultados', label: 'Estado de Resultados', icon: BarChart2 },
@@ -573,7 +918,7 @@ export default function Financiero() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <div>
                     <h1>Módulo Financiero</h1>
-                    <p className="text-muted">Gastos, nómina y estado de resultados</p>
+                    <p className="text-muted">Cuentas por pagar a proveedores, gastos operativos, nómina y balance</p>
                 </div>
             </div>
 
@@ -591,9 +936,11 @@ export default function Financiero() {
                 })}
             </div>
 
+            {tab === 'cuentasPorPagar' && <CuentasPorPagarTab />}
             {tab === 'gastos' && <GastosTab />}
             {tab === 'nomina' && <NominaTab />}
             {tab === 'resultados' && <PLTab />}
         </>
     );
 }
+
