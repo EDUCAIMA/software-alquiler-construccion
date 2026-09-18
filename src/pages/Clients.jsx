@@ -1197,6 +1197,51 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
 
     const clientRemisiones = (remisiones || []).filter(r => r && r.clientId === client?.id);
 
+    const remisionesPorObra = useMemo(() => {
+        const obrasMap = {};
+        (client?.obras || []).forEach(o => {
+            if (o && o.id) {
+                obrasMap[o.id] = {
+                    id: o.id,
+                    nombre: o.nombre || o.name || `Obra ${o.id}`,
+                    ubicacion: o.ubicacion || '',
+                    remisiones: []
+                };
+            }
+        });
+
+        const sinObra = [];
+
+        clientRemisiones.forEach(rem => {
+            if (rem.obraId && obrasMap[rem.obraId]) {
+                obrasMap[rem.obraId].remisiones.push(rem);
+            } else if (rem.obraId) {
+                if (!obrasMap[rem.obraId]) {
+                    obrasMap[rem.obraId] = {
+                        id: rem.obraId,
+                        nombre: rem.obraNombre || `Obra ${rem.obraId}`,
+                        ubicacion: '',
+                        remisiones: []
+                    };
+                }
+                obrasMap[rem.obraId].remisiones.push(rem);
+            } else {
+                sinObra.push(rem);
+            }
+        });
+
+        const grupos = Object.values(obrasMap).filter(g => g.remisiones.length > 0);
+        if (sinObra.length > 0) {
+            grupos.push({
+                id: 'sin-obra',
+                nombre: 'Sin Obra Asignada',
+                ubicacion: '',
+                remisiones: sinObra
+            });
+        }
+        return grupos;
+    }, [clientRemisiones, client?.obras]);
+
     const TABS = [
         { k: 'datos',    label: 'Información' },
         { k: 'obras',    label: `Obras (${client?.obras?.length || 0})` },
@@ -1366,8 +1411,43 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                 {clientRemisiones.length === 0 ? (
                                     <div style={{ textAlign:'center', padding:'4rem', color:'#94a3b8', border:'1px dashed #e2e8f0', borderRadius:'14px' }}>No hay remisiones registradas.</div>
                                 ) : (
-                                    <div style={{ display:'flex', flexDirection:'column', gap:'0.85rem' }}>
-                                        {clientRemisiones.map((rem) => {
+                                    <div style={{ display:'flex', flexDirection:'column', gap:'1.5rem' }}>
+                                        {remisionesPorObra.map((grupo, gIdx) => (
+                                            <div key={grupo.id} style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
+                                                {/* Subtítulo de la Obra */}
+                                                <div style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    marginTop: gIdx === 0 ? 0 : '0.5rem',
+                                                    paddingBottom: '0.4rem',
+                                                    borderBottom: '1.5px solid #e2e8f0'
+                                                }}>
+                                                    <Building2 size={15} color="#2365AB" />
+                                                    <span style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e3a5f', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                                        {grupo.nombre}
+                                                    </span>
+                                                    {grupo.ubicacion ? (
+                                                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                                            • {grupo.ubicacion}
+                                                        </span>
+                                                    ) : null}
+                                                    <span style={{ 
+                                                        marginLeft: 'auto', 
+                                                        fontSize: '0.72rem', 
+                                                        fontWeight: 700, 
+                                                        color: '#2365AB',
+                                                        background: '#eff6ff',
+                                                        border: '1px solid #bfdbfe',
+                                                        padding: '1px 8px',
+                                                        borderRadius: '10px'
+                                                    }}>
+                                                        {grupo.remisiones.length} {grupo.remisiones.length === 1 ? 'remisión' : 'remisiones'}
+                                                    </span>
+                                                </div>
+
+                                                <div style={{ display:'flex', flexDirection:'column', gap:'0.85rem' }}>
+                                                    {grupo.remisiones.map((rem) => {
                                             if (!rem) return null;
                                             const obra = (client?.obras || []).find(o => o && o.id === rem.obraId);
                                             const isExpanded = expandedRemIds.includes(rem.id);
@@ -1674,9 +1754,12 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                             </div>
                                                         );
                                                     })()}
+                                                        </div>
+                                                    );
+                                                })}
                                                 </div>
-                                            );
-                                        })}
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </>)}
