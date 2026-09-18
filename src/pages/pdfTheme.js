@@ -9,14 +9,134 @@ export const applyStandardLayout = (doc, title, settings, number = '', options =
     const H = doc.internal.pageSize.getHeight();
     const margin = 10;
 
-    // --- ENCABEZADO PROFESIONAL ---
+    if (options.centerTitle) {
+        // --- ENCABEZADO CON TÍTULO CENTRADO (EMPRESA EN PIE DE PÁGINA) ---
+        let topY = 10;
+        let logoW = 34;
+        let logoH = 14;
+
+        if (settings?.logo) {
+            try {
+                let formatType = 'PNG';
+                try {
+                    const imgProps = doc.getImageProperties(settings.logo);
+                    if (imgProps && imgProps.width && imgProps.height) {
+                        const aspect = imgProps.width / imgProps.height;
+                        const maxW = 38;
+                        const maxH = 15;
+                        if (aspect > maxW / maxH) {
+                            logoW = maxW;
+                            logoH = maxW / aspect;
+                        } else {
+                            logoH = maxH;
+                            logoW = maxH * aspect;
+                        }
+                        if (imgProps.fileType) formatType = imgProps.fileType;
+                    }
+                } catch (propErr) {
+                    console.warn('No se pudieron leer propiedades de proporción del logo:', propErr);
+                }
+                doc.addImage(settings.logo, formatType, margin, topY, logoW, logoH);
+            } catch (e) {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(13);
+                doc.setTextColor(35, 101, 171);
+                doc.text(settings?.shortName || 'CIELO', margin, topY + 8);
+                logoW = 28;
+                logoH = 12;
+            }
+        } else {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(13);
+            doc.setTextColor(35, 101, 171);
+            doc.text(settings?.shortName || 'CIELO', margin, topY + 8);
+            logoW = 28;
+            logoH = 12;
+        }
+
+        // Título del Documento Centrado
+        let titleY = topY + 5;
+        doc.setFontSize(11.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(35, 101, 171);
+        doc.text(title.toUpperCase(), W / 2, titleY, { align: 'center' });
+
+        if (number) {
+            titleY += 5;
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(71, 85, 105);
+            const numStr = number.startsWith('Nro - ') ? number : `Nro - ${number.replace(/^Nro\s*[-:]?\s*/i, '').replace('--', '-')}`;
+            doc.text(numStr, W / 2, titleY, { align: 'center' });
+        }
+
+        const headerBottom = Math.max(topY + logoH, titleY + 2) + 2.5;
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.line(margin, headerBottom, W - margin, headerBottom);
+
+        if (!options.skipFooter) {
+            // Pie de página institucional completo
+            const companyTitle = settings?.companyName?.toUpperCase() || 'CIELO ALQUILER DE EQUIPOS Y HERRAMIENTAS';
+            const nitText = settings?.nit ? `NIT. ${settings.nit}` : 'NIT. 700.112.495 - 2';
+            const addressText = settings?.address || 'Calle 14 No. 3 - 62 Pitalito / Huila - Colombia';
+            const phoneText = settings?.phone || '3214010834';
+            const emailText = settings?.email || 'andresfbol11@gmail.com';
+
+            doc.setDrawColor(226, 232, 240);
+            doc.setLineWidth(0.3);
+            doc.line(margin, H - 18, W - margin, H - 18);
+
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 41, 59);
+            doc.text(`${companyTitle}  |  ${nitText}`, W / 2, H - 13.5, { align: 'center' });
+
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(71, 85, 105);
+            doc.text(`${addressText}  |  Tel: ${phoneText}  |  ${emailText}`, W / 2, H - 9.5, { align: 'center' });
+
+            doc.setFontSize(6.5);
+            doc.setTextColor(148, 163, 184);
+            const generationInfo = `Página 1 de 1  |  Generado por Sistema ${settings?.shortName || 'CIELO'} el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
+            doc.text(generationInfo, W / 2, H - 5.5, { align: 'center' });
+        }
+
+        return headerBottom + 5;
+    }
+
+    // --- ENCABEZADO PROFESIONAL ESTÁNDAR ---
     let y = 14;
     
-    // Logo o Nombre Corto
+    // Logo o Nombre Corto (respetando proporción original)
     if (settings?.logo) {
         try {
-            doc.addImage(settings.logo, 'PNG', margin, y, 35, 15);
-            y += 18;
+            let logoW = 38;
+            let logoH = 16;
+            let formatType = 'PNG';
+
+            try {
+                const imgProps = doc.getImageProperties(settings.logo);
+                if (imgProps && imgProps.width && imgProps.height) {
+                    const aspect = imgProps.width / imgProps.height;
+                    const maxW = 42;
+                    const maxH = 18;
+                    if (aspect > maxW / maxH) {
+                        logoW = maxW;
+                        logoH = maxW / aspect;
+                    } else {
+                        logoH = maxH;
+                        logoW = maxH * aspect;
+                    }
+                    if (imgProps.fileType) formatType = imgProps.fileType;
+                }
+            } catch (propErr) {
+                console.warn('No se pudieron leer propiedades de proporción del logo:', propErr);
+            }
+
+            doc.addImage(settings.logo, formatType, margin, y, logoW, logoH);
+            y += logoH + 3;
         } catch (e) {
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(14);

@@ -172,7 +172,14 @@ function HojaDeVidaPanel({ product, maintenances, onClose }) {
                         <div>
                             <div style={{ fontWeight: 800, color: 'white', fontSize: '1rem' }}>{product.name}</div>
                             <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
-                                {String(product.id || '').includes('-') ? String(product.id || '').split('-')[1]?.slice(-2) : String(product.id || '').slice(-2)} · {product.category}
+                                {String(product.id || '').includes('-') ? String(product.id || '').split('-')[1]?.slice(-2) : String(product.id || '').slice(-2)} · ({
+                                    product.category === 'Heavy Machinery' ? 'Maquinaria Pesada' :
+                                    product.category === 'Power Tools' ? 'Herramientas Eléctricas' :
+                                    product.category === 'Structures' ? 'Estructuras y Andamios' :
+                                    product.category === 'Equipment' ? 'Equipos' :
+                                    product.category === 'Machinery' ? 'Maquinaria' :
+                                    product.category === 'Other' ? 'Otro' : (product.category || 'General')
+                                })
                             </div>
                             <div style={{ marginTop: 6, fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)' }}>Stock: {product.totalStock} total · {product.availableStock} disponibles</div>
                             {product.estado === 'Dado de baja' && (
