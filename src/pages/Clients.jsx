@@ -1585,8 +1585,65 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                     {(client.obras || []).map(obra => {
                                         if (!obra) return null;
                                         const cfg = OBRA_ESTADO[obra.estado] || OBRA_ESTADO['Activa'];
+
+                                        // 1. Remisiones asociadas a esta obra
+                                        const obraRemisiones = clientRemisiones.filter(r => 
+                                            r && (String(r.obraId) === String(obra.id) || (!r.obraId && r.obraNombre && r.obraNombre === obra.nombre))
+                                        );
+
+                                        // 2. Cartera al día de hoy para esta obra
+                                        const obraValorHoy = obraRemisiones.reduce((sumRem, rem) => {
+                                            let diasCalc = 1;
+                                            if (rem.fecha) {
+                                                const parts = String(rem.fecha).split('T')[0].split('-');
+                                                if (parts.length === 3) {
+                                                    const fDate = new Date(parts[0], parts[1] - 1, parts[2]);
+                                                    const now = new Date();
+                                                    const diff = Math.max(0, now - fDate);
+                                                    diasCalc = Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+                                                }
+                                            }
+                                            const remTotal = (rem.items || []).reduce((acc, it) => {
+                                                const { vHoy } = calculateItemValorHoy(rem, it, diasCalc);
+                                                return acc + vHoy;
+                                            }, 0);
+                                            return sumRem + remTotal;
+                                        }, 0);
+
+                                        // Facturas pendientes específicas de esta obra
+                                        const pendingInvDebt = clientInvoices
+                                            .filter(i => String(i.obraId) === String(obra.id) && (i.status === 'Pending' || i.status === 'Partial'))
+                                            .reduce((s, i) => s + (Number(i.amount) - (Number(i.paidAmount || i.paid_amount) || 0)), 0);
+
+                                        const carteraObra = Math.max(pendingInvDebt, obraValorHoy);
+
+                                        // 3. Ítems que aún se tienen en alquiler totalizados por ítem
+                                        const itemsMap = {};
+                                        obraRemisiones.filter(r => r.estado !== 'Cancelada').forEach(r => {
+                                            (r.items || []).forEach(it => {
+                                                const prod = (products || []).find(p => p.id === it.productId);
+                                                if (isServicioItem(it, prod)) return;
+                                                const cant = Number(it.cantidad) || 0;
+                                                const cantDev = Number(it.cantidadDevuelta || it.cantidad_devuelta) || 0;
+                                                const enCampo = Math.max(0, cant - cantDev);
+                                                if (enCampo > 0) {
+                                                    const rawName = it.nombre || it.name || prod?.name || 'Equipo';
+                                                    const cleanName = cleanItemName(rawName);
+                                                    if (!itemsMap[cleanName]) {
+                                                        itemsMap[cleanName] = {
+                                                            name: rawName.replace(/\s*\((Dev|Corte|Dev\.\s*previa):.*?\)/gi, '').trim(),
+                                                            cantidad: 0
+                                                        };
+                                                    }
+                                                    itemsMap[cleanName].cantidad += enCampo;
+                                                }
+                                            });
+                                        });
+                                        const itemsEnAlquiler = Object.values(itemsMap).sort((a, b) => b.cantidad - a.cantidad);
+                                        const totalEquiposEnCampo = itemsEnAlquiler.reduce((s, it) => s + it.cantidad, 0);
+
                                         return (
-                                            <div key={obra.id} className="obra-card" style={{ border: `1px solid ${cfg.color}40` }}>
+                                            <div key={obra.id} className="obra-card" style={{ border: `1px solid ${cfg.color}40`, display: 'flex', flexDirection: 'column' }}>
                                                 <div style={{ background: cfg.color, padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <div style={{ fontWeight: 800, color: '#ffffff', fontSize: '1.05rem', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                         <Building2 size={16} />
@@ -1601,13 +1658,114 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <div style={{ padding: '1.25rem' }}>
+                                                <div style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
                                                     <div style={{ fontSize: '0.85rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '1rem' }}>
                                                         <MapPin size={14} color="#64748b" />{obra.ubicacion || 'Sin ubicación'}
                                                     </div>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
-                                                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.05em' }}>PRESUPUESTO</span>
-                                                        <span style={{ fontSize: '1.2rem', fontWeight: 900, color: '#0f172a' }}>${(obra.presupuesto||0).toLocaleString()}</span>
+
+                                                    {/* Equipos aún en alquiler */}
+                                                    <div style={{ marginBottom: '1rem', flex: 1 }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                                                            <span style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                                <Package size={13} color="#2365AB" />
+                                                                Equipos en alquiler
+                                                            </span>
+                                                            {totalEquiposEnCampo > 0 && (
+                                                                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#2365AB', background: '#eff6ff', padding: '1px 7px', borderRadius: '10px', border: '1px solid #bfdbfe' }}>
+                                                                    {totalEquiposEnCampo} {totalEquiposEnCampo === 1 ? 'und' : 'unds'} ({itemsEnAlquiler.length} {itemsEnAlquiler.length === 1 ? 'ítem' : 'ítems'})
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+                                                        {itemsEnAlquiler.length === 0 ? (
+                                                            <div style={{ 
+                                                                padding: '0.65rem 0.8rem', 
+                                                                background: '#f8fafc', 
+                                                                borderRadius: '8px', 
+                                                                border: '1px dashed #cbd5e1', 
+                                                                fontSize: '0.75rem', 
+                                                                color: '#94a3b8', 
+                                                                display: 'flex', 
+                                                                alignItems: 'center', 
+                                                                gap: '0.45rem' 
+                                                            }}>
+                                                                <CheckCircle size={14} color="#10b981" />
+                                                                <span>Sin equipos en alquiler actualmente</span>
+                                                            </div>
+                                                        ) : (
+                                                            <div style={{ 
+                                                                maxHeight: '135px', 
+                                                                overflowY: 'auto', 
+                                                                background: '#f8fafc', 
+                                                                borderRadius: '8px', 
+                                                                border: '1px solid #e2e8f0', 
+                                                                padding: '0.45rem 0.65rem',
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                gap: '0.35rem'
+                                                            }}>
+                                                                {itemsEnAlquiler.map(item => (
+                                                                    <div key={item.name} style={{ 
+                                                                        display: 'flex', 
+                                                                        justifyContent: 'space-between', 
+                                                                        alignItems: 'center', 
+                                                                        fontSize: '0.78rem',
+                                                                        padding: '0.2rem 0',
+                                                                        borderBottom: '1px solid #f1f5f9'
+                                                                    }}>
+                                                                        <span style={{ 
+                                                                            color: '#1e293b', 
+                                                                            fontWeight: 600, 
+                                                                            overflow: 'hidden', 
+                                                                            textOverflow: 'ellipsis', 
+                                                                            whiteSpace: 'nowrap', 
+                                                                            paddingRight: '0.5rem' 
+                                                                        }} title={item.name}>
+                                                                            {item.name}
+                                                                        </span>
+                                                                        <span style={{ 
+                                                                            fontWeight: 800, 
+                                                                            color: '#2365AB', 
+                                                                            background: '#eff6ff', 
+                                                                            border: '1px solid #bfdbfe',
+                                                                            padding: '1px 7px', 
+                                                                            borderRadius: '6px', 
+                                                                            fontSize: '0.72rem',
+                                                                            whiteSpace: 'nowrap',
+                                                                            flexShrink: 0
+                                                                        }}>
+                                                                            {item.cantidad} und
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Cartera por Obra */}
+                                                    <div style={{ 
+                                                        display: 'flex', 
+                                                        justifyContent: 'space-between', 
+                                                        alignItems: 'center', 
+                                                        paddingTop: '0.85rem', 
+                                                        borderTop: '1px solid #e2e8f0',
+                                                        marginTop: 'auto'
+                                                    }}>
+                                                        <div>
+                                                            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.05em', display: 'block' }}>CARTERA:</span>
+                                                            {obra.presupuesto > 0 ? (
+                                                                <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Ppto: ${(obra.presupuesto||0).toLocaleString()}</span>
+                                                            ) : (
+                                                                <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Saldo al día de hoy</span>
+                                                            )}
+                                                        </div>
+                                                        <span style={{ 
+                                                            fontSize: '1.25rem', 
+                                                            fontWeight: 900, 
+                                                            color: carteraObra > 0 ? '#ef4444' : '#10b981' 
+                                                        }}>
+                                                            ${carteraObra.toLocaleString()}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>

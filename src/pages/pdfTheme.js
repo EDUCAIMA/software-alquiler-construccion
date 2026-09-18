@@ -173,9 +173,10 @@ export const applyStandardLayout = (doc, title, settings, number = '', options =
         y += 3.5;
     });
 
-    // Recuadro Derecha: Tipo documento y número
+    // Recuadro Derecha: Tipo documento y número o texto personalizado
+    const subtext = options.customSubtext || (number ? (number.startsWith('Nro - ') ? number : `Nro - ${number.replace(/^Nro\s*[-:]?\s*/i, '').replace('--', '-')}`) : '');
     const boxW = 75;
-    const boxH = number ? 22 : 16;
+    const boxH = subtext ? 22 : 16;
     const boxX = W - margin - boxW;
     const boxY = 14;
 
@@ -189,10 +190,10 @@ export const applyStandardLayout = (doc, title, settings, number = '', options =
     doc.setTextColor(35, 101, 171);
     doc.text(title.toUpperCase(), boxX + (boxW / 2), boxY + 10, { align: 'center' });
     
-    if (number) {
-        doc.setFontSize(9.5);
-        doc.setTextColor(30, 41, 59);
-        doc.text(`Nro - ${number.replace('--', '-')}`, boxX + (boxW / 2), boxY + 18, { align: 'center' });
+    if (subtext) {
+        doc.setFontSize(options.customSubtextSize || 9.5);
+        doc.setTextColor(options.customSubtextColor?.[0] ?? 30, options.customSubtextColor?.[1] ?? 41, options.customSubtextColor?.[2] ?? 59);
+        doc.text(subtext, boxX + (boxW / 2), boxY + 18, { align: 'center' });
     }
 
     if (!options.skipFooter) {

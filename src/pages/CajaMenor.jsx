@@ -120,43 +120,102 @@ export default function CajaMenor() {
     const exportToPDF = () => {
         const doc = new jsPDF();
         const margin = 10;
-        let y = applyStandardLayout(doc, 'Libro de Caja Menor', settings);
+        let y = applyStandardLayout(doc, 'Libro de Caja Menor', settings, '', {
+            customSubtext: `SALDO ACTUAL: ${fmtCOP(saldoActual)}`
+        });
 
-        doc.setTextColor(100, 116, 139); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-        doc.text('Control de efectivo: ingresos, egresos y retiros de caja menor', margin, y + 8);
+        doc.setTextColor(100, 116, 139); doc.setFontSize(8.5); doc.setFont('helvetica', 'normal');
+        doc.text('Control de efectivo: ingresos, egresos y retiros de caja menor', margin, y + 4);
 
         const filterSummary = [];
-        if (filtroFechaInicio) filterSummary.push(`Desde: ${filtroFechaInicio}`);
-        if (filtroFechaFin) filterSummary.push(`Hasta: ${filtroFechaFin}`);
+        if (filtroFechaInicio) filterSummary.push(`Desde: ${formatFechaCorta(filtroFechaInicio)}`);
+        if (filtroFechaFin) filterSummary.push(`Hasta: ${formatFechaCorta(filtroFechaFin)}`);
         if (filtroTipo !== 'Todos') filterSummary.push(`Tipo: ${filtroTipo}`);
-        if (search) filterSummary.push(`Busqueda: "${search}"`);
+        if (search) filterSummary.push(`Búsqueda: "${search}"`);
+
+        let startY = y + 7;
         if (filterSummary.length > 0) {
-            doc.text(`Filtros: ${filterSummary.join('  |  ')}`, margin, y + 13);
-            y += 5;
+            doc.text(`Filtros: ${filterSummary.join('  |  ')}`, margin, startY);
+            startY += 5;
         }
 
-        doc.setTextColor(30, 41, 59); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-        doc.text(`SALDO ACTUAL EN CAJA MENOR: ${fmtCOP(saldoActual)}`, margin, y + 15);
-
+        // Resumen Ejecutivo / Métricas de Caja Menor
         autoTable(doc, {
-            startY: y + 21,
-            head: [['Fecha', 'Tipo', 'Origen', 'Ref.', 'Concepto', 'Tercero', 'Entrada', 'Salida', 'Saldo']],
+            startY: startY,
+            margin: { left: margin, right: margin },
+            head: [['SALDO ACTUAL EN CAJA', 'ENTRADAS EFECTIVO', 'GASTOS EFECTIVO', 'RETIROS DE CAJA']],
+            body: [[
+                fmtCOP(saldoActual),
+                fmtCOP(resumenPeriodo.totalIngresos),
+                fmtCOP(resumenPeriodo.totalEgresos),
+                fmtCOP(resumenPeriodo.totalRetiros)
+            ]],
+            theme: 'plain',
+            headStyles: {
+                fillColor: [35, 101, 171],
+                textColor: 255,
+                fontSize: 7.5,
+                fontStyle: 'bold',
+                halign: 'center'
+            },
+            styles: {
+                fontSize: 8.5,
+                halign: 'center',
+                fontStyle: 'bold',
+                textColor: [30, 41, 59],
+                cellPadding: 2.5,
+                lineWidth: 0.1,
+                lineColor: [203, 213, 225]
+            },
+            columnStyles: {
+                0: {
+                    textColor: saldoActual < 0 ? [220, 38, 38] : [35, 101, 171],
+                    fontSize: 9.5,
+                    fillColor: [240, 249, 255]
+                },
+                1: { textColor: [5, 150, 105] },
+                2: { textColor: [220, 38, 38] },
+                3: { textColor: [234, 88, 12] }
+            }
+        });
+
+        const tableStartY = doc.lastAutoTable.finalY + 5;
+
+        // Tabla de movimientos (sin columna Ref.)
+        autoTable(doc, {
+            startY: tableStartY,
+            head: [['Fecha', 'Tipo', 'Origen', 'Concepto', 'Tercero', 'Entrada', 'Salida', 'Saldo']],
             body: [
                 ...filasTabla.map(m => [
-                    formatFechaCorta(m.fecha), m.tipo, m.origen, m.referencia,
-                    m.concepto, m.tercero,
+                    formatFechaCorta(m.fecha),
+                    m.tipo,
+                    m.origen,
+                    m.concepto,
+                    m.tercero,
                     m.entrada ? fmtCOP(m.entrada) : '—',
                     m.salida ? fmtCOP(m.salida) : '—',
                     fmtCOP(m.saldo)
                 ]),
-                ['', '', '', '', '', 'TOTALES DEL PERIODO:',
-                    fmtCOP(resumenPeriodo.totalIngresos),
-                    fmtCOP(resumenPeriodo.totalEgresos + resumenPeriodo.totalRetiros),
-                    '—']
+                [
+                    { content: 'TOTALES DEL PERIODO:', colSpan: 5, styles: { halign: 'right', fontStyle: 'bold' } },
+                    { content: fmtCOP(resumenPeriodo.totalIngresos), styles: { halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] } },
+                    { content: fmtCOP(resumenPeriodo.totalEgresos + resumenPeriodo.totalRetiros), styles: { halign: 'right', fontStyle: 'bold', textColor: [220, 38, 38] } },
+                    { content: fmtCOP(saldoActual), styles: { halign: 'right', fontStyle: 'bold', textColor: saldoActual < 0 ? [220, 38, 38] : [35, 101, 171] } }
+                ]
             ],
             headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
             styles: { fontSize: 7, cellPadding: 2.5 },
-            columnStyles: { 4: { cellWidth: 38 } },
+            columnStyles: {
+                0: { cellWidth: 18 },                          // Fecha
+                1: { cellWidth: 16 },                          // Tipo
+                2: { cellWidth: 22 },                          // Origen
+                3: { cellWidth: 46 },                          // Concepto
+                4: { cellWidth: 32 },                          // Tercero
+                5: { cellWidth: 18, halign: 'right' },         // Entrada
+                6: { cellWidth: 18, halign: 'right' },         // Salida
+                7: { cellWidth: 20, halign: 'right', fontStyle: 'bold' } // Saldo
+            },
+            footStyles: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [30, 41, 59] },
             margin: { left: margin, right: margin },
         });
 
