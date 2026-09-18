@@ -1372,6 +1372,32 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                             const obra = (client?.obras || []).find(o => o && o.id === rem.obraId);
                                             const isExpanded = expandedRemIds.includes(rem.id);
 
+                                            let diasCalc = 1;
+                                            if (rem.fecha) {
+                                                const parts = rem.fecha.split('-');
+                                                if (parts.length === 3) {
+                                                    const fDate = new Date(parts[0], parts[1] - 1, parts[2]);
+                                                    const now = new Date();
+                                                    const diff = Math.max(0, now - fDate);
+                                                    diasCalc = Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+                                                }
+                                            }
+
+                                            const totalValorHoy = (rem.items || []).reduce((acc, it) => {
+                                                const prod = (products || []).find(p => p.id === it.productId);
+                                                const cant = Number(it.cantidad) || 0;
+                                                const cantDev = Number(it.cantidadDevuelta) || 0;
+                                                const enCampo = Math.max(0, cant - cantDev);
+                                                const tarifa = Number(it.tarifaDia || prod?.value || 0);
+                                                const isServ = (it.tipoCobro || '').toLowerCase().includes('servicio') || 
+                                                               (it.tipoCobro || '').toLowerCase().includes('única') ||
+                                                               (prod?.category || '').toLowerCase().includes('servicio') || 
+                                                               (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                                               (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                                                const vHoy = enCampo > 0 ? (enCampo * tarifa * (isServ ? 1 : diasCalc)) : 0;
+                                                return acc + vHoy;
+                                            }, 0);
+
                                             return (
                                                 <div key={rem.id} style={{
                                                     background: '#ffffff',
@@ -1397,12 +1423,28 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                             transition: 'background 0.15s ease'
                                                         }}
                                                     >
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '3.5rem', flexWrap: 'wrap' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flexWrap: 'wrap' }}>
                                                             <span style={{ fontWeight: 800, fontSize: '0.95rem', color: isExpanded ? '#ffffff' : '#2365AB' }}>{rem.id}</span>
                                                             <span style={{ fontSize: '0.85rem', color: isExpanded ? 'rgba(255,255,255,0.9)' : '#0f172a', fontWeight: 600 }}>{rem.fecha}</span>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: isExpanded ? 'rgba(255,255,255,0.75)' : '#64748b' }}>
+                                                                    Valor al día de hoy:
+                                                                </span>
+                                                                <span style={{ 
+                                                                    fontWeight: 800, 
+                                                                    fontSize: '0.88rem', 
+                                                                    color: isExpanded ? '#ffffff' : '#2365AB',
+                                                                    background: isExpanded ? 'rgba(255,255,255,0.18)' : '#eff6ff',
+                                                                    border: isExpanded ? '1px solid rgba(255,255,255,0.3)' : '1px solid #bfdbfe',
+                                                                    padding: '2px 8px',
+                                                                    borderRadius: '6px'
+                                                                }}>
+                                                                    ${totalValorHoy.toLocaleString()}
+                                                                </span>
+                                                            </div>
                                                         </div>
 
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
@@ -1410,18 +1452,17 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                 }}
                                                                 className="btn btn-outline btn-sm"
                                                                 style={{
-                                                                    padding: '0.3rem 0.65rem',
-                                                                    fontSize: '0.75rem',
+                                                                    padding: '0.35rem 0.5rem',
                                                                     display: 'flex',
                                                                     alignItems: 'center',
-                                                                    gap: '0.35rem',
+                                                                    justifyContent: 'center',
                                                                     background: isExpanded ? 'rgba(255,255,255,0.15)' : 'transparent',
                                                                     borderColor: isExpanded ? 'rgba(255,255,255,0.3)' : '#cbd5e1',
                                                                     color: isExpanded ? '#ffffff' : '#334155'
                                                                 }}
+                                                                title={isExpanded ? 'Ocultar ítems' : 'Desplegar ítems'}
                                                             >
-                                                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                                                {isExpanded ? 'Ocultar' : 'Desplegar ítems'}
+                                                                {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                                                             </button>
 
                                                             <button 
@@ -1431,18 +1472,17 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                 }}
                                                                 className="btn btn-outline btn-sm" 
                                                                 style={{
-                                                                    padding: '0.3rem 0.65rem',
-                                                                    fontSize: '0.75rem',
+                                                                    padding: '0.35rem 0.5rem',
                                                                     display: 'flex',
                                                                     alignItems: 'center',
-                                                                    gap: '0.35rem',
+                                                                    justifyContent: 'center',
                                                                     background: isExpanded ? 'rgba(255,255,255,0.15)' : 'transparent',
                                                                     borderColor: isExpanded ? 'rgba(255,255,255,0.3)' : '#cbd5e1',
                                                                     color: isExpanded ? '#ffffff' : '#334155'
                                                                 }}
                                                                 title="Editar Remisión"
                                                             >
-                                                                <Edit3 size={14} /> Editar
+                                                                <Edit3 size={15} />
                                                             </button>
 
                                                             <button 
@@ -1452,18 +1492,17 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                 }}
                                                                 className="btn btn-outline btn-sm" 
                                                                 style={{
-                                                                    padding: '0.3rem 0.65rem',
-                                                                    fontSize: '0.75rem',
+                                                                    padding: '0.35rem 0.5rem',
                                                                     display: 'flex',
                                                                     alignItems: 'center',
-                                                                    gap: '0.35rem',
+                                                                    justifyContent: 'center',
                                                                     background: isExpanded ? 'rgba(255,255,255,0.15)' : 'transparent',
                                                                     borderColor: isExpanded ? 'rgba(255,255,255,0.3)' : '#cbd5e1',
                                                                     color: isExpanded ? '#ffffff' : '#334155'
                                                                 }}
                                                                 title="Imprimir Remisión"
                                                             >
-                                                                <Printer size={14} /> Imprimir
+                                                                <Printer size={15} />
                                                             </button>
 
                                                             <button 
@@ -1500,18 +1539,17 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                 }}
                                                                 className="btn btn-outline btn-sm" 
                                                                 style={{
-                                                                    padding: '0.3rem 0.65rem',
-                                                                    fontSize: '0.75rem',
+                                                                    padding: '0.35rem 0.5rem',
                                                                     display: 'flex',
                                                                     alignItems: 'center',
-                                                                    gap: '0.35rem',
+                                                                    justifyContent: 'center',
                                                                     background: 'rgba(239, 68, 68, 0.1)',
                                                                     borderColor: 'rgba(239, 68, 68, 0.3)',
                                                                     color: '#ef4444'
                                                                 }}
                                                                 title="Eliminar Remisión (Retornar al inventario)"
                                                             >
-                                                                <Trash2 size={14} /> Eliminar
+                                                                <Trash2 size={15} />
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1616,6 +1654,16 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                             })
                                                                         )}
                                                                     </tbody>
+                                                                    <tfoot>
+                                                                        <tr style={{ background: '#f8fafc', borderTop: '2px solid #e2e8f0' }}>
+                                                                            <td colSpan={5} style={{ padding: '0.65rem 1rem', textAlign: 'right', fontWeight: 700, color: '#475569', fontSize: '0.8rem' }}>
+                                                                                Total al día de hoy:
+                                                                            </td>
+                                                                            <td style={{ padding: '0.65rem 1rem', textAlign: 'right', fontWeight: 800, color: '#2365AB', fontSize: '0.88rem' }}>
+                                                                                ${totalValorHoy.toLocaleString()}
+                                                                            </td>
+                                                                        </tr>
+                                                                    </tfoot>
                                                                 </table>
 
                                                                 {rem.notas && (

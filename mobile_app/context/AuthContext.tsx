@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { safeStorage } from '../utils/storage';
 
 export interface User {
@@ -19,9 +21,23 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Para simulador iOS en Mac, localhost:5001 funciona. Para Android emulador usar 10.0.2.2:5001.
-// Si se despliega en producción, cambiar por la URL correspondiente.
-export const API_URL = 'http://192.168.1.104:5001';
+// Autodetección de la IP para Expo Go (celular físico), emuladores y web
+const getApiUrl = () => {
+  if (Platform.OS === 'web') {
+    return 'http://localhost:5001';
+  }
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (hostUri) {
+    const hostIp = hostUri.split(':')[0];
+    if (hostIp) return `http://${hostIp}:5001`;
+  }
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:5001';
+  }
+  return 'http://192.168.1.107:5001';
+};
+
+export const API_URL = getApiUrl();
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
