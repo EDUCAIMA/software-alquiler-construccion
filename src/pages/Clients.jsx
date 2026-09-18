@@ -1212,6 +1212,86 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
         ) || null;
     };
 
+    const calculateItemValorHoy = (rem, it, diasCalc) => {
+        const prod = (products || []).find(p => p.id === it.productId);
+        const cant = Number(it.cantidad) || 0;
+        const cantDev = Number(it.cantidadDevuelta) || 0;
+        const tarifa = Number(it.tarifaDia || prod?.value || 0);
+        const isServ = isServicioItem(it, prod);
+        const isHora = (it.tipoCobro || '').toLowerCase().includes('hora');
+
+        const invAsoc = findInvoiceForRemOrItem(rem, it);
+        const isPagado = !!(invAsoc && (
+            invAsoc.status === 'Paid' || 
+            invAsoc.status === 'Pagada' || 
+            (Number(invAsoc.paidAmount || invAsoc.paid_amount || 0) >= Number(invAsoc.amount || invAsoc.total || 0) && Number(invAsoc.amount || invAsoc.total || 0) > 0)
+        ));
+
+        if (isPagado) {
+            return { vHoy: 0, isPagado: true, isFacturado: true, invAsoc, isServ };
+        }
+
+        let ratioPendiente = 1;
+        const isFacturado = !!invAsoc;
+        if (isFacturado) {
+            const totalFactura = Number(invAsoc.amount || invAsoc.total || 0);
+            const pagadoFactura = Number(invAsoc.paidAmount || invAsoc.paid_amount || 0);
+            if (totalFactura > 0 && pagadoFactura > 0) {
+                ratioPendiente = Math.max(0, (totalFactura - pagadoFactura) / totalFactura);
+            }
+        }
+
+        if (isServ) {
+            const vBruto = cant * tarifa;
+            return { vHoy: Math.round(vBruto * ratioPendiente), isPagado: false, isFacturado, invAsoc, isServ };
+        }
+
+        // 1. Días y valor de equipos devueltos
+        let valorDevueltos = 0;
+        let cantDevueltosContados = 0;
+        if (Array.isArray(it.devoluciones) && it.devoluciones.length > 0) {
+            it.devoluciones.forEach(dev => {
+                const q = Number(dev.cantidad) || 0;
+                if (q <= 0) return;
+                cantDevueltosContados += q;
+
+                let dDays = 1;
+                if (isHora) {
+                    dDays = Number(it.horasCalculadas || it.dias || 1);
+                } else if (rem.fecha && dev.fecha) {
+                    const rDateStr = typeof rem.fecha === 'string' ? rem.fecha.split('T')[0] : (rem.fecha ? new Date(rem.fecha).toISOString().split('T')[0] : '');
+                    const devDateStr = typeof dev.fecha === 'string' ? dev.fecha.split('T')[0] : (dev.fecha ? new Date(dev.fecha).toISOString().split('T')[0] : '');
+                    const startParts = rDateStr.split('-');
+                    const endParts = devDateStr.split('-');
+                    if (startParts.length === 3 && endParts.length === 3) {
+                        const dStart = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+                        const dEnd = new Date(endParts[0], endParts[1] - 1, endParts[2]);
+                        const diffDays = Math.round((dEnd - dStart) / (1000 * 60 * 60 * 24));
+                        dDays = Math.max(1, diffDays + 1);
+                    }
+                } else {
+                    dDays = diasCalc;
+                }
+                valorDevueltos += q * tarifa * dDays;
+            });
+        }
+
+        const orphanQty = Math.max(0, cantDev - cantDevueltosContados);
+        if (orphanQty > 0) {
+            valorDevueltos += orphanQty * tarifa * diasCalc;
+        }
+
+        // 2. Equipos aún en campo
+        const enCampo = Math.max(0, cant - cantDev);
+        const horasOEnCampo = isHora ? Number(it.horasCalculadas || it.dias || 1) : diasCalc;
+        const valorEnCampo = enCampo > 0 ? (enCampo * tarifa * horasOEnCampo) : 0;
+
+        const valorBrutoTotal = valorDevueltos + valorEnCampo;
+        const vHoy = Math.round(valorBrutoTotal * ratioPendiente);
+
+        return { vHoy, isPagado: false, isFacturado, invAsoc, isServ };
+    };
+
     const clientInvoices = (invoices || []).filter(inv => inv && inv.clientId === client?.id);
     const totalFacturado = clientInvoices.reduce((s, i) => s + (Number(i?.amount) || 0), 0);
     const totalPagado = clientInvoices.filter(i => i?.status === 'Paid').reduce((s, i) => s + (Number(i?.amount) || 0), 0);
@@ -1497,27 +1577,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                             }
 
                                             const totalValorHoy = (rem.items || []).reduce((acc, it) => {
-                                                const prod = (products || []).find(p => p.id === it.productId);
-                                                const cant = Number(it.cantidad) || 0;
-                                                const cantDev = Number(it.cantidadDevuelta) || 0;
-                                                const enCampo = Math.max(0, cant - cantDev);
-                                                const tarifa = Number(it.tarifaDia || prod?.value || 0);
-                                                const isServ = isServicioItem(it, prod);
-
-                                                let vHoy = 0;
-                                                if (isServ) {
-                                                    const invAsoc = findInvoiceForRemOrItem(rem, it);
-                                                    const isFacturado = !!invAsoc;
-                                                    const isPagado = !!(invAsoc && (invAsoc.status === 'Paid' || invAsoc.status === 'Pagada' || (Number(invAsoc.paidAmount || invAsoc.paid_amount || 0) >= Number(invAsoc.amount || invAsoc.total || 0) && Number(invAsoc.amount || invAsoc.total || 0) > 0)));
-
-                                                    if (isFacturado || isPagado || rem.estado === 'Cerrada') {
-                                                        vHoy = 0;
-                                                    } else {
-                                                        vHoy = cant * tarifa;
-                                                    }
-                                                } else {
-                                                    vHoy = enCampo > 0 ? (enCampo * tarifa * diasCalc) : 0;
-                                                }
+                                                const { vHoy } = calculateItemValorHoy(rem, it, diasCalc);
                                                 return acc + vHoy;
                                             }, 0);
 
@@ -1716,19 +1776,9 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                                 const cantDev = Number(it.cantidadDevuelta) || 0;
                                                                                 const enCampo = Math.max(0, cant - cantDev);
                                                                                 const tarifa = Number(it.tarifaDia || prod?.value || 0);
-                                                                                const isServ = isServicioItem(it, prod);
-
-                                                                                const invAsoc = isServ ? findInvoiceForRemOrItem(rem, it) : null;
-                                                                                const isFacturado = !!invAsoc;
-                                                                                const isPagado = !!(invAsoc && (invAsoc.status === 'Paid' || invAsoc.status === 'Pagada' || (Number(invAsoc.paidAmount || invAsoc.paid_amount || 0) >= Number(invAsoc.amount || invAsoc.total || 0) && Number(invAsoc.amount || invAsoc.total || 0) > 0)));
-
-                                                                                let vHoy = 0;
-                                                                                if (isServ) {
-                                                                                    vHoy = (isFacturado || isPagado || rem.estado === 'Cerrada') ? 0 : (cant * tarifa);
-                                                                                } else {
-                                                                                    vHoy = enCampo > 0 ? (enCampo * tarifa * diasCalc) : 0;
-                                                                                }
                                                                                 const devoluciones = it.devoluciones || [];
+
+                                                                                const { vHoy, isPagado, isFacturado, invAsoc, isServ } = calculateItemValorHoy(rem, it, diasCalc);
 
                                                                                 return (
                                                                                     <tr key={iIdx} style={{ borderBottom: '1px solid #f1f5f9', background: iIdx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
@@ -1749,32 +1799,35 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                                                     <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: '#eff6ff', color: '#2365AB' }}>
                                                                                                         Servicio Facturado {invAsoc?.id ? `(${invAsoc.id})` : ''}
                                                                                                     </span>
-                                                                                                ) : rem.estado === 'Cerrada' ? (
-                                                                                                    <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: '#f1f5f9', color: '#475569' }}>
-                                                                                                        Servicio Finalizado
-                                                                                                    </span>
                                                                                                 ) : (
                                                                                                     <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: '#fef3c7', color: '#b45309' }}>
                                                                                                         Cobro Único (Servicio)
                                                                                                     </span>
                                                                                                 )
                                                                                             ) : (
-                                                                                                <>
-                                                                                                    {enCampo > 0 ? (
-                                                                                                        <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: 'rgba(35, 101, 171, 0.1)', color: '#2365AB' }}>
-                                                                                                            Alquiler {cantDev > 0 ? `(${enCampo})` : ''}
+                                                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                                                                                        {enCampo > 0 && (
+                                                                                                            <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: 'rgba(35, 101, 171, 0.1)', color: '#2365AB' }}>
+                                                                                                                Alquiler {cantDev > 0 ? `(${enCampo})` : ''}
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                        {cantDev > 0 && (
+                                                                                                            <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: '#dcfce7', color: '#15803d' }}>
+                                                                                                                Devuelto {enCampo > 0 ? `(${cantDev})` : ''}
+                                                                                                            </span>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                    {isPagado ? (
+                                                                                                        <span style={{ padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
+                                                                                                            Pagado {invAsoc?.id ? `(${invAsoc.id})` : ''}
                                                                                                         </span>
-                                                                                                    ) : (
-                                                                                                        <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: '#dcfce7', color: '#15803d' }}>
-                                                                                                            Devuelto
+                                                                                                    ) : isFacturado ? (
+                                                                                                        <span style={{ padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem', fontWeight: 700, background: '#eff6ff', color: '#2365AB', border: '1px solid #bfdbfe' }}>
+                                                                                                            Facturado {invAsoc?.id ? `(${invAsoc.id})` : ''}
                                                                                                         </span>
-                                                                                                    )}
-                                                                                                    {cantDev > 0 && enCampo > 0 && (
-                                                                                                        <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', marginLeft: '6px' }}>
-                                                                                                            Devuelto ({cantDev})
-                                                                                                        </span>
-                                                                                                    )}
-                                                                                                </>
+                                                                                                    ) : null}
+                                                                                                </div>
                                                                                             )}
                                                                                         </td>
                                                                                         <td style={{ padding: '0.55rem 1rem', textAlign: 'center', color: '#475569', fontWeight: 600 }}>
@@ -1785,13 +1838,13 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                                             ) : devoluciones.length > 0 ? (
                                                                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
                                                                                                     {devoluciones.map((dev, dIdx) => (
-                                                                                                        <span key={dIdx}>
+                                                                                                        <span key={dIdx} style={{ fontSize: '0.75rem' }}>
                                                                                                             {dev.fecha || rem.fecha} {dev.cantidad ? `(${dev.cantidad})` : ''}
                                                                                                         </span>
                                                                                                     ))}
                                                                                                 </div>
                                                                                             ) : cantDev > 0 ? (
-                                                                                                <span>
+                                                                                                <span style={{ fontSize: '0.75rem' }}>
                                                                                                     {rem.fecha} ({cantDev})
                                                                                                 </span>
                                                                                             ) : (
@@ -1801,8 +1854,13 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                                         <td style={{ padding: '0.55rem 1rem', textAlign: 'right', color: '#475569', fontWeight: 600 }}>
                                                                                             ${tarifa.toLocaleString()}
                                                                                         </td>
-                                                                                        <td style={{ padding: '0.55rem 1rem', textAlign: 'right', color: vHoy === 0 ? '#64748b' : '#0f172a', fontWeight: 800 }}>
+                                                                                        <td style={{ padding: '0.55rem 1rem', textAlign: 'right', color: isPagado ? '#16a34a' : '#0f172a', fontWeight: 800 }}>
                                                                                             ${vHoy.toLocaleString()}
+                                                                                            {isPagado && (
+                                                                                                <span style={{ display: 'block', fontSize: '0.68rem', color: '#16a34a', fontWeight: 600 }}>
+                                                                                                    Saldado
+                                                                                                </span>
+                                                                                            )}
                                                                                         </td>
                                                                                     </tr>
                                                                                 );
