@@ -1179,6 +1179,21 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
         );
     };
 
+    const cleanItemName = (n) => {
+        if (!n) return '';
+        return n.replace(/\s*\((Dev|Corte|Dev\.\s*previa):.*?\)/gi, '').trim().toLowerCase();
+    };
+
+    const parseLocalDate = (d) => {
+        if (!d) return null;
+        const str = typeof d === 'string' ? d.split('T')[0] : (d instanceof Date ? d.toISOString().split('T')[0] : String(d));
+        const parts = str.split('-');
+        if (parts.length !== 3) return null;
+        const [y, m, day] = parts.map(Number);
+        if (!y || !m || !day) return null;
+        return new Date(y, m - 1, day);
+    };
+
     const isServicioItem = (it, prod) => {
         const name = (it?.nombre || it?.name || prod?.name || '').toLowerCase();
         return (it?.tipoCobro || '').toLowerCase().includes('servicio') || 
@@ -1193,12 +1208,15 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
 
     const findInvoiceForRemOrItem = (rem, it) => {
         if (!invoices || !rem) return null;
+        const itClean = cleanItemName(it?.nombre || it?.name);
         if (it) {
             const byItem = invoices.find(inv => 
-                (inv?.items || []).some(invItem => 
-                    String(invItem.remId) === String(rem.id) && 
-                    (invItem.productId === it.productId || (invItem.nombre && it.nombre && invItem.nombre.trim().toLowerCase() === it.nombre.trim().toLowerCase()))
-                )
+                (inv?.items || []).some(invItem => {
+                    if (String(invItem.remId) !== String(rem.id)) return false;
+                    if (invItem.productId && it.productId && String(invItem.productId) === String(it.productId)) return true;
+                    const invClean = cleanItemName(invItem.nombre || invItem.name);
+                    return !!(itClean && invClean && (itClean === invClean || itClean.includes(invClean) || invClean.includes(itClean)));
+                })
             );
             if (byItem) return byItem;
         }
@@ -1216,80 +1234,162 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
         const prod = (products || []).find(p => p.id === it.productId);
         const cant = Number(it.cantidad) || 0;
         const cantDev = Number(it.cantidadDevuelta) || 0;
+        const enCampo = Math.max(0, cant - cantDev);
         const tarifa = Number(it.tarifaDia || prod?.value || 0);
         const isServ = isServicioItem(it, prod);
         const isHora = (it.tipoCobro || '').toLowerCase().includes('hora');
 
-        const invAsoc = findInvoiceForRemOrItem(rem, it);
-        const isPagado = !!(invAsoc && (
-            invAsoc.status === 'Paid' || 
-            invAsoc.status === 'Pagada' || 
-            (Number(invAsoc.paidAmount || invAsoc.paid_amount || 0) >= Number(invAsoc.amount || invAsoc.total || 0) && Number(invAsoc.amount || invAsoc.total || 0) > 0)
-        ));
+        const itClean = cleanItemName(it?.nombre || it?.name);
+        const rDate = parseLocalDate(rem?.fecha);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-        if (isPagado) {
-            return { vHoy: 0, isPagado: true, isFacturado: true, invAsoc, isServ };
-        }
+        // Recolectar períodos facturados y ratios de saldo pendiente
+        const billedPeriods = [];
+        let servicePendingRatio = 1.0;
+        let serviceMatched = false;
+        let anyInvoicePaid = false;
+        let matchedInvAsoc = null;
 
-        let ratioPendiente = 1;
-        const isFacturado = !!invAsoc;
-        if (isFacturado) {
-            const totalFactura = Number(invAsoc.amount || invAsoc.total || 0);
-            const pagadoFactura = Number(invAsoc.paidAmount || invAsoc.paid_amount || 0);
-            if (totalFactura > 0 && pagadoFactura > 0) {
-                ratioPendiente = Math.max(0, (totalFactura - pagadoFactura) / totalFactura);
+        (invoices || []).forEach(inv => {
+            const isPaid = inv.status === 'Paid' || inv.status === 'Pagada' || 
+                           (Number(inv.paid_amount || inv.paidAmount || 0) >= Number(inv.amount || inv.total || 0) && Number(inv.amount || inv.total || 0) > 0);
+            const tot = Number(inv.amount || inv.total || 0);
+            const pd = Number(inv.paid_amount || inv.paidAmount || 0);
+            const ratio = isPaid ? 0 : ((tot > 0 && pd > 0) ? Math.max(0, (tot - pd) / tot) : 1);
+
+            (inv.items || []).forEach(invIt => {
+                if (String(invIt.remId) !== String(rem.id)) return;
+                const invClean = cleanItemName(invIt.nombre || invIt.name);
+                const match = (invIt.productId && it.productId && String(invIt.productId) === String(it.productId)) ||
+                              (itClean && invClean && (itClean === invClean || itClean.includes(invClean) || invClean.includes(itClean)));
+                if (match) {
+                    if (!matchedInvAsoc) matchedInvAsoc = inv;
+                    if (isPaid) anyInvoicePaid = true;
+                    if (isServ) {
+                        serviceMatched = true;
+                        servicePendingRatio = Math.min(servicePendingRatio, ratio);
+                    } else {
+                        const cortes = inv.cortes || [];
+                        if (Array.isArray(cortes) && cortes.length > 0 && cortes[0].fechaCorte) {
+                            const cStart = parseLocalDate(cortes[0].fechaInicio) || rDate;
+                            const cEnd = parseLocalDate(cortes[0].fechaCorte);
+                            if (cStart && cEnd) billedPeriods.push({ start: cStart, end: cEnd, ratio, invId: inv.id, isPaid });
+                        } else if (invIt.days && invIt.remFecha) {
+                            const iStart = parseLocalDate(invIt.remFecha);
+                            const iEnd = new Date(iStart);
+                            iEnd.setDate(iStart.getDate() + (Number(invIt.days) - 1));
+                            billedPeriods.push({ start: iStart, end: iEnd, ratio, invId: inv.id, isPaid });
+                        } else if (inv.date) {
+                            const iStart = rDate || parseLocalDate(inv.date);
+                            const iEnd = parseLocalDate(inv.date);
+                            if (iStart && iEnd) billedPeriods.push({ start: iStart, end: iEnd, ratio, invId: inv.id, isPaid });
+                        }
+                    }
+                }
+            });
+        });
+
+        // Facturas vinculadas directamente por remisión
+        if (!matchedInvAsoc && (rem.facturaId || rem.factura_id)) {
+            const targetId = rem.facturaId || rem.factura_id;
+            matchedInvAsoc = (invoices || []).find(inv => String(inv.id) === String(targetId)) || null;
+            if (matchedInvAsoc) {
+                const isPaid = matchedInvAsoc.status === 'Paid' || matchedInvAsoc.status === 'Pagada';
+                if (isPaid) {
+                    anyInvoicePaid = true;
+                    if (isServ) servicePendingRatio = 0;
+                }
             }
         }
 
+        const invAsoc = matchedInvAsoc;
+        const isFacturado = !!invAsoc || billedPeriods.length > 0 || serviceMatched;
+
         if (isServ) {
             const vBruto = cant * tarifa;
-            return { vHoy: Math.round(vBruto * ratioPendiente), isPagado: false, isFacturado, invAsoc, isServ };
+            const vHoy = Math.round(vBruto * servicePendingRatio);
+            const isPagado = servicePendingRatio === 0;
+            return { vHoy, isPagado, isFacturado, invAsoc, isServ, cortePagado: isPagado, enCampo: 0, cantDev: 0 };
         }
 
-        // 1. Días y valor de equipos devueltos
+        const getDaysWeight = (start, end) => {
+            if (!start || !end || start > end) return 0;
+            let curr = new Date(start);
+            let totalWeight = 0;
+            while (curr <= end) {
+                const period = billedPeriods.find(p => curr >= p.start && curr <= p.end);
+                if (period) {
+                    totalWeight += period.ratio;
+                } else {
+                    totalWeight += 1.0;
+                }
+                curr.setDate(curr.getDate() + 1);
+            }
+            return totalWeight;
+        };
+
+        // Equipos devueltos
         let valorDevueltos = 0;
         let cantDevueltosContados = 0;
+
         if (Array.isArray(it.devoluciones) && it.devoluciones.length > 0) {
             it.devoluciones.forEach(dev => {
                 const q = Number(dev.cantidad) || 0;
                 if (q <= 0) return;
                 cantDevueltosContados += q;
 
-                let dDays = 1;
                 if (isHora) {
-                    dDays = Number(it.horasCalculadas || it.dias || 1);
-                } else if (rem.fecha && dev.fecha) {
-                    const rDateStr = typeof rem.fecha === 'string' ? rem.fecha.split('T')[0] : (rem.fecha ? new Date(rem.fecha).toISOString().split('T')[0] : '');
-                    const devDateStr = typeof dev.fecha === 'string' ? dev.fecha.split('T')[0] : (dev.fecha ? new Date(dev.fecha).toISOString().split('T')[0] : '');
-                    const startParts = rDateStr.split('-');
-                    const endParts = devDateStr.split('-');
-                    if (startParts.length === 3 && endParts.length === 3) {
-                        const dStart = new Date(startParts[0], startParts[1] - 1, startParts[2]);
-                        const dEnd = new Date(endParts[0], endParts[1] - 1, endParts[2]);
-                        const diffDays = Math.round((dEnd - dStart) / (1000 * 60 * 60 * 24));
-                        dDays = Math.max(1, diffDays + 1);
-                    }
+                    const h = Number(it.horasCalculadas || it.dias || 1);
+                    const ratio = anyInvoicePaid ? 0 : 1;
+                    valorDevueltos += q * tarifa * h * ratio;
                 } else {
-                    dDays = diasCalc;
+                    const devDate = parseLocalDate(dev.fecha) || today;
+                    const daysWeight = getDaysWeight(rDate, devDate);
+                    valorDevueltos += q * tarifa * daysWeight;
                 }
-                valorDevueltos += q * tarifa * dDays;
             });
         }
 
         const orphanQty = Math.max(0, cantDev - cantDevueltosContados);
         if (orphanQty > 0) {
-            valorDevueltos += orphanQty * tarifa * diasCalc;
+            if (isHora) {
+                const h = Number(it.horasCalculadas || it.dias || 1);
+                const ratio = anyInvoicePaid ? 0 : 1;
+                valorDevueltos += orphanQty * tarifa * h * ratio;
+            } else {
+                const daysWeight = getDaysWeight(rDate, today);
+                valorDevueltos += orphanQty * tarifa * daysWeight;
+            }
         }
 
-        // 2. Equipos aún en campo
-        const enCampo = Math.max(0, cant - cantDev);
-        const horasOEnCampo = isHora ? Number(it.horasCalculadas || it.dias || 1) : diasCalc;
-        const valorEnCampo = enCampo > 0 ? (enCampo * tarifa * horasOEnCampo) : 0;
+        // Equipos aún en campo
+        let valorEnCampo = 0;
+        if (enCampo > 0) {
+            if (isHora) {
+                const h = Number(it.horasCalculadas || it.dias || 1);
+                const ratio = anyInvoicePaid ? 0 : 1;
+                valorEnCampo = enCampo * tarifa * h * ratio;
+            } else {
+                const daysWeight = getDaysWeight(rDate, today);
+                valorEnCampo = enCampo * tarifa * daysWeight;
+            }
+        }
 
-        const valorBrutoTotal = valorDevueltos + valorEnCampo;
-        const vHoy = Math.round(valorBrutoTotal * ratioPendiente);
+        const vHoy = Math.round(valorDevueltos + valorEnCampo);
+        const hasPaidCorte = billedPeriods.some(p => p.ratio === 0);
+        const isPagado = vHoy === 0 && (anyInvoicePaid || (cantDev === cant && cantDev > 0 && isFacturado));
 
-        return { vHoy, isPagado: false, isFacturado, invAsoc, isServ };
+        return { 
+            vHoy, 
+            isPagado, 
+            isFacturado, 
+            invAsoc, 
+            isServ, 
+            cortePagado: hasPaidCorte, 
+            enCampo, 
+            cantDev 
+        };
     };
 
     const clientInvoices = (invoices || []).filter(inv => inv && inv.clientId === client?.id);
@@ -1778,7 +1878,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                                 const tarifa = Number(it.tarifaDia || prod?.value || 0);
                                                                                 const devoluciones = it.devoluciones || [];
 
-                                                                                const { vHoy, isPagado, isFacturado, invAsoc, isServ } = calculateItemValorHoy(rem, it, diasCalc);
+                                                                                const { vHoy, isPagado, isFacturado, invAsoc, isServ, cortePagado } = calculateItemValorHoy(rem, it, diasCalc);
 
                                                                                 return (
                                                                                     <tr key={iIdx} style={{ borderBottom: '1px solid #f1f5f9', background: iIdx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
@@ -1822,6 +1922,10 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                                                         <span style={{ padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
                                                                                                             Pagado {invAsoc?.id ? `(${invAsoc.id})` : ''}
                                                                                                         </span>
+                                                                                                    ) : cortePagado ? (
+                                                                                                        <span style={{ padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem', fontWeight: 700, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }} title="Corte anterior liquidado y pagado">
+                                                                                                            Corte Pagado {invAsoc?.id ? `(${invAsoc.id})` : ''}
+                                                                                                        </span>
                                                                                                     ) : isFacturado ? (
                                                                                                         <span style={{ padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem', fontWeight: 700, background: '#eff6ff', color: '#2365AB', border: '1px solid #bfdbfe' }}>
                                                                                                             Facturado {invAsoc?.id ? `(${invAsoc.id})` : ''}
@@ -1856,11 +1960,15 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                                         </td>
                                                                                         <td style={{ padding: '0.55rem 1rem', textAlign: 'right', color: isPagado ? '#16a34a' : '#0f172a', fontWeight: 800 }}>
                                                                                             ${vHoy.toLocaleString()}
-                                                                                            {isPagado && (
+                                                                                            {isPagado ? (
                                                                                                 <span style={{ display: 'block', fontSize: '0.68rem', color: '#16a34a', fontWeight: 600 }}>
                                                                                                     Saldado
                                                                                                 </span>
-                                                                                            )}
+                                                                                            ) : cortePagado && vHoy > 0 ? (
+                                                                                                <span style={{ display: 'block', fontSize: '0.68rem', color: '#2365AB', fontWeight: 600 }}>
+                                                                                                    Pendiente actual
+                                                                                                </span>
+                                                                                            ) : null}
                                                                                         </td>
                                                                                     </tr>
                                                                                 );
