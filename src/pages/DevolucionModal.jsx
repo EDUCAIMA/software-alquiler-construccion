@@ -9,12 +9,15 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
     const [horaDevolucion, setHoraDevolucion] = useState(format(new Date(), 'HH:mm'));
 
     const isServicio = (item, prod) => {
-        return (item.tipoCobro || '').toLowerCase().includes('servicio') ||
-            (item.tipoCobro || '').toLowerCase().includes('única') ||
-            (item.category || '').toLowerCase().includes('servicio') ||
+        const name = (item?.nombre || item?.name || prod?.name || '').toLowerCase();
+        return (item?.tipoCobro || '').toLowerCase().includes('servicio') ||
+            (item?.tipoCobro || '').toLowerCase().includes('única') ||
+            (item?.category || '').toLowerCase().includes('servicio') ||
             (prod?.category || '').toLowerCase().includes('servicio') ||
             (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
-            (prod?.esquemaCobro || '').toLowerCase().includes('única');
+            (prod?.esquemaCobro || '').toLowerCase().includes('única') ||
+            name.includes('transporte') || name.includes('entrega') ||
+            name.includes('recogida') || name.includes('flete') || name.includes('acarreo');
     };
 
     const client = clients.find(c => c.id === selClientId);
@@ -128,9 +131,10 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
                 }
             }
             if (remItems.length > 0) {
-                const totalRem = rem.items.reduce((s, i) => s + i.cantidad, 0);
-                const totalDev = rem.items.reduce((s, i) => s + i.cantidadDevuelta, 0) + remItems.reduce((s, i) => s + i.descuento, 0);
-                preview.push({ id: rem.id, fecha: rem.fecha, items: remItems, seCierra: totalDev >= totalRem });
+                const physicalItems = (rem.items || []).filter(i => !isServicio(i, products.find(p => p.id === i.productId)));
+                const totalRem = physicalItems.reduce((s, i) => s + (Number(i.cantidad) || 0), 0);
+                const totalDev = physicalItems.reduce((s, i) => s + (Number(i.cantidadDevuelta) || 0), 0) + remItems.reduce((s, i) => s + (Number(i.descuento) || 0), 0);
+                preview.push({ id: rem.id, fecha: rem.fecha, items: remItems, seCierra: totalRem > 0 ? totalDev >= totalRem : true });
             }
         }
         return preview;

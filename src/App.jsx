@@ -95,10 +95,10 @@ function Topbar() {
   }, [theme]);
 
   const menuItems = [
+    { icon: Briefcase,       label: 'Comercial',             path: '/comercial',   restricted: false },
     { icon: LayoutDashboard, label: 'Panel de Control',      path: '/',            restricted: true  },
     { icon: Users,           label: 'Clientes',              path: '/clients',     restricted: false },
     { icon: Package,         label: 'Inventario / Equipos',  path: '/products',    restricted: false },
-    { icon: Briefcase,       label: 'Comercial',             path: '/comercial',   restricted: false },
     { icon: FileText,        label: 'Remisión',              path: '/invoices',    restricted: false },
     { icon: Activity,        label: 'Trazabilidad',          path: '/trazability', restricted: false },
     { icon: Calculator,      label: 'Gastos y Costos Operativos', path: '/gastos-mantenimiento', restricted: false },
@@ -244,6 +244,7 @@ function Topbar() {
                 ref={el => { themeOptionRefs.current[opt.value] = el; }}
                 type="button"
                 title={opt.label}
+                aria-label={opt.label}
                 aria-pressed={isSelected}
                 onClick={() => setTheme(opt.value)}
                 style={{
@@ -251,14 +252,14 @@ function Topbar() {
                   zIndex: 1,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6,
-                  padding: '0.35rem 0.6rem',
+                  justifyContent: 'center',
+                  width: 32,
+                  height: 30,
+                  padding: 0,
                   borderRadius: 8,
                   border: 'none',
                   background: 'transparent',
                   color: isSelected ? 'white' : '#a9c4dc',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
                   cursor: 'pointer',
                   transition: 'color 0.2s',
                 }}
@@ -269,8 +270,7 @@ function Topbar() {
                   if (!isSelected) e.currentTarget.style.color = '#a9c4dc';
                 }}
               >
-                <OptIcon size={15} />
-                <span className="hide-on-mobile">{opt.label}</span>
+                <OptIcon size={16} />
               </button>
             );
           })}

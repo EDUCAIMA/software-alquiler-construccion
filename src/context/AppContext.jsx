@@ -767,10 +767,26 @@ export const AppProvider = ({ children }) => {
     // 3. Actualizar estados y persistir solo las remisiones modificadas
     for (const id of modifiedIds) {
       const rem = updatedRemsMap[id];
-      const total = rem.items.reduce((s, i) => s + (Number(i.cantidad) || 0), 0);
-      const devuelto = rem.items.reduce((s, i) => s + (Number(i.cantidadDevuelta) || 0), 0);
+      const checkIsServ = (i) => {
+        const prod = products.find(p => p.id === i.productId);
+        const name = (i.nombre || i.name || prod?.name || '').toLowerCase();
+        return (i.tipoCobro || '').toLowerCase().includes('servicio') ||
+          (i.tipoCobro || '').toLowerCase().includes('única') ||
+          (i.category || '').toLowerCase().includes('servicio') ||
+          (prod?.category || '').toLowerCase().includes('servicio') ||
+          (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+          (prod?.esquemaCobro || '').toLowerCase().includes('única') ||
+          name.includes('transporte') ||
+          name.includes('entrega') ||
+          name.includes('recogida') ||
+          name.includes('flete') ||
+          name.includes('acarreo');
+      };
+      const physicalItems = (rem.items || []).filter(i => !checkIsServ(i));
+      const total = physicalItems.reduce((s, i) => s + (Number(i.cantidad) || 0), 0);
+      const devuelto = physicalItems.reduce((s, i) => s + (Number(i.cantidadDevuelta) || 0), 0);
       
-      rem.estado = devuelto === 0 ? 'Activa' : devuelto >= total ? 'Cerrada' : 'Parcial';
+      rem.estado = total === 0 ? 'Cerrada' : devuelto === 0 ? 'Activa' : devuelto >= total ? 'Cerrada' : 'Parcial';
       
       await api.put(`/api/remisiones/${rem.id}`, rem);
     }
