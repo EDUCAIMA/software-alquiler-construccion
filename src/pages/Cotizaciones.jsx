@@ -41,8 +41,11 @@ class ModalErrorBoundary extends React.Component {
     render() {
         if (this.state.hasError) {
             return (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                    <div style={{ background: 'white', padding: '2rem', borderRadius: 12, maxWidth: 500, width: '90%' }}>
+                <div 
+                    onClick={() => { this.setState({ hasError: false, error: null }); this.props.onClose?.(); }}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+                >
+                    <div onClick={e => e.stopPropagation()} style={{ background: 'white', padding: '2rem', borderRadius: 12, maxWidth: 500, width: '90%' }}>
                         <h3 style={{ color: '#ef4444', marginBottom: '1rem' }}>⚠️ Error al cargar el formulario</h3>
                         <pre style={{ background: '#f8fafc', padding: '1rem', borderRadius: 8, fontSize: '0.75rem', overflow: 'auto', maxHeight: 200, color: '#dc2626' }}>
                             {this.state.error?.message || String(this.state.error)}
@@ -659,8 +662,11 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
 
             {/* Verify Dispatch Modal */}
             {showVerifyModal && verifyTarget && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '1rem' }}>
-                    <div style={{ background: 'white', borderRadius: 16, maxWidth: 440, width: '100%', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                <div 
+                    onClick={() => { setShowVerifyModal(false); setVerifyTarget(null); }}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '1rem' }}
+                >
+                    <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, maxWidth: 440, width: '100%', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
                         <div style={{ background: 'linear-gradient(135deg,#2365AB,#104166)', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                 <Truck size={20} color="white" />
@@ -709,8 +715,11 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
 
             {/* Pay Invoice Modal */}
             {payingInvoice && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
-                    <div className="glass-panel" style={{ maxWidth: 460, width: '100%', padding: 0, overflow: 'hidden', background: 'white', borderRadius: 16 }}>
+                <div 
+                    onClick={() => setPayingInvoice(null)}
+                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}
+                >
+                    <div onClick={e => e.stopPropagation()} className="glass-panel" style={{ maxWidth: 460, width: '100%', padding: 0, overflow: 'hidden', background: 'white', borderRadius: 16 }}>
                         {/* Header */}
                         <div style={{ background: 'linear-gradient(135deg,#10b981,#059669)', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

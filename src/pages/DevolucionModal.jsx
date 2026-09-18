@@ -172,8 +172,8 @@ export default function DevolucionModal({ clientId: initialClientId, obraId: ini
     const selectStyle = { width: '100%', padding: '0.65rem 0.75rem', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '10px', color: '#1e293b', fontSize: '0.9rem', outline: 'none', transition: 'all 0.2s' };
 
     return (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
-            <div style={{ background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', width: '100%', maxWidth: 950, maxHeight: '90vh', display: 'flex', flexDirection: 'column', marginTop: '4vh', transition: 'all 0.2s ease-out' }}>
+        <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', width: '100%', maxWidth: 950, maxHeight: '90vh', display: 'flex', flexDirection: 'column', marginTop: '4vh', transition: 'all 0.2s ease-out' }}>
                 {/* Header */}
                 <div style={{ padding: '1rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ffffff', borderTopLeftRadius: '16px', borderTopRightRadius: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>

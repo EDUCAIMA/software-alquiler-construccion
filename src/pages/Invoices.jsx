@@ -698,12 +698,15 @@ export default function Invoices({ hideHeader = false } = {}) {
 
             {/* ===================== NEW INVOICE MODAL ===================== */}
             {showModal && (
-                <div className="modal-overlay">
-                    <div className="modal-content fadeIn" style={{ maxWidth: '680px', padding: '0' }}>
+                <div className="modal-overlay" onClick={() => setShowModal(false)}>
+                    <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px', padding: '0' }}>
 
                         {/* Modal Header with Steps */}
                         <div style={{ padding: '1.75rem 2rem 1.25rem', borderBottom: '1px solid var(--surface-border)' }}>
-                            <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '1.25rem' }}>Generar Orden de Alquiler</h3>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                                <h3 style={{ fontSize: '1.3rem', fontWeight: 700, margin: 0 }}>Generar Orden de Alquiler</h3>
+                                <button onClick={() => setShowModal(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
+                            </div>
                             <div className="flex items-center gap-2">
                                 {/* Step 1 */}
                                 <div className="flex items-center gap-2">
@@ -901,8 +904,8 @@ export default function Invoices({ hideHeader = false } = {}) {
                 const client = clients.find(c => c.id === inv.clientId);
                 const invTotal = inv.amount;
                 return (
-                    <div className="modal-overlay">
-                        <div className="modal-content fadeIn" style={{ maxWidth: '720px', padding: 0 }}>
+                    <div className="modal-overlay" onClick={() => setShowViewModal(false)}>
+                        <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: '720px', padding: 0 }}>
                             {/* Invoice Header */}
                             <div style={{ background: 'linear-gradient(135deg, #2365AB, #154272)', padding: '2rem', borderRadius: '16px 16px 0 0' }}>
                                 <div className="flex justify-between items-start">
@@ -910,12 +913,15 @@ export default function Invoices({ hideHeader = false } = {}) {
                                          <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white' }}>{settings?.shortName || 'CIELO'}</div>
                                          <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>{settings?.nameComplement || 'Alquiler de Equipos y Herramientas'}</div>
                                      </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>{inv.id}</div>
-                                        <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>Fecha: {inv.date}</div>
-                                        <span style={{ display: 'inline-block', marginTop: 8, padding: '2px 12px', borderRadius: 999, fontSize: '0.75rem', fontWeight: 700, background: inv.status === 'Paid' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)', color: 'white', border: '1px solid rgba(255,255,255,0.3)' }}>
-                                            {inv.status === 'Paid' ? 'PAGADA' : 'PENDIENTE'}
-                                        </span>
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>{inv.id}</div>
+                                            <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>Fecha: {inv.date}</div>
+                                            <span style={{ display: 'inline-block', marginTop: 8, padding: '2px 12px', borderRadius: 999, fontSize: '0.75rem', fontWeight: 700, background: inv.status === 'Paid' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)', color: 'white', border: '1px solid rgba(255,255,255,0.3)' }}>
+                                                {inv.status === 'Paid' ? 'PAGADA' : 'PENDIENTE'}
+                                            </span>
+                                        </div>
+                                        <button onClick={() => setShowViewModal(false)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
                                     </div>
                                 </div>
                             </div>
@@ -1024,10 +1030,10 @@ export default function Invoices({ hideHeader = false } = {}) {
                 const inv = payingInvoice;
                 const client = clients.find(c => c.id === inv.clientId);
                 return (
-                    <div className="modal-overlay">
-                        <div className="modal-content fadeIn" style={{ maxWidth: '480px', padding: 0, overflow: 'hidden' }}>
+                    <div className="modal-overlay" onClick={() => setShowPayModal(false)}>
+                        <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', padding: 0, overflow: 'hidden' }}>
                             {/* Header */}
-                            <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: '1.75rem 2rem', borderRadius: '16px 16px 0 0' }}>
+                            <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: '1.75rem 2rem', borderRadius: '16px 16px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                     <div style={{ width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         <DollarSign size={26} color="white" />
@@ -1037,6 +1043,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                                         <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>Remisión de Cobro {inv.id}</div>
                                     </div>
                                 </div>
+                                <button onClick={() => setShowPayModal(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
                             </div>
 
                             <div style={{ padding: '1.75rem 2rem' }}>

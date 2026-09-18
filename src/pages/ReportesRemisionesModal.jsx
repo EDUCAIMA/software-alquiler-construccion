@@ -615,7 +615,7 @@ export default function ReportesRemisionesModal({
     };
 
     return (
-        <div style={{
+        <div onClick={onClose} style={{
             position: 'fixed',
             inset: 0,
             background: 'rgba(15, 23, 42, 0.65)',
@@ -626,7 +626,7 @@ export default function ReportesRemisionesModal({
             zIndex: 1100,
             padding: '1.5rem'
         }}>
-            <div style={{
+            <div onClick={e => e.stopPropagation()} style={{
                 background: '#ffffff',
                 borderRadius: '16px',
                 boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',

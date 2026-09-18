@@ -233,13 +233,13 @@ function DeleteClientModal({ client, onClose, onConfirm }) {
     const [error, setError] = useState('');
     
     return (
-        <div className="modal-overlay" style={{ zIndex: 2000 }}>
+        <div className="modal-overlay" onClick={onClose} style={{ zIndex: 2000 }}>
             <div 
                 className="modal-content fadeIn" 
                 onClick={e => e.stopPropagation()}
                 style={{ maxWidth: 420, padding: 0, overflow: 'hidden' }}
             >
-                <div style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', padding: '1.5rem 2rem' }}>
+                <div style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', padding: '1.5rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Trash2 size={22} color="white" />
@@ -249,6 +249,7 @@ function DeleteClientModal({ client, onClose, onConfirm }) {
                             <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>{client.name}</div>
                         </div>
                     </div>
+                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
                 </div>
                 <div style={{ padding: '1.5rem 2rem' }}>
                     <div style={{ display: 'flex', gap: '0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '0.85rem', marginBottom: '1.25rem' }}>
@@ -348,13 +349,13 @@ function DeleteProviderModal({ provider, onClose, onConfirm }) {
     const [error, setError] = useState('');
     
     return (
-        <div className="modal-overlay" style={{ zIndex: 2000 }}>
+        <div className="modal-overlay" onClick={onClose} style={{ zIndex: 2000 }}>
             <div 
                 className="modal-content fadeIn" 
                 onClick={e => e.stopPropagation()}
                 style={{ maxWidth: 420, padding: 0, overflow: 'hidden' }}
             >
-                <div style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', padding: '1.5rem 2rem' }}>
+                <div style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', padding: '1.5rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Trash2 size={22} color="white" />
@@ -364,6 +365,7 @@ function DeleteProviderModal({ provider, onClose, onConfirm }) {
                             <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>{provider.name}</div>
                         </div>
                     </div>
+                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
                 </div>
                 <div style={{ padding: '1.5rem 2rem' }}>
                     <div style={{ display: 'flex', gap: '0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '0.85rem', marginBottom: '1.25rem' }}>
@@ -792,7 +794,7 @@ function AddEditBatchModal({ mode, product, batch, onSave, onClose }) {
     };
 
     return (
-        <div className="modal-overlay" style={{ zIndex: 1200 }}>
+        <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
             <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, width: '100%', borderRadius: 12, overflow: 'hidden' }}>
                 <div style={{ padding: '1.25rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 style={{ margin: 0, color: '#104166', fontSize: '1.15rem', fontWeight: 700 }}>
@@ -1465,7 +1467,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
     return (
         <>
             <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', backdropFilter:'blur(6px)', zIndex:1000 }} />
-            <div style={{ position:'fixed', inset:0, zIndex:1001, display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
+            <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:1001, display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
                 <div onClick={e => e.stopPropagation()} style={{
                     width:'100%', maxWidth:1180, height:'90vh',
                     display:'flex', overflow:'hidden',

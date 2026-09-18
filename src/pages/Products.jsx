@@ -279,9 +279,9 @@ function BajaModal({ product, onClose, onConfirm }) {
         onClose();
     };
     return (
-        <div className="modal-overlay">
-            <div className="modal-content fadeIn" style={{ maxWidth: 440, padding: 0, overflow: 'hidden' }}>
-                <div style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)', padding: '1.5rem 2rem' }}>
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, padding: 0, overflow: 'hidden' }}>
+                <div style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)', padding: '1.5rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <ArrowDownCircle size={22} color="white" />
@@ -291,6 +291,7 @@ function BajaModal({ product, onClose, onConfirm }) {
                             <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>{product.name} · {product.id}</div>
                         </div>
                     </div>
+                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
                 </div>
                 <div style={{ padding: '1.5rem 2rem' }}>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', lineHeight: 1.6 }}>
@@ -345,9 +346,9 @@ function DeleteModal({ product, onClose, onConfirm }) {
         onClose();
     };
     return (
-        <div className="modal-overlay">
-            <div className="modal-content fadeIn" style={{ maxWidth: 400, padding: 0, overflow: 'hidden' }}>
-                <div style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', padding: '1.5rem 2rem' }}>
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, padding: 0, overflow: 'hidden' }}>
+                <div style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', padding: '1.5rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Trash2 size={22} color="white" />
@@ -357,6 +358,7 @@ function DeleteModal({ product, onClose, onConfirm }) {
                             <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>{product.name} · {product.id}</div>
                         </div>
                     </div>
+                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
                 </div>
                 <div style={{ padding: '1.5rem 2rem' }}>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', lineHeight: 1.6 }}>
@@ -1207,7 +1209,10 @@ export default function Products() {
             {showAddModal && (
                 <div className="modal-overlay" onClick={() => setShowAddModal(false)} style={{ alignItems: 'flex-start', padding: '2rem 1rem' }}>
                     <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 900, width: '100%', maxHeight: '80vh', overflowY: 'auto', marginTop: '2vh' }}>
-                        <h3 className="modal-title">Agregar Nuevo Equipo</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                            <h3 className="modal-title" style={{ margin: 0 }}>Agregar Nuevo Equipo</h3>
+                            <button onClick={() => setShowAddModal(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
+                        </div>
                         
                         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.6fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
@@ -1306,7 +1311,10 @@ export default function Products() {
             {showEditModal && editingProduct && (
                 <div className="modal-overlay" onClick={() => setShowEditModal(false)} style={{ alignItems: 'flex-start', padding: '2rem 1rem' }}>
                     <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: 900, width: '100%', maxHeight: '80vh', overflowY: 'auto', marginTop: '2vh' }}>
-                        <h3 className="modal-title">Editar Equipo — {editingProduct.id}</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                            <h3 className="modal-title" style={{ margin: 0 }}>Editar Equipo — {editingProduct.id}</h3>
+                            <button onClick={() => setShowEditModal(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
+                        </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.6fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                             <div className="input-group" style={{ margin: 0 }}>
