@@ -4,7 +4,7 @@ import {
     AlertTriangle, X, Wrench, Trash2, ArrowDownCircle,
     ShieldCheck, ShieldAlert, Download, Factory, Pencil,
     ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Search, ChevronUp,
-    User, MapPin
+    User, MapPin, BarChart2
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import jsPDF from 'jspdf';
@@ -12,6 +12,7 @@ import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { applyStandardLayout } from './pdfTheme';
 import * as echarts from 'echarts';
+import EquipmentUsageReportModal from './EquipmentUsageReportModal';
 
 
 // ─── DropZone – definido FUERA del componente para evitar re-montaje ─────────
@@ -754,6 +755,7 @@ export default function Products() {
     const [showAddModal, setShowAddModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showFieldModal, setShowFieldModal] = useState(false);
+    const [showUsageModal, setShowUsageModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
     const [hojaProduct, setHojaProduct] = useState(null);
     const [bajaProduct, setBajaProduct] = useState(null);
@@ -764,11 +766,14 @@ export default function Products() {
     useEffect(() => {
         const h1 = () => setShowFieldModal(true);
         const h2 = () => setShowAddModal(true);
+        const h3 = () => setShowUsageModal(true);
         window.addEventListener('trigger-field-inv', h1);
         window.addEventListener('trigger-new-prod', h2);
+        window.addEventListener('trigger-usage-report', h3);
         return () => {
             window.removeEventListener('trigger-field-inv', h1);
             window.removeEventListener('trigger-new-prod', h2);
+            window.removeEventListener('trigger-usage-report', h3);
         };
     }, []);
 
@@ -924,6 +929,30 @@ export default function Products() {
                         style={{ padding: '0.55rem 0.75rem', paddingLeft: '2rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', width: '100%', boxSizing: 'border-box' }} 
                     />
                 </div>
+                <button
+                    onClick={() => setShowUsageModal(true)}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.45rem',
+                        padding: '0.52rem 0.95rem',
+                        borderRadius: 8,
+                        background: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        color: '#1D4ED8',
+                        fontWeight: 700,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.15s'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#DBEAFE'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; }}
+                    title="Ver reporte detallado de días y horas de uso de máquinas y herramientas"
+                >
+                    <BarChart2 size={16} />
+                    Reporte de Uso de Equipos
+                </button>
             </div>
 
             {/* Table */}
@@ -1202,6 +1231,17 @@ export default function Products() {
                     products={products} 
                     remisiones={remisiones} 
                     clients={clients} 
+                />
+            )}
+
+            {/* Equipment Usage Report Modal */}
+            {showUsageModal && (
+                <EquipmentUsageReportModal
+                    onClose={() => setShowUsageModal(false)}
+                    products={products}
+                    remisiones={remisiones}
+                    clients={clients}
+                    settings={settings}
                 />
             )}
 

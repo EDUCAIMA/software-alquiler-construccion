@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Package, Activity,
   Wrench, LogOut, ShieldAlert, Calculator, Briefcase, Settings,
   Plus, RotateCcw, DollarSign, ArrowDownCircle, FileText,
-  Sun, Moon, Monitor, Wallet
+  Sun, Moon, Monitor, Wallet, BarChart2
 } from 'lucide-react';
 import { AppProvider, useAppContext } from './context/AppContext';
 
@@ -352,6 +352,7 @@ function Topbar() {
           ].map(renderActionBtn)}
 
           {location.pathname === '/products' && [
+            { label: 'Reporte de Uso', icon: BarChart2, event: 'trigger-usage-report', color: '#2563EB' },
             { label: 'Ver Equipos en Campo', icon: ArrowDownCircle, event: 'trigger-field-inv', color: '#76B1E0' },
             { label: 'Nuevo Equipo', icon: Package, event: 'trigger-new-prod', color: '#10b981' },
           ].map(renderActionBtn)}
