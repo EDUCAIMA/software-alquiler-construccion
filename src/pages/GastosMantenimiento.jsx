@@ -274,7 +274,7 @@ export default function GastosMantenimiento() {
     const exportToPDF = () => {
         const doc = new jsPDF();
         const margin = 10;
-        let y = applyStandardLayout(doc, 'Reporte de Gastos', settings);
+        let y = applyStandardLayout(doc, 'Reporte de Gastos', settings, '', { skipFooter: true });
 
         doc.setTextColor(100, 116, 139); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
         doc.text('Reporte de Gastos y Costos Operativos Filtrados', margin, y + 8);
@@ -318,6 +318,19 @@ export default function GastosMantenimiento() {
             footStyles: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [30, 41, 59] },
             margin: { left: margin, right: margin },
         });
+
+        // Pie de página en todas las páginas con el formato estándar del reporte de gastos
+        const pageCount = doc.internal.getNumberOfPages();
+        const W = doc.internal.pageSize.getWidth();
+        const H = doc.internal.pageSize.getHeight();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            doc.setFontSize(6.5);
+            doc.setTextColor(100, 116, 139);
+            doc.setFont('helvetica', 'normal');
+            const generationInfo = `Página ${i} de ${pageCount}  |  Generado por Sistema de Gestión ${settings?.shortName || 'CIELO'} el ${format(new Date(), 'dd/MM/yyyy HH:mm')}`;
+            doc.text(generationInfo, W / 2, H - 8, { align: 'center' });
+        }
 
         doc.save(`Reporte_Gastos_${format(new Date(), 'yyyyMMdd_HHmmss')}.pdf`);
     };

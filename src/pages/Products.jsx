@@ -579,7 +579,7 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
         const H = doc.internal.pageSize.getHeight();
         const margin = 10;
 
-        let y = applyStandardLayout(doc, 'Reporte de Equipos en Campo', settings);
+        let y = applyStandardLayout(doc, 'Reporte de Equipos en Campo', settings, '', { skipFooter: true });
 
         const tableData = equipmentInField.map(row => [
             row.productName,
@@ -616,7 +616,7 @@ function FieldInventoryModal({ onClose, products, remisiones, clients }) {
 
         // --- 4. Agregar Nueva Página con Gráfico Resumen ---
         doc.addPage();
-        let chartPageY = applyStandardLayout(doc, 'Resumen Gráfico: Equipos en Campo', settings);
+        let chartPageY = applyStandardLayout(doc, 'Resumen Gráfico: Equipos en Campo', settings, '', { skipFooter: true });
         doc.addImage(chartImage, 'PNG', 20, chartPageY + 12, 239.4, 110);
 
         // --- 5. Pie de Página Profesional en todas las páginas ---
