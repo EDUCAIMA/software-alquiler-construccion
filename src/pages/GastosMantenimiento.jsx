@@ -274,6 +274,8 @@ export default function GastosMantenimiento() {
     const exportToPDF = () => {
         const doc = new jsPDF();
         const margin = 10;
+        const W = doc.internal.pageSize.getWidth();
+        const H = doc.internal.pageSize.getHeight();
         let y = applyStandardLayout(doc, 'Reporte de Gastos', settings, '', { skipFooter: true });
 
         doc.setTextColor(100, 116, 139); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
@@ -292,37 +294,104 @@ export default function GastosMantenimiento() {
             y += 5;
         }
 
-        const bodyData = filteredGastos.map(g => [
-            g.id,
-            g.tipo_gasto,
-            g.subtipo_gasto || '—',
-            g.proveedor_beneficiario || '—',
-            g.referencia_soporte || '—',
-            g.descripcion || '—',
-            g.metodo_pago || 'Sin especificar',
-            `$${Math.round(g.costo || 0).toLocaleString()}`,
-            safeFormatDate(g.fecha_gasto, 'dd/MM/yyyy')
-        ]);
-
         const totalCosto = filteredGastos.reduce((s, g) => s + (Number(g.costo) || 0), 0);
 
-        autoTable(doc, {
-            startY: y + 17,
-            head: [['ID', 'Categoria', 'Subcategoria', 'Proveedor', 'Ref. Soporte', 'Descripcion', 'Metodo', 'Costo', 'Fecha']],
-            body: [
-                ...bodyData,
-                ['', '', '', '', '', '', 'TOTAL FILTRADO:', `$${Math.round(totalCosto).toLocaleString()}`, '']
-            ],
-            headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 8 },
-            styles: { fontSize: 7, cellPadding: 2.5 },
-            footStyles: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [30, 41, 59] },
-            margin: { left: margin, right: margin },
-        });
+        if (filteredGastos.length === 0) {
+            doc.setFontSize(9);
+            doc.setTextColor(100, 116, 139);
+            doc.text('No hay gastos registrados para los filtros seleccionados.', margin, y + 17);
+        } else {
+            // Agrupar gastos por categoría (tipo_gasto)
+            const gastosPorCategoria = {};
+            filteredGastos.forEach(g => {
+                const cat = g.tipo_gasto || 'Otros Gastos';
+                if (!gastosPorCategoria[cat]) gastosPorCategoria[cat] = [];
+                gastosPorCategoria[cat].push(g);
+            });
+
+            let currentY = y + 17;
+
+            Object.entries(gastosPorCategoria).forEach(([categoria, items]) => {
+                if (doc.lastAutoTable) {
+                    currentY = doc.lastAutoTable.finalY + 8;
+                }
+
+                // Verificar si cabe el encabezado de categoría y al menos una fila (aprox 25mm)
+                if (currentY + 25 > H - 18) {
+                    doc.addPage();
+                    currentY = 15;
+                }
+
+                const subtotalCat = items.reduce((s, g) => s + (Number(g.costo) || 0), 0);
+
+                // Franja de título de la categoría
+                doc.setFillColor(241, 245, 249);
+                doc.setDrawColor(203, 213, 225);
+                doc.setLineWidth(0.3);
+                doc.roundedRect(margin, currentY, W - (margin * 2), 7, 1.5, 1.5, 'FD');
+
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(30, 41, 59);
+                doc.text(`CATEGORÍA: ${categoria.toUpperCase()} (${items.length} ${items.length === 1 ? 'registro' : 'registros'})`, margin + 4, currentY + 4.8);
+
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(35, 101, 171);
+                doc.text(`Subtotal: $${Math.round(subtotalCat).toLocaleString('es-CO')}`, W - margin - 4, currentY + 4.8, { align: 'right' });
+
+                const catBodyData = items.map(g => [
+                    g.id,
+                    g.subtipo_gasto || '—',
+                    g.proveedor_beneficiario || '—',
+                    g.referencia_soporte || '—',
+                    g.descripcion || '—',
+                    g.metodo_pago || 'Sin especificar',
+                    `$${Math.round(g.costo || 0).toLocaleString('es-CO')}`,
+                    safeFormatDate(g.fecha_gasto, 'dd/MM/yyyy')
+                ]);
+
+                autoTable(doc, {
+                    startY: currentY + 9,
+                    head: [['ID', 'Subcategoría', 'Proveedor / Beneficiario', 'Ref. Soporte', 'Descripción', 'Método', 'Costo', 'Fecha']],
+                    body: catBodyData,
+                    foot: [[
+                        '', '', '', '', '', 'Subtotal Categoría:', `$${Math.round(subtotalCat).toLocaleString('es-CO')}`, ''
+                    ]],
+                    headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
+                    styles: { fontSize: 7, cellPadding: 2 },
+                    footStyles: { fontStyle: 'bold', fillColor: [248, 250, 252], textColor: [30, 41, 59], fontSize: 7.5 },
+                    columnStyles: {
+                        0: { cellWidth: 16 },
+                        1: { cellWidth: 28 },
+                        2: { cellWidth: 28 },
+                        3: { cellWidth: 22 },
+                        4: { cellWidth: 'auto' },
+                        5: { cellWidth: 22 },
+                        6: { cellWidth: 24, halign: 'right' },
+                        7: { cellWidth: 18, halign: 'center' }
+                    },
+                    margin: { left: margin, right: margin }
+                });
+            });
+
+            // Resumen de Total General al final de todas las categorías
+            let finalY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 8 : currentY + 10;
+            if (finalY + 16 > H - 18) {
+                doc.addPage();
+                finalY = 15;
+            }
+
+            doc.setFillColor(30, 41, 59);
+            doc.roundedRect(margin, finalY, W - (margin * 2), 9, 2, 2, 'F');
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(255, 255, 255);
+            doc.text('TOTAL GENERAL GASTOS FILTRADOS:', margin + 6, finalY + 6);
+            doc.text(`$${Math.round(totalCosto).toLocaleString('es-CO')}`, W - margin - 6, finalY + 6, { align: 'right' });
+        }
 
         // Pie de página en todas las páginas con el formato estándar del reporte de gastos
         const pageCount = doc.internal.getNumberOfPages();
-        const W = doc.internal.pageSize.getWidth();
-        const H = doc.internal.pageSize.getHeight();
         for (let i = 1; i <= pageCount; i++) {
             doc.setPage(i);
             doc.setFontSize(6.5);
