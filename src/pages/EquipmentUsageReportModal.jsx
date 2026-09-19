@@ -311,41 +311,32 @@ export default function EquipmentUsageReportModal({
         doc.setTextColor(35, 101, 171);
         doc.text(`${summary.totalDiasEquipo.toLocaleString()} días`, margin + 225, y + 8);
 
-        const tableBody = usageData.map(item => {
-            const obrasList = Array.from(item.obrasMap.values())
-                .map(o => `${o.obraName} (${o.dias}d)`)
-                .slice(0, 3)
-                .join(', ');
-
-            return [
-                item.name,
-                item.category,
-                item.tipoPropiedad === 'Terceros' ? `Terceros${item.proveedor ? ` (${item.proveedor})` : ''}` : 'Propio',
-                item.despachosCount.toString(),
-                item.unidadesDespachadas.toString(),
-                `${item.diasUsoTotal} días`,
-                `${item.diasEquipoTotal} d-eq`,
-                obrasList || '—'
-            ];
-        });
+        const tableBody = usageData.map(item => [
+            item.name,
+            item.category,
+            item.tipoPropiedad === 'Terceros' ? `Terceros${item.proveedor ? ` (${item.proveedor})` : ''}` : 'Propio',
+            item.despachosCount.toString(),
+            item.unidadesDespachadas.toString(),
+            `${item.diasUsoTotal} días`,
+            `${item.diasEquipoTotal} d-eq`
+        ]);
 
         autoTable(doc, {
             startY: y + 19,
             margin: { left: margin, right: margin },
-            head: [['Equipo / Herramienta', 'Categoría', 'Propiedad', 'Despachos', 'Cant.', 'Días en Obra', 'Días-Equipo', 'Obras / Clientes Principales']],
+            head: [['Equipo / Herramienta', 'Categoría', 'Propiedad', 'Despachos', 'Cant.', 'Días en Obra', 'Días-Equipo']],
             body: tableBody,
             headStyles: { fillColor: [35, 101, 171], textColor: 255, fontStyle: 'bold', fontSize: 8 },
             bodyStyles: { fontSize: 8, textColor: [51, 65, 85], font: 'helvetica' },
             alternateRowStyles: { fillColor: [248, 250, 252] },
             columnStyles: {
-                0: { cellWidth: 55 },
-                1: { cellWidth: 32 },
-                2: { cellWidth: 28 },
-                3: { cellWidth: 20, halign: 'center' },
-                4: { cellWidth: 16, halign: 'center' },
-                5: { cellWidth: 25, halign: 'center' },
-                6: { cellWidth: 25, halign: 'center' },
-                7: { cellWidth: 'auto' }
+                0: { cellWidth: 'auto' },
+                1: { cellWidth: 45 },
+                2: { cellWidth: 40 },
+                3: { cellWidth: 25, halign: 'center' },
+                4: { cellWidth: 20, halign: 'center' },
+                5: { cellWidth: 35, halign: 'center' },
+                6: { cellWidth: 35, halign: 'center' }
             },
             foot: [[
                 'TOTALES',
@@ -354,8 +345,7 @@ export default function EquipmentUsageReportModal({
                 summary.totalDespachos.toString(),
                 usageData.reduce((s, r) => s + r.unidadesDespachadas, 0).toString(),
                 `${summary.totalDiasUso.toLocaleString()} días`,
-                `${summary.totalDiasEquipo.toLocaleString()} d-eq`,
-                ''
+                `${summary.totalDiasEquipo.toLocaleString()} d-eq`
             ]],
             footStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontStyle: 'bold', fontSize: 8 }
         });
@@ -777,14 +767,12 @@ export default function EquipmentUsageReportModal({
                                     <th style={{ padding: '0.75rem 0.6rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700, textAlign: 'center' }}>Cant.</th>
                                     <th style={{ padding: '0.75rem 0.6rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700, textAlign: 'center' }}>Días en Obra</th>
                                     <th style={{ padding: '0.75rem 0.6rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700, textAlign: 'center' }}>Días-Equipo</th>
-                                    <th style={{ padding: '0.75rem 0.6rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700 }}>Destinos / Obras</th>
                                     <th style={{ padding: '0.75rem 0.6rem', fontSize: '0.75rem', color: 'white', textTransform: 'uppercase', fontWeight: 700, textAlign: 'center', borderTopRightRadius: '8px', borderBottomRightRadius: '8px' }}>Detalle</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {usageData.map((item, idx) => {
                                     const isExpanded = expandedItem === item.id;
-                                    const obras = Array.from(item.obrasMap.values());
                                     const propiedadTexto = item.tipoPropiedad === 'Terceros' ? `Terceros${item.proveedor ? ` (${item.proveedor})` : ''}` : 'Propio';
 
                                     return (
@@ -814,9 +802,6 @@ export default function EquipmentUsageReportModal({
                                                 <td style={cellCenterStyle}>
                                                     {item.diasEquipoTotal} d-eq
                                                 </td>
-                                                <td style={cellStyle}>
-                                                    {obras.length === 0 ? '—' : obras.map(o => `${o.obraName} (${o.dias}d)`).join(', ')}
-                                                </td>
                                                 <td style={cellCenterStyle}>
                                                     {item.detalles.length > 0 && (
                                                         <button
@@ -845,7 +830,7 @@ export default function EquipmentUsageReportModal({
                                             {/* Subtabla de Detalle con el mismo estilo unificado */}
                                             {isExpanded && (
                                                 <tr style={{ background: '#F8FAFC' }}>
-                                                    <td colSpan={9} style={{ padding: '0.75rem 1.5rem' }}>
+                                                    <td colSpan={8} style={{ padding: '0.75rem 1.5rem' }}>
                                                         <div style={{ background: 'white', borderRadius: 8, border: '1px solid #E2E8F0', padding: '0.75rem' }}>
                                                             <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1E293B', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                                                 <Building2 size={14} color="#2365AB" />
