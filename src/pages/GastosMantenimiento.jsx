@@ -278,9 +278,6 @@ export default function GastosMantenimiento() {
         const H = doc.internal.pageSize.getHeight();
         let y = applyStandardLayout(doc, 'Reporte de Gastos', settings, '', { skipFooter: true });
 
-        doc.setTextColor(100, 116, 139); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-        doc.text('Reporte de Gastos y Costos Operativos Filtrados', margin, y + 8);
-        
         let filterSummary = [];
         if (filtroFechaInicio) filterSummary.push(`Desde: ${filtroFechaInicio}`);
         if (filtroFechaFin) filterSummary.push(`Hasta: ${filtroFechaFin}`);
@@ -290,7 +287,10 @@ export default function GastosMantenimiento() {
         if (search) filterSummary.push(`Busqueda: "${search}"`);
         
         if (filterSummary.length > 0) {
-            doc.text(`Filtros: ${filterSummary.join('  |  ')}`, margin, y + 13);
+            doc.setTextColor(100, 116, 139);
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Filtros: ${filterSummary.join('  |  ')}`, margin, y + 7);
             y += 5;
         }
 
@@ -346,7 +346,7 @@ export default function GastosMantenimiento() {
                 };
             });
 
-            let currentY = y + 17;
+            let currentY = y + (filterSummary.length > 0 ? 13 : 7);
             categorias.forEach(categoria => {
                 // Espacio para el título de categoría y el primer cuadro de subcategoría.
                 if (currentY + 28 > H - 18) {
@@ -354,15 +354,27 @@ export default function GastosMantenimiento() {
                     currentY = 15;
                 }
 
+                // Encabezado de categoría: bloque oscuro con jerarquía de nombre,
+                // cantidad y subtotal para que cada sección sea identificable de inmediato.
                 doc.setFillColor(30, 41, 59);
                 doc.setDrawColor(30, 41, 59);
-                doc.roundedRect(margin, currentY, W - (margin * 2), 8, 1.5, 1.5, 'FD');
-                doc.setFontSize(8);
+                doc.roundedRect(margin, currentY, W - (margin * 2), 12, 1.8, 1.8, 'FD');
+                doc.setFillColor(35, 101, 171);
+                doc.roundedRect(margin, currentY, 3, 12, 1.8, 1.8, 'F');
+                doc.setFontSize(6.5);
                 doc.setFont('helvetica', 'bold');
+                doc.setTextColor(147, 197, 253);
+                doc.text('CATEGORÍA', margin + 7, currentY + 4.5);
+                doc.setFontSize(8.5);
                 doc.setTextColor(255, 255, 255);
-                doc.text(`CATEGORÍA: ${categoria.nombre.toUpperCase()} (${categoria.cantidad} ${categoria.cantidad === 1 ? 'registro' : 'registros'})`, margin + 4, currentY + 5.2);
-                doc.text(`Subtotal categoría: ${formatCurrency(categoria.subtotal)}`, W - margin - 4, currentY + 5.2, { align: 'right' });
-                currentY += 11;
+                doc.text(categoria.nombre.toUpperCase(), margin + 7, currentY + 9.1);
+                doc.setFontSize(6.5);
+                doc.setTextColor(203, 213, 225);
+                doc.text(`${categoria.cantidad} ${categoria.cantidad === 1 ? 'REGISTRO' : 'REGISTROS'}`, W - margin - 36, currentY + 4.5, { align: 'right' });
+                doc.setFontSize(9);
+                doc.setTextColor(255, 255, 255);
+                doc.text(formatCurrency(categoria.subtotal), W - margin - 5, currentY + 9.1, { align: 'right' });
+                currentY += 15;
 
                 categoria.subcategorias.forEach(subcategoria => {
                     if (currentY + 25 > H - 18) {
@@ -370,18 +382,30 @@ export default function GastosMantenimiento() {
                         currentY = 15;
                     }
 
-                    doc.setFillColor(239, 246, 255);
-                    doc.setDrawColor(147, 197, 253);
-                    doc.setLineWidth(0.25);
-                    doc.roundedRect(margin, currentY, W - (margin * 2), 7, 1.2, 1.2, 'FD');
-                    doc.setFontSize(7.8);
+                    // Encabezado de subcategoría con fondo claro y acento lateral.
+                    doc.setFillColor(248, 250, 252);
+                    doc.setDrawColor(203, 213, 225);
+                    doc.setLineWidth(0.3);
+                    doc.roundedRect(margin, currentY, W - (margin * 2), 9, 1.2, 1.2, 'FD');
+                    doc.setDrawColor(59, 130, 246);
+                    doc.setLineWidth(1.1);
+                    doc.line(margin + 1, currentY + 1.5, margin + 1, currentY + 7.5);
+                    doc.setFontSize(6.3);
                     doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(100, 116, 139);
+                    doc.text('SUBCATEGORÍA', margin + 6, currentY + 3.8);
+                    doc.setFontSize(8);
                     doc.setTextColor(30, 64, 175);
-                    doc.text(`SUBCATEGORÍA: ${subcategoria.nombre.toUpperCase()} (${subcategoria.items.length} ${subcategoria.items.length === 1 ? 'registro' : 'registros'})`, margin + 4, currentY + 4.7);
-                    doc.text(`Subtotal: ${formatCurrency(subcategoria.subtotal)}`, W - margin - 4, currentY + 4.7, { align: 'right' });
+                    doc.text(subcategoria.nombre.toUpperCase(), margin + 6, currentY + 7.4);
+                    doc.setFontSize(6.3);
+                    doc.setTextColor(100, 116, 139);
+                    doc.text(`${subcategoria.items.length} ${subcategoria.items.length === 1 ? 'registro' : 'registros'}`, W - margin - 38, currentY + 3.8, { align: 'right' });
+                    doc.setFontSize(8.5);
+                    doc.setTextColor(30, 64, 175);
+                    doc.text(formatCurrency(subcategoria.subtotal), W - margin - 5, currentY + 7.4, { align: 'right' });
 
                     autoTable(doc, {
-                        startY: currentY + 8.5,
+                        startY: currentY + 10.5,
                         head: [['ID', 'Proveedor / Beneficiario', 'Ref. Soporte', 'Descripción', 'Método', 'Costo', 'Fecha']],
                         body: subcategoria.items.map(gasto => [
                             gasto.id,
@@ -393,9 +417,10 @@ export default function GastosMantenimiento() {
                             safeFormatDate(gasto.fecha_gasto, 'dd/MM/yyyy')
                         ]),
                         foot: [['', '', '', '', 'Subtotal subcategoría:', formatCurrency(subcategoria.subtotal), '']],
-                        headStyles: { fillColor: [30, 41, 59], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
-                        styles: { fontSize: 7, cellPadding: 2 },
-                        footStyles: { fontStyle: 'bold', fillColor: [239, 246, 255], textColor: [30, 64, 175], fontSize: 7.5 },
+                        headStyles: { fillColor: [35, 101, 171], textColor: 255, fontSize: 7.2, fontStyle: 'bold', cellPadding: 2.2 },
+                        styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240], lineWidth: 0.15, textColor: [51, 65, 85], overflow: 'linebreak' },
+                        alternateRowStyles: { fillColor: [248, 250, 252] },
+                        footStyles: { fontStyle: 'bold', fillColor: [219, 234, 254], textColor: [30, 64, 175], fontSize: 7.5 },
                         columnStyles: {
                             0: { cellWidth: 16 },
                             1: { cellWidth: 32 },
@@ -408,7 +433,7 @@ export default function GastosMantenimiento() {
                         margin: { left: margin, right: margin, bottom: 18 },
                         rowPageBreak: 'avoid'
                     });
-                    currentY = doc.lastAutoTable.finalY + 7;
+                    currentY = doc.lastAutoTable.finalY + 8;
                 });
             });
 
