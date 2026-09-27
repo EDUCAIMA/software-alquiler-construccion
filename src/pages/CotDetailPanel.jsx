@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
     X, FileText, DollarSign, Truck, Download, Edit2, CheckCircle, Package, Shield, 
     Activity, RotateCcw, Plus, Printer, Check, CreditCard, Clock, AlertTriangle, Ban,
@@ -54,10 +54,20 @@ export default function CotDetailPanel({
     const { users, editRemision, deleteRemision, products = [], clients = [] } = useAppContext();
     const [activeTab, setActiveTab] = useState('cotizacion');
     const [editingRemisionTarget, setEditingRemisionTarget] = useState(null);
+    const [localEdits, setLocalEdits] = useState({});
+    const quoteValue = (field) => Object.prototype.hasOwnProperty.call(localEdits, field)
+        ? localEdits[field]
+        : cot[field];
+
+    useEffect(() => {
+        setLocalEdits({});
+    }, [cot.id]);
+
     const updateQuoteField = async (field, value, successText) => {
         if (!onUpdateCot) return;
         try {
             await onUpdateCot(cot.id, { [field]: value });
+            setLocalEdits(prev => ({ ...prev, [field]: value }));
             Swal.fire({ title: 'Actualizado', text: successText, icon: 'success', confirmButtonColor: '#2365AB' });
         } catch (error) {
             Swal.fire({ title: 'Error', text: error.message, icon: 'error', confirmButtonColor: '#ef4444' });
@@ -65,14 +75,14 @@ export default function CotDetailPanel({
     };
     const handleEditFecha = async () => {
         const { value } = await Swal.fire({
-            title: 'Editar fecha de la cotización', input: 'date', inputValue: cot.fecha || format(new Date(), 'yyyy-MM-dd'),
+            title: 'Editar fecha de la cotización', input: 'date', inputValue: quoteValue('fecha') || format(new Date(), 'yyyy-MM-dd'),
             showCancelButton: true, confirmButtonText: 'Guardar', cancelButtonText: 'Cancelar', confirmButtonColor: '#2365AB'
         });
         if (value) await updateQuoteField('fecha', value, 'La fecha de la cotización fue actualizada.');
     };
     const handleEditNotas = async () => {
         const { value } = await Swal.fire({
-            title: 'Editar notas para el cliente', input: 'textarea', inputValue: cot.notas || '',
+            title: 'Editar notas para el cliente', input: 'textarea', inputValue: quoteValue('notas') || '',
             inputPlaceholder: 'Condiciones, observaciones o instrucciones…', inputAttributes: { 'aria-label': 'Notas de la cotización' },
             showCancelButton: true, confirmButtonText: 'Guardar notas', cancelButtonText: 'Cancelar', confirmButtonColor: '#2365AB'
         });
@@ -80,7 +90,7 @@ export default function CotDetailPanel({
     };
     const handleEditDeposito = async () => {
         const { value } = await Swal.fire({
-            title: 'Depósito reembolsable', input: 'number', inputValue: Number(cot.deposito) || 0,
+            title: 'Depósito reembolsable', input: 'number', inputValue: Number(quoteValue('deposito')) || 0,
             inputAttributes: { min: 0, step: 1000 }, showCancelButton: true, confirmButtonText: 'Guardar depósito', cancelButtonText: 'Cancelar', confirmButtonColor: '#2365AB'
         });
         if (value !== undefined) await updateQuoteField('deposito', Math.max(0, Number(value) || 0), 'El depósito de la cotización fue actualizado.');
@@ -104,7 +114,7 @@ export default function CotDetailPanel({
             cancelButtonColor: '#64748b',
             confirmButtonText: 'Siguiente',
             cancelButtonText: 'Cancelar',
-            inputValue: ['Crédito 30 días', 'Crédito 15 días', 'Contado', 'Contra entrega'].includes(cot.metodoPago) ? cot.metodoPago : 'custom'
+            inputValue: ['Crédito 30 días', 'Crédito 15 días', 'Contado', 'Contra entrega'].includes(quoteValue('metodoPago')) ? quoteValue('metodoPago') : 'custom'
         });
 
         if (nuevoMetodo) {
@@ -119,7 +129,7 @@ export default function CotDetailPanel({
                     cancelButtonColor: '#64748b',
                     confirmButtonText: 'Guardar',
                     cancelButtonText: 'Cancelar',
-                    inputValue: !['Crédito 30 días', 'Crédito 15 días', 'Contado', 'Contra entrega'].includes(cot.metodoPago) ? cot.metodoPago : ''
+                    inputValue: !['Crédito 30 días', 'Crédito 15 días', 'Contado', 'Contra entrega'].includes(quoteValue('metodoPago')) ? quoteValue('metodoPago') : ''
                 });
                 if (customMetodo !== undefined) {
                     finalMetodo = customMetodo;
@@ -131,6 +141,7 @@ export default function CotDetailPanel({
             if (finalMetodo.trim() !== '') {
                 try {
                     await onUpdateCot(cot.id, { metodoPago: finalMetodo });
+                    setLocalEdits(prev => ({ ...prev, metodoPago: finalMetodo }));
                     Swal.fire({
                         title: '¡Actualizado!',
                         text: 'La forma de pago ha sido actualizada con éxito.',
@@ -157,7 +168,7 @@ export default function CotDetailPanel({
     const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
     const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
     const totalVal = cot.type === 'inv' ? cot.amount : (subtotal + iva + ret + (cot.transporte || 0));
-    const deposito = Number(cot.deposito) || 0;
+    const deposito = Number(quoteValue('deposito')) || 0;
     const relatedInvoice = invoices.find(inv => inv.id === cot.id || inv.id === cot.facturaId || inv.cotizacionId === cot.id) || (cot.type === 'inv' ? cot : null);
     
     // --- Lógica de Liquidación Dinámica por Ítem ---
@@ -445,7 +456,7 @@ export default function CotDetailPanel({
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', padding: '0.25rem 0', borderBottom: '1px solid #f1f5f9' }}>
                                     <span style={{ color: '#64748b' }}>Fecha Cotización</span>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                        <span style={{ fontWeight: 600, color: '#104166' }}>{cot.fecha || '—'}</span>
+                                        <span style={{ fontWeight: 600, color: '#104166' }}>{quoteValue('fecha') || '—'}</span>
                                         {onUpdateCot && <button onClick={handleEditFecha} title="Editar fecha" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2365AB', padding: 2, display: 'flex' }}><Edit2 size={12} /></button>}
                                     </div>
                                 </div>
@@ -453,7 +464,7 @@ export default function CotDetailPanel({
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', padding: '0.25rem 0', borderBottom: '1px solid #f1f5f9' }}>
                                     <span style={{ color: '#64748b' }}>Método Pago</span>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                        <span style={{ fontWeight: 600, color: '#104166' }}>{cot.metodoPago || '—'}</span>
+                                        <span style={{ fontWeight: 600, color: '#104166' }}>{quoteValue('metodoPago') || '—'}</span>
                                         {onUpdateCot && (
                                             <button 
                                                 onClick={handleEditMetodoPago}
@@ -504,7 +515,7 @@ export default function CotDetailPanel({
 
                             <div style={{ fontSize: '0.78rem', color: '#64748b', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.65rem 0.85rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{cot.notas || 'Sin notas para el cliente.'}</div>
+                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{quoteValue('notas') || 'Sin notas para el cliente.'}</div>
                                     {onUpdateCot && <button onClick={handleEditNotas} title="Editar notas" style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2365AB', borderRadius: 7, padding: 6, cursor: 'pointer', display: 'flex', flexShrink: 0 }}><Edit2 size={14} /></button>}
                                 </div>
                             </div>

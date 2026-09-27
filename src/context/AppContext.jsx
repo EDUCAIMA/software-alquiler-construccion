@@ -1021,9 +1021,14 @@ export const AppProvider = ({ children }) => {
   const updateCotizacion = async (cotId, data) => {
     const current = cotizaciones.find(c => c.id === cotId);
     if (!current) return;
-    await api.put(`/api/cotizaciones/${cotId}`, { ...current, ...data });
+    const updated = { ...current, ...data };
+    await api.put(`/api/cotizaciones/${cotId}`, updated);
+    // Refleja el cambio inmediatamente en la cotización que está abierta.
+    // reloadAll mantiene después el estado sincronizado con la base de datos.
+    setCotizaciones(prev => prev.map(c => c.id === cotId ? updated : c));
     await reloadAll();
     logAction('Cotización Actualizada', cotId, '', 'system');
+    return updated;
   };
 
   const deleteCotizacion = async (cotId) => {
