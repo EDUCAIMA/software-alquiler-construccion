@@ -1342,6 +1342,59 @@ h3 {
 .theme-popover button:hover,
 .theme-popover button.active { background: rgba(35,101,171,0.12); color: var(--primary); }
 
+/* Accesos de informes dentro de Inventario */
+.inventory-report-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.inventory-report-button {
+  min-width: 245px;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.inventory-report-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 15px rgba(15,23,42,0.14);
+}
+
+.inventory-report-button__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.inventory-report-button__content { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 1px; }
+.inventory-report-button__content strong { font-size: 0.78rem; font-weight: 800; }
+.inventory-report-button__content small { font-size: 0.64rem; line-height: 1.25; opacity: 0.82; }
+.inventory-report-button__tag { padding: 0.18rem 0.35rem; border-radius: 5px; font-size: 0.6rem; font-weight: 900; letter-spacing: 0.04em; }
+
+.inventory-report-button--pdf { border: 1px solid #0f766e; background: #0f766e; color: #fff; }
+.inventory-report-button--pdf .inventory-report-button__icon { background: rgba(255,255,255,0.18); }
+.inventory-report-button--pdf .inventory-report-button__tag { background: rgba(255,255,255,0.2); color: #fff; }
+
+.inventory-report-button--usage { border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+.inventory-report-button--usage .inventory-report-button__icon { background: #dbeafe; }
+.inventory-report-button--usage .inventory-report-button__tag { background: #dbeafe; color: #1d4ed8; }
+
+@media (max-width: 720px) {
+  .inventory-report-actions { width: 100%; }
+  .inventory-report-button { width: 100%; min-width: 0; }
+}
+
 .header-right {
   display: flex;
   align-items: center;

@@ -1026,37 +1026,32 @@ export default function Products() {
                         style={{ padding: '0.55rem 0.75rem', paddingLeft: '2rem', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--surface-border)', borderRadius: 8, color: 'var(--text-primary)', fontSize: '0.875rem', outline: 'none', width: '100%', boxSizing: 'border-box' }} 
                     />
                 </div>
-                <button
-                    onClick={() => generateInventoryPDF(products, remisiones, clients, maintenances, settings)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.52rem 0.95rem', borderRadius: 8, background: '#0f766e', border: '1px solid #0f766e', color: 'white', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    title="Inventario completo: bodega, obra, daño y ubicación detallada"
-                >
-                    <Download size={16}/> Exportar inventario PDF
-                </button>
-                <button
-                    onClick={() => setShowUsageModal(true)}
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.45rem',
-                        padding: '0.52rem 0.95rem',
-                        borderRadius: 8,
-                        background: '#EFF6FF',
-                        border: '1px solid #BFDBFE',
-                        color: '#1D4ED8',
-                        fontWeight: 700,
-                        fontSize: '0.82rem',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        transition: 'all 0.15s'
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#DBEAFE'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#EFF6FF'; }}
-                    title="Ver reporte detallado de días y horas de uso de máquinas y herramientas"
-                >
-                    <BarChart2 size={16} />
-                    Reporte de Uso de Equipos
-                </button>
+                <div className="inventory-report-actions" aria-label="Informes de inventario">
+                    <button
+                        className="inventory-report-button inventory-report-button--pdf"
+                        onClick={() => generateInventoryPDF(products, remisiones, clients, maintenances, settings)}
+                        title="Descargar inventario completo: bodega, obra, daño y ubicación detallada"
+                    >
+                        <span className="inventory-report-button__icon"><Download size={20}/></span>
+                        <span className="inventory-report-button__content">
+                            <strong>Descargar inventario PDF</strong>
+                            <small>Total, bodega, obra, dañados y detalle por remisión</small>
+                        </span>
+                        <span className="inventory-report-button__tag">PDF</span>
+                    </button>
+                    <button
+                        className="inventory-report-button inventory-report-button--usage"
+                        onClick={() => setShowUsageModal(true)}
+                        title="Abrir informe detallado de días y horas de uso de máquinas y herramientas"
+                    >
+                        <span className="inventory-report-button__icon"><BarChart2 size={20} /></span>
+                        <span className="inventory-report-button__content">
+                            <strong>Informe de uso de equipos</strong>
+                            <small>Consulte días, horas y utilización por equipo</small>
+                        </span>
+                        <span className="inventory-report-button__tag">VER</span>
+                    </button>
+                </div>
             </div>
 
             {/* Table */}
