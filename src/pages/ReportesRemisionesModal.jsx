@@ -231,30 +231,41 @@ export default function ReportesRemisionesModal({
         }).sort((a, b) => b.ingresosFacturados - a.ingresosFacturados);
     }, [remisionesFiltradas, clients, invoices, fechaDesde, fechaHasta]);
 
-    // ─── Resumen por Ítems / Equipos ──────────────────────────────────────────
+    const itemKindLabel = itemKind === 'productos'
+        ? 'PRODUCTOS'
+        : (itemKind === 'servicios' ? 'SERVICIOS' : 'PRODUCTOS Y SERVICIOS');
+
+    // ─── Resumen operativo y financiero por producto / servicio ───────────────
     const equiposResumen = useMemo(() => {
         const prodMap = new Map();
 
+        const ensureItem = (rawItem = {}) => {
+            const pId = String(rawItem.productId || rawItem.id || rawItem.nombre || rawItem.name || 'Ítem sin identificar');
+            if (!prodMap.has(pId)) {
+                const prod = products.find(p => String(p.id) === String(pId));
+                const servicio = esServicio(rawItem, prod);
+                prodMap.set(pId, {
+                    id: pId,
+                    nombre: rawItem.nombre || rawItem.name || prod?.name || pId,
+                    categoria: traducirCategoria(prod?.category || rawItem.category),
+                    tipo: servicio ? 'Servicio' : 'Producto',
+                    esServicio: servicio,
+                    vecesAlquilado: 0,
+                    registrosFacturados: 0,
+                    totalDespachado: 0,
+                    totalDevuelto: 0,
+                    enCampo: 0,
+                    totalFacturado: 0,
+                    totalCobrado: 0,
+                    saldoPendiente: 0
+                });
+            }
+            return prodMap.get(pId);
+        };
+
         remisionesFiltradas.forEach(r => {
             (r.items || []).forEach(it => {
-                const pId = it.productId || it.nombre;
-                if (!prodMap.has(pId)) {
-                    const prod = products.find(p => p.id === pId);
-                    const servicio = esServicio(it, prod);
-                    prodMap.set(pId, {
-                        id: pId,
-                        nombre: it.nombre || prod?.name || pId,
-                        categoria: traducirCategoria(prod?.category || it.category),
-                        tipo: servicio ? 'Servicio' : 'Producto',
-                        esServicio: servicio,
-                        vecesAlquilado: 0,
-                        totalDespachado: 0,
-                        totalDevuelto: 0,
-                        enCampo: 0
-                    });
-                }
-
-                const rec = prodMap.get(pId);
+                const rec = ensureItem(it);
                 rec.vecesAlquilado += 1;
                 if (!rec.esServicio) {
                     const c = Number(it.cantidad) || 0;
@@ -266,10 +277,53 @@ export default function ReportesRemisionesModal({
             });
         });
 
+        // Distribuir los totales de cada factura proporcionalmente entre sus ítems.
+        // De esta manera el filtro Productos/Servicios también separa correctamente
+        // lo facturado, lo cobrado y el saldo pendiente.
+        (invoices || []).forEach(inv => {
+            if (fechaDesde && inv.date < fechaDesde) return;
+            if (fechaHasta && inv.date > fechaHasta) return;
+
+            const invoiceItems = Array.isArray(inv.items) ? inv.items : [];
+            if (invoiceItems.length === 0) return;
+
+            const weights = invoiceItems.map(it => {
+                const rec = ensureItem(it);
+                const quantity = rec.esServicio ? 1 : Math.max(0, Number(it.quantity ?? it.cantidad) || 0);
+                const days = rec.esServicio ? 1 : Math.max(1, Number(it.days ?? it.dias) || 1);
+                const price = Math.max(0, Number(it.price ?? it.tarifaDia ?? it.value) || 0);
+                return Math.max(0, quantity * days * price);
+            });
+            const totalWeight = weights.reduce((sum, value) => sum + value, 0);
+            const invoiceAmount = Math.max(0, Number(inv.amount ?? inv.total) || 0);
+            const invoicePaid = (inv.status === 'Paid' || inv.status === 'Pagada')
+                ? invoiceAmount
+                : Math.min(invoiceAmount, Math.max(0, Number(inv.paidAmount ?? inv.paid_amount) || 0));
+
+            invoiceItems.forEach((it, index) => {
+                const rec = ensureItem(it);
+                const ratio = totalWeight > 0 ? weights[index] / totalWeight : 1 / invoiceItems.length;
+                const billed = invoiceAmount * ratio;
+                const paid = invoicePaid * ratio;
+                rec.registrosFacturados += 1;
+                rec.totalFacturado += billed;
+                rec.totalCobrado += paid;
+                rec.saldoPendiente += Math.max(0, billed - paid);
+            });
+        });
+
         return Array.from(prodMap.values())
             .filter(item => itemKind === 'todos' || (itemKind === 'servicios' ? item.esServicio : !item.esServicio))
-            .sort((a, b) => b.vecesAlquilado - a.vecesAlquilado || b.totalDespachado - a.totalDespachado);
-    }, [remisionesFiltradas, products, itemKind]);
+            .sort((a, b) => b.totalFacturado - a.totalFacturado || b.vecesAlquilado - a.vecesAlquilado || b.totalDespachado - a.totalDespachado);
+    }, [remisionesFiltradas, products, invoices, fechaDesde, fechaHasta, itemKind]);
+
+    const metricasEquipos = useMemo(() => equiposResumen.reduce((totals, item) => ({
+        totalFacturado: totals.totalFacturado + item.totalFacturado,
+        totalPagado: totals.totalPagado + item.totalCobrado,
+        saldoPendiente: totals.saldoPendiente + item.saldoPendiente
+    }), { totalFacturado: 0, totalPagado: 0, saldoPendiente: 0 }), [equiposResumen]);
+
+    const metricasVisibles = reportType === 'equipos' ? metricasEquipos : metricas;
 
     // ─── Resumen de Cartera y Deudas de Clientes (Quién debe y cuánto) ────────
     const carteraResumen = useMemo(() => {
@@ -311,7 +365,7 @@ export default function ReportesRemisionesModal({
     // ─── Generación de PDF ────────────────────────────────────────────────────
     const exportarPDF = () => {
         try {
-            const doc = new jsPDF({ orientation: 'portrait', format: 'letter', unit: 'mm' });
+            const doc = new jsPDF({ orientation: reportType === 'equipos' ? 'landscape' : 'portrait', format: 'letter', unit: 'mm' });
             const W = doc.internal.pageSize.getWidth();
             const H = doc.internal.pageSize.getHeight();
             const margin = 10;
@@ -325,7 +379,7 @@ export default function ReportesRemisionesModal({
                     : (reportType === 'ingresos'
                         ? 'CONSOLIDADO DE INGRESOS POR CLIENTE'
                         : (reportType === 'equipos'
-                            ? 'INFORME POR PRODUCTO Y SERVICIO'
+                            ? `INFORME DE ${itemKindLabel}`
                             : 'INFORME DE REMISIONES Y ALQUILER')),
                 settings,
                 nroDoc,
@@ -391,9 +445,9 @@ export default function ReportesRemisionesModal({
                     margin: { left: margin, right: margin },
                     head: [['TOTAL FACTURADO', 'TOTAL RECAUDADO / COBRADO', 'SALDO PENDIENTE']],
                     body: [[
-                        fmtCOP(metricas.totalFacturado),
-                        fmtCOP(metricas.totalPagado),
-                        fmtCOP(metricas.saldoPendiente)
+                        fmtCOP(metricasVisibles.totalFacturado),
+                        fmtCOP(metricasVisibles.totalPagado),
+                        fmtCOP(metricasVisibles.saldoPendiente)
                     ]],
                     theme: 'plain',
                     headStyles: {
@@ -503,23 +557,25 @@ export default function ReportesRemisionesModal({
                     }
                 });
             } else if (reportType === 'equipos') {
-                // Reporte enfocado a rotación de ítems
+                // Reporte financiero y operativo por ítem
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(8.5);
                 doc.setTextColor(30, 41, 59);
-                doc.text(`INFORME POR PRODUCTO Y SERVICIO · ${itemKind.toUpperCase()}`, margin, y);
+                doc.text(`INFORME DE ${itemKindLabel}`, margin, y);
                 y += 3;
 
                 autoTable(doc, {
                     startY: y,
                     margin: { left: margin, right: margin, bottom: 22 },
-                    head: [['#', 'PRODUCTO / SERVICIO', 'TIPO', 'CATEGORÍA', 'REGISTROS', 'CANTIDAD\nDESPACHADA', 'CANTIDAD\nDEVUELTA', 'SALDO EN\nOBRA']],
+                    head: [['#', itemKind === 'productos' ? 'PRODUCTO' : (itemKind === 'servicios' ? 'SERVICIO' : 'PRODUCTO / SERVICIO'), 'TIPO', 'REGISTROS', 'TOTAL FACTURADO', 'TOTAL COBRADO', 'SALDO PENDIENTE', 'DESP.', 'DEV.', 'EN OBRA']],
                     body: equiposResumen.map((eq, idx) => [
                         idx + 1,
                         eq.nombre.toUpperCase(),
                         eq.tipo,
-                        eq.categoria,
-                        eq.vecesAlquilado,
+                        eq.registrosFacturados || eq.vecesAlquilado,
+                        fmtCOP(eq.totalFacturado),
+                        fmtCOP(eq.totalCobrado),
+                        fmtCOP(eq.saldoPendiente),
                         eq.esServicio ? '—' : eq.totalDespachado,
                         eq.esServicio ? '—' : eq.totalDevuelto,
                         eq.esServicio ? '—' : eq.enCampo
@@ -529,14 +585,23 @@ export default function ReportesRemisionesModal({
                     styles: { fontSize: 7, cellPadding: 2, lineWidth: 0.1, lineColor: [226, 232, 240] },
                     columnStyles: {
                         0: { halign: 'center', cellWidth: 8 },
-                        1: { halign: 'left', cellWidth: 54 },
-                        2: { halign: 'center', cellWidth: 18 },
-                        3: { halign: 'center', cellWidth: 20 },
-                        4: { halign: 'center', cellWidth: 22 },
-                        5: { halign: 'center', cellWidth: 24 },
-                        6: { halign: 'center', cellWidth: 24 },
-                        7: { halign: 'center', fontStyle: 'bold', cellWidth: 24 }
-                    }
+                        1: { halign: 'left', cellWidth: 60 },
+                        2: { halign: 'center', cellWidth: 19 },
+                        3: { halign: 'center', cellWidth: 18 },
+                        4: { halign: 'right', fontStyle: 'bold', cellWidth: 30 },
+                        5: { halign: 'right', fontStyle: 'bold', textColor: [16, 185, 129], cellWidth: 30 },
+                        6: { halign: 'right', fontStyle: 'bold', textColor: [35, 101, 171], cellWidth: 30 },
+                        7: { halign: 'center', cellWidth: 16 },
+                        8: { halign: 'center', cellWidth: 16 },
+                        9: { halign: 'center', fontStyle: 'bold', cellWidth: 17 }
+                    },
+                    foot: [[
+                        '', `TOTALES DE ${itemKindLabel}:`, '', '',
+                        fmtCOP(metricasEquipos.totalFacturado),
+                        fmtCOP(metricasEquipos.totalPagado),
+                        fmtCOP(metricasEquipos.saldoPendiente), '', '', ''
+                    ]],
+                    footStyles: { fillColor: [239, 246, 255], textColor: [35, 101, 171], fontSize: 7, fontStyle: 'bold' }
                 });
             } else {
                 // Reporte Detallado de Remisiones
@@ -630,7 +695,9 @@ export default function ReportesRemisionesModal({
                 ? `Estado_Cartera_${format(new Date(), 'yyyy-MM-dd')}.pdf`
                 : (reportType === 'ingresos'
                     ? `Consolidado_Ingresos_${format(new Date(), 'yyyy-MM-dd')}.pdf`
-                    : `Informe_Remisiones_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+                    : (reportType === 'equipos'
+                        ? `Informe_${itemKindLabel.replaceAll(' ', '_')}_${format(new Date(), 'yyyy-MM-dd')}.pdf`
+                        : `Informe_Remisiones_${format(new Date(), 'yyyy-MM-dd')}.pdf`));
             doc.save(fileName);
         } catch (error) {
             console.error('Error generando PDF de reporte:', error);
@@ -858,20 +925,26 @@ export default function ReportesRemisionesModal({
                         }}>
                             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.15rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
                                 <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total Facturado (COP)</div>
-                                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#2365AB', marginTop: 4 }}>{fmtCOP(metricas.totalFacturado)}</div>
-                                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 3 }}>Valor total generado en el período</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#2365AB', marginTop: 4 }}>{fmtCOP(metricasVisibles.totalFacturado)}</div>
+                                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 3 }}>
+                                    {reportType === 'equipos' ? `Solo ${itemKindLabel.toLowerCase()} del período` : 'Valor total generado en el período'}
+                                </div>
                             </div>
 
                             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '1.15rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
                                 <div style={{ fontSize: '0.75rem', color: '#166534', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total Recaudado / Cobrado (COP)</div>
-                                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#10b981', marginTop: 4 }}>{fmtCOP(metricas.totalPagado)}</div>
-                                <div style={{ fontSize: '0.72rem', color: '#15803d', marginTop: 3 }}>Dinero efectivamente cobrado</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#10b981', marginTop: 4 }}>{fmtCOP(metricasVisibles.totalPagado)}</div>
+                                <div style={{ fontSize: '0.72rem', color: '#15803d', marginTop: 3 }}>
+                                    {reportType === 'equipos' ? `Cobrado por ${itemKindLabel.toLowerCase()}` : 'Dinero efectivamente cobrado'}
+                                </div>
                             </div>
 
                             <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '1.15rem', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
                                 <div style={{ fontSize: '0.75rem', color: '#1e40af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Saldo Pendiente (COP)</div>
-                                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#2365AB', marginTop: 4 }}>{fmtCOP(metricas.saldoPendiente)}</div>
-                                <div style={{ fontSize: '0.72rem', color: '#3b82f6', marginTop: 3 }}>Diferencia pendiente por cobrar</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#2365AB', marginTop: 4 }}>{fmtCOP(metricasVisibles.saldoPendiente)}</div>
+                                <div style={{ fontSize: '0.72rem', color: '#3b82f6', marginTop: 3 }}>
+                                    {reportType === 'equipos' ? `Pendiente de ${itemKindLabel.toLowerCase()}` : 'Diferencia pendiente por cobrar'}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -946,8 +1019,12 @@ export default function ReportesRemisionesModal({
                     </div>
 
                     {reportType === 'equipos' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
-                            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Mostrar:</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+                            <div style={{ fontSize: '0.9rem', color: '#1e293b', fontWeight: 900 }}>
+                                INFORME DE {itemKindLabel}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Mostrar:</span>
                             {[
                                 ['todos', 'Todos'],
                                 ['productos', 'Productos'],
@@ -971,6 +1048,7 @@ export default function ReportesRemisionesModal({
                                     {label}
                                 </button>
                             ))}
+                            </div>
                         </div>
                     )}
 
@@ -1130,6 +1208,9 @@ export default function ReportesRemisionesModal({
                                         <th style={{ padding: '0.75rem', textAlign: 'center' }}>Tipo</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'center' }}>Categoría</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'center' }}>Registros</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Facturado</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Total Cobrado</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'right' }}>Saldo Pendiente</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'center' }}>Total Despachado</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'center' }}>Total Devuelto</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'center' }}>Saldo en Obra</th>
@@ -1138,7 +1219,7 @@ export default function ReportesRemisionesModal({
                                 <tbody>
                                     {equiposResumen.length === 0 ? (
                                         <tr>
-                                            <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                                            <td colSpan={10} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
                                                 Sin productos o servicios para los filtros aplicados.
                                             </td>
                                         </tr>
@@ -1157,7 +1238,16 @@ export default function ReportesRemisionesModal({
                                                     {eq.categoria}
                                                 </td>
                                                 <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>
-                                                    {eq.vecesAlquilado}
+                                                    {eq.registrosFacturados || eq.vecesAlquilado}
+                                                </td>
+                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 800, color: '#2365AB', whiteSpace: 'nowrap' }}>
+                                                    {fmtCOP(eq.totalFacturado)}
+                                                </td>
+                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 800, color: '#10b981', whiteSpace: 'nowrap' }}>
+                                                    {fmtCOP(eq.totalCobrado)}
+                                                </td>
+                                                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 800, color: eq.saldoPendiente > 0 ? '#2365AB' : '#64748b', whiteSpace: 'nowrap' }}>
+                                                    {fmtCOP(eq.saldoPendiente)}
                                                 </td>
                                                 <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 700 }}>
                                                     {eq.esServicio ? '—' : eq.totalDespachado}
@@ -1172,6 +1262,19 @@ export default function ReportesRemisionesModal({
                                         ))
                                     )}
                                 </tbody>
+                                {equiposResumen.length > 0 && (
+                                    <tfoot style={{ background: '#eff6ff', borderTop: '2px solid #bfdbfe', fontWeight: 900 }}>
+                                        <tr>
+                                            <td colSpan={4} style={{ padding: '0.8rem', textAlign: 'right', color: '#1e40af' }}>
+                                                TOTALES DE {itemKindLabel}:
+                                            </td>
+                                            <td style={{ padding: '0.8rem', textAlign: 'right', color: '#2365AB', whiteSpace: 'nowrap' }}>{fmtCOP(metricasEquipos.totalFacturado)}</td>
+                                            <td style={{ padding: '0.8rem', textAlign: 'right', color: '#10b981', whiteSpace: 'nowrap' }}>{fmtCOP(metricasEquipos.totalPagado)}</td>
+                                            <td style={{ padding: '0.8rem', textAlign: 'right', color: '#2365AB', whiteSpace: 'nowrap' }}>{fmtCOP(metricasEquipos.saldoPendiente)}</td>
+                                            <td colSpan={3}></td>
+                                        </tr>
+                                    </tfoot>
+                                )}
                             </table>
                         )}
 
@@ -1302,8 +1405,10 @@ export default function ReportesRemisionesModal({
                     <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
                         {reportType === 'cartera' ? (
                             <>Mostrando <strong>{carteraResumen.length}</strong> clientes evaluados. Total cartera por cobrar: <strong style={{ color: '#2365AB' }}>{fmtCOP(metricasCartera.totalCartera)}</strong>.</>
+                        ) : reportType === 'equipos' ? (
+                            <>Mostrando <strong>{equiposResumen.length}</strong> {itemKindLabel.toLowerCase()}. Facturado: <strong style={{ color: '#2365AB' }}>{fmtCOP(metricasEquipos.totalFacturado)}</strong>; cobrado: <strong style={{ color: '#10b981' }}>{fmtCOP(metricasEquipos.totalPagado)}</strong>.</>
                         ) : (
-                            <>Mostrando <strong>{remisionesFiltradas.length}</strong> remisiones con <strong>{metricas.totalEquiposEnCampo}</strong> equipos en campo.</>
+                            <>Mostrando <strong>{remisionesFiltradas.length}</strong> remisiones del período seleccionado.</>
                         )}
                     </div>
                     <div style={{ display: 'flex', gap: '0.75rem' }}>
