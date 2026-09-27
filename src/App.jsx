@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Package, Activity,
   Wrench, LogOut, ShieldAlert, Calculator, Briefcase, Settings,
   Plus, RotateCcw, DollarSign, ArrowDownCircle, FileText,
-  Sun, Moon, Monitor, Wallet, BarChart2
+  Sun, Moon, Monitor, Wallet, BarChart2, Palette
 } from 'lucide-react';
 import { AppProvider, useAppContext } from './context/AppContext';
 
@@ -123,8 +123,7 @@ function Topbar() {
   const { currentUser, logout, canViewDashboard, settings } = useAppContext();
 
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system');
-  const themeOptionRefs = useRef({});
-  const [themeThumb, setThemeThumb] = useState(null);
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -157,16 +156,7 @@ function Topbar() {
     { value: 'dark', label: 'Oscuro', icon: Moon },
     { value: 'system', label: 'Sistema', icon: Monitor },
   ];
-
-  useLayoutEffect(() => {
-    const updateThemeThumb = () => {
-      const el = themeOptionRefs.current[theme];
-      if (el) setThemeThumb({ left: el.offsetLeft, width: el.offsetWidth });
-    };
-    updateThemeThumb();
-    window.addEventListener('resize', updateThemeThumb);
-    return () => window.removeEventListener('resize', updateThemeThumb);
-  }, [theme]);
+  const ActiveThemeIcon = themeOptions.find(option => option.value === theme)?.icon || Palette;
 
   const menuItems = [
     { icon: Briefcase,       label: 'Comercial',             path: '/comercial',   restricted: false },
@@ -230,7 +220,7 @@ function Topbar() {
   );
 
   return (
-    <header style={{
+    <header className="app-topbar" style={{
       position: 'fixed',
       top: 0, left: 0, right: 0,
       height: 80,
@@ -278,77 +268,6 @@ function Topbar() {
           return title ? <div style={titleStyle} className="header-page-title">{title}</div> : null;
         })()}
 
-        {/* ── Theme Toggle (segmented, always visible, sliding thumb) ── */}
-        <div
-          role="group"
-          aria-label="Selector de tema"
-          style={{
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            padding: 3,
-            borderRadius: 10,
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.15)',
-          }}
-        >
-          {themeThumb && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 3,
-                bottom: 3,
-                left: themeThumb.left,
-                width: themeThumb.width,
-                borderRadius: 8,
-                background: 'rgba(255,255,255,0.22)',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
-                transition: 'left 0.25s cubic-bezier(0.4,0,0.2,1), width 0.25s cubic-bezier(0.4,0,0.2,1)',
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-          {themeOptions.map((opt) => {
-            const OptIcon = opt.icon;
-            const isSelected = theme === opt.value;
-            return (
-              <button
-                key={opt.value}
-                ref={el => { themeOptionRefs.current[opt.value] = el; }}
-                type="button"
-                title={opt.label}
-                aria-label={opt.label}
-                aria-pressed={isSelected}
-                onClick={() => setTheme(opt.value)}
-                style={{
-                  position: 'relative',
-                  zIndex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 32,
-                  height: 30,
-                  padding: 0,
-                  borderRadius: 8,
-                  border: 'none',
-                  background: 'transparent',
-                  color: isSelected ? 'white' : '#a9c4dc',
-                  cursor: 'pointer',
-                  transition: 'color 0.2s',
-                }}
-                onMouseEnter={e => {
-                  if (!isSelected) e.currentTarget.style.color = 'white';
-                }}
-                onMouseLeave={e => {
-                  if (!isSelected) e.currentTarget.style.color = '#a9c4dc';
-                }}
-              >
-                <OptIcon size={16} />
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {/* ── CENTER SECTION: Nav Icons (Stable) ── */}
@@ -418,7 +337,7 @@ function Topbar() {
       {/* ── RIGHT SECTION: Actions + User (Flexible) ── */}
       <div className="header-right" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flex: 1, minWidth: 0 }}>
         {/* Quick Actions */}
-        <div style={{ display: 'flex', gap: '0.6rem', marginRight: '1rem' }}>
+        <div className="header-quick-actions" style={{ display: 'flex', gap: '0.6rem', marginRight: '1rem' }}>
           {location.pathname === '/comercial' && [
             { label: 'Nueva Cotización', icon: Plus, event: 'trigger-nueva-cot', color: '#76B1E0' },
             { label: 'Devoluciones', icon: RotateCcw, event: 'trigger-devolucion', color: '#10b981' },
@@ -439,6 +358,39 @@ function Topbar() {
 
         {/* User + Logout */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexShrink: 0 }}>
+          <div className="theme-control">
+            <button
+              type="button"
+              className="theme-toggle"
+              title="Cambiar tema"
+              aria-label="Cambiar tema"
+              aria-expanded={themeMenuOpen}
+              onClick={() => setThemeMenuOpen(open => !open)}
+            >
+              <ActiveThemeIcon size={18} />
+            </button>
+            {themeMenuOpen && (
+              <div className="theme-popover" role="menu" aria-label="Selector de tema">
+                {themeOptions.map((option) => {
+                  const ThemeIcon = option.icon;
+                  const selected = option.value === theme;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={selected}
+                      className={selected ? 'active' : ''}
+                      onClick={() => { setTheme(option.value); setThemeMenuOpen(false); }}
+                    >
+                      <ThemeIcon size={16} />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <div style={{
             width: 42,
             height: 42,
