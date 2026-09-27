@@ -194,6 +194,13 @@ export const AppProvider = ({ children }) => {
     return `${prefix}${separator}${String(maxId + 1).padStart(padSize, '0')}`;
   };
 
+  const isServiceProduct = (product = {}) => {
+    const descriptor = [product.category, product.tipoCobro, product.esquemaCobro, product.name, product.nombre]
+      .filter(Boolean).join(' ').toLowerCase();
+    return ['servicio', 'servio ', 'única vez', 'unica vez', 'mano de obra', 'transporte', 'entrega', 'recogida', 'flete', 'acarreo', 'armado', 'desarmado', 'depósito', 'deposito', 'cargo por']
+      .some(term => descriptor.includes(term));
+  };
+
   // ─── CLIENTS CRUD ─────────────────────────────────────────────────────────
   const addClient = async (client) => {
     const id = nextId(clients, 'C');
@@ -201,7 +208,7 @@ export const AppProvider = ({ children }) => {
       ? [{ id: `${id}-1`, nombre: client.primeraObra, ubicacion: client.obraUbicacion || '', estado: 'Activa', presupuesto: Number(client.obraPresupuesto) || 0, fechaInicio: format(new Date(), 'yyyy-MM-dd'), descripcion: '' }]
       : [];
     const { primeraObra: _, obraUbicacion: __, obraPresupuesto: ___, ...rest } = client;
-    const newClient = { ...rest, id, debt: 0, joined: format(new Date(), 'yyyy-MM-dd'), obras: firstObra };
+    const newClient = { ...rest, id, debt: 0, joined: format(new Date(), 'yyyy-MM-dd'), obras: firstObra, abonos: [] };
     await api.post('/api/clients', newClient);
     await reloadAll();
     logAction('Cliente Creado', id, newClient.name, 'system');
@@ -218,6 +225,56 @@ export const AppProvider = ({ children }) => {
     await api.del(`/api/clients/${clientId}`);
     await reloadAll();
     logAction('Cliente Eliminado', clientId, '', 'system');
+  };
+
+  const addClientAbono = async (clientId, abonoData) => {
+    const current = clients.find(c => c.id === clientId);
+    if (!current) throw new Error('Cliente no encontrado.');
+    const monto = Number(abonoData.monto) || 0;
+    if (monto <= 0) throw new Error('El valor del abono debe ser mayor que cero.');
+
+    const abono = {
+      id: `AB-${Date.now()}`,
+      monto,
+      saldo: monto,
+      aplicaciones: [],
+      fecha: abonoData.fecha || format(new Date(), 'yyyy-MM-dd'),
+      metodoPago: abonoData.metodoPago || 'Efectivo',
+      notas: abonoData.notas || '',
+      obraId: abonoData.obraId || null,
+      aplicarProximoCorte: abonoData.aplicarProximoCorte !== false,
+      aplicado: false,
+      facturaId: null
+    };
+    await api.put(`/api/clients/${clientId}`, { ...current, abonos: [...(current.abonos || []), abono] });
+    await reloadAll();
+    logAction('Abono de Cliente Registrado', `${abono.id} — $${monto.toLocaleString('es-CO')}`, current.name, 'entry');
+    return abono;
+  };
+
+  const markClientAbonosApplied = async (clientId, abonoIds, facturaId, appliedAmount = Infinity) => {
+    const current = clients.find(c => c.id === clientId);
+    if (!current || !Array.isArray(abonoIds) || abonoIds.length === 0) return;
+    const ids = new Set(abonoIds);
+    let remaining = Math.max(0, Number(appliedAmount));
+    const fechaAplicacion = format(new Date(), 'yyyy-MM-dd');
+    const abonos = (current.abonos || []).map(abono => {
+      if (!ids.has(abono.id) || remaining <= 0) return abono;
+      const saldoActual = Math.max(0, Number(abono.saldo ?? abono.monto) || 0);
+      const montoAplicado = Math.min(saldoActual, remaining);
+      const saldo = saldoActual - montoAplicado;
+      remaining -= montoAplicado;
+      return {
+        ...abono,
+        saldo,
+        aplicado: saldo <= 0,
+        facturaId,
+        fechaAplicacion,
+        aplicaciones: [...(abono.aplicaciones || []), { facturaId, monto: montoAplicado, fecha: fechaAplicacion }]
+      };
+    });
+    await api.put(`/api/clients/${clientId}`, { ...current, abonos });
+    await reloadAll();
   };
 
   // ─── PROVIDERS CRUD ───────────────────────────────────────────────────────
@@ -265,11 +322,13 @@ export const AppProvider = ({ children }) => {
 
   // ─── PRODUCTS CRUD ────────────────────────────────────────────────────────
   const addProduct = async (product) => {
+    const isService = isServiceProduct(product);
+    const stock = isService ? 0 : (Number(product.totalStock) || 1);
     const newProduct = {
       ...product,
       id: nextId(products, '', 1),
-      totalStock: product.totalStock || 1,
-      availableStock: product.totalStock || 1
+      totalStock: stock,
+      availableStock: stock
     };
     await api.post('/api/products', newProduct);
     await reloadAll();
@@ -279,7 +338,11 @@ export const AppProvider = ({ children }) => {
   const editProduct = async (productId, updatedData) => {
     const current = products.find(p => p.id === productId);
     if (!current) return;
-    const finalProduct = { ...current, ...updatedData, availableStock: updatedData.totalStock - (current.totalStock - current.availableStock) };
+    const merged = { ...current, ...updatedData };
+    const isService = isServiceProduct(merged);
+    const totalStock = isService ? 0 : Math.max(0, Number(updatedData.totalStock ?? current.totalStock) || 0);
+    const rented = Math.max(0, Number(current.totalStock) - Number(current.availableStock));
+    const finalProduct = { ...merged, totalStock, availableStock: isService ? 0 : Math.max(0, totalStock - rented) };
     await api.put(`/api/products/${productId}`, finalProduct);
     await reloadAll();
     logAction('Product Edited', updatedData.name, 'System Admin', 'system');
@@ -578,6 +641,8 @@ export const AppProvider = ({ children }) => {
   const addRemision = async (data) => {
     // Bloqueo de mantenimiento pendiente
     for (const item of data.items) {
+      const itemProduct = products.find(p => p.id === item.productId);
+      if (isServiceProduct(itemProduct)) continue;
       const hasPending = maintenances.some(
         m => m.productId === item.productId && (m.status === 'Pendiente' || m.status === 'En Proceso')
       );
@@ -588,7 +653,16 @@ export const AppProvider = ({ children }) => {
     }
 
     const id = nextId(remisiones, 'REM');
-    const nueva = { ...data, id, fecha: data.fecha || format(new Date(), 'yyyy-MM-dd'), estado: 'Activa', items: data.items.map(i => ({ ...i, cantidadDevuelta: 0 })) };
+    const nueva = {
+      ...data,
+      id,
+      fecha: data.fecha || format(new Date(), 'yyyy-MM-dd'),
+      estado: 'Activa',
+      items: data.items.map(i => {
+        const prod = products.find(p => p.id === i.productId);
+        return { ...i, cantidad: isServiceProduct(prod) ? 1 : i.cantidad, cantidadDevuelta: 0 };
+      })
+    };
     await api.post('/api/remisiones', nueva);
 
     // Reducir stock de productos y generar Cuentas por Pagar para equipos de Terceros
@@ -598,7 +672,10 @@ export const AppProvider = ({ children }) => {
     for (const item of nueva.items) {
       const prod = products.find(p => p.id === item.productId);
       if (prod) {
-        await api.put(`/api/products/${prod.id}`, { ...prod, availableStock: Math.max(0, prod.availableStock - item.cantidad) });
+        const isService = isServiceProduct(prod);
+        if (!isService) {
+          await api.put(`/api/products/${prod.id}`, { ...prod, availableStock: Math.max(0, prod.availableStock - item.cantidad) });
+        }
 
         // Si el equipo es de Terceros (proveedor externo), generar automáticamente la Cuenta por Pagar
         const isTercero = prod.tipoPropiedad === 'Terceros' || Boolean(prod.proveedor);
@@ -687,7 +764,7 @@ export const AppProvider = ({ children }) => {
 
         if (delta !== 0) {
           const prod = products.find(p => p.id === prodId);
-          if (prod) {
+          if (prod && !isServiceProduct(prod)) {
             const currentAvailable = Number(prod.availableStock) || 0;
             const total = Number(prod.totalStock) || (currentAvailable + Math.max(0, delta));
             const newAvailable = Math.max(0, Math.min(total, currentAvailable + delta));
@@ -724,6 +801,8 @@ export const AppProvider = ({ children }) => {
 
     // 2. Procesar cada producto a devolver aplicando PEPS
     for (const { productId, cantidad } of devoluciones) {
+      const returnedProduct = products.find(p => p.id === productId);
+      if (isServiceProduct(returnedProduct)) continue;
       let restante = cantidad;
       
       for (const rem of targetRems) {
@@ -794,7 +873,7 @@ export const AppProvider = ({ children }) => {
     // 4. Reintegrar stock de productos y actualizar Cuentas por Pagar asociadas
     for (const [productId, devuelto] of Object.entries(stockReintegrar)) {
       const prod = products.find(p => p.id === productId);
-      if (prod && devuelto > 0) {
+      if (prod && !isServiceProduct(prod) && devuelto > 0) {
         await api.put(`/api/products/${productId}`, { 
             ...prod, 
             availableStock: Math.min(prod.totalStock, prod.availableStock + devuelto) 
@@ -868,7 +947,7 @@ export const AppProvider = ({ children }) => {
     for (const item of (rem.items || [])) {
       const prod = products.find(p => p.id === item.productId);
       const pendiente = Math.max(0, (Number(item.cantidad) || 0) - (Number(item.cantidadDevuelta) || 0));
-      if (prod && pendiente > 0) {
+      if (prod && !isServiceProduct(prod) && pendiente > 0) {
         const currentAvailable = Number(prod.availableStock) || 0;
         const total = Number(prod.totalStock) || (currentAvailable + pendiente);
         await api.put(`/api/products/${prod.id}`, { 
@@ -905,7 +984,7 @@ export const AppProvider = ({ children }) => {
         '5. Este contrato se rige por las leyes colombianas. Las partes se someten a los jueces competentes de la ciudad de Bogotá D.C.',
         '6. Forma de pago: ' + (data.metodoPago || 'Acordada entre las partes.'),
     ];
-    const nueva = { ...data, id, fecha: format(new Date(), 'yyyy-MM-dd'), estado: 'Borrador', habeasData: false, habeasDataTimestamp: null, firma: null, foto: null, clausulas: data.clausulas || defaultClausulas };
+    const nueva = { ...data, id, fecha: data.fecha || format(new Date(), 'yyyy-MM-dd'), deposito: Number(data.deposito) || 0, estado: 'Borrador', habeasData: false, habeasDataTimestamp: null, firma: null, foto: null, clausulas: data.clausulas || defaultClausulas };
     await api.post('/api/cotizaciones', nueva);
     await reloadAll();
     const client = clients.find(c => c.id === data.clientId);
@@ -1187,7 +1266,7 @@ export const AppProvider = ({ children }) => {
       // Auth
       currentUser, login, logout, canViewDashboard, isAdmin, isGerente,
       // Clients
-      clients, setClients, addClient, editClient, deleteClient, addObra, editObra,
+      clients, setClients, addClient, editClient, deleteClient, addObra, editObra, addClientAbono, markClientAbonosApplied,
       // Providers
       providers, setProviders, addProvider, editProvider, deleteProvider,
       // Cuentas por Pagar (Subarriendo Proveedores)

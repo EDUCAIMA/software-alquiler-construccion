@@ -116,6 +116,7 @@ async function initDB() {
             joined DATE DEFAULT CURRENT_DATE,
             debt NUMERIC(12, 2) DEFAULT 0,
             obras JSONB DEFAULT '[]',
+            abonos JSONB DEFAULT '[]',
             foto TEXT,
             foto_cc TEXT,
             foto_cc_back TEXT
@@ -126,6 +127,7 @@ async function initDB() {
         await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS foto TEXT`);
         await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS foto_cc TEXT`);
         await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS foto_cc_back TEXT`);
+        await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS abonos JSONB DEFAULT '[]'`);
 
         // --- Proveedores ---
         await client.query(`
@@ -184,6 +186,7 @@ async function initDB() {
                 responsable_transporte VARCHAR(100),
                 plazo_entrega VARCHAR(100),
                 transporte NUMERIC(12, 2) DEFAULT 0,
+                deposito NUMERIC(15, 2) DEFAULT 0,
                 notas TEXT,
                 estado VARCHAR(50) DEFAULT 'Borrador',
                 items JSONB DEFAULT '[]',
@@ -203,6 +206,7 @@ async function initDB() {
         await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS foto_cc_back TEXT`);
         await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS clausulas JSONB DEFAULT '[]'`);
         await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS factura_id VARCHAR(50)`);
+        await client.query(`ALTER TABLE cotizaciones ADD COLUMN IF NOT EXISTS deposito NUMERIC(15, 2) DEFAULT 0`);
 
         // --- Remisiones ---
         await client.query(`
@@ -520,6 +524,7 @@ const mapClient = r => ({
     joined: r.joined ? r.joined.toISOString().split('T')[0] : '',
     debt: Number(r.debt),
     obras: r.obras || [],
+    abonos: r.abonos || [],
     foto: r.foto,
     fotoCC: r.foto_cc,
     fotoCCBack: r.foto_cc_back
@@ -550,7 +555,7 @@ const mapCot = r => ({
     fecha: r.fecha ? r.fecha.toISOString().split('T')[0] : '',
     validezDias: r.validez_dias, metodoPago: r.metodo_pago,
     responsableTransporte: r.responsable_transporte, plazoEntrega: r.plazo_entrega,
-    transporte: Number(r.transporte), notas: r.notas, estado: r.estado,
+    transporte: Number(r.transporte), deposito: Number(r.deposito || 0), notas: r.notas, estado: r.estado,
     items: r.items || [],
     habeasData: r.habeas_data, habeasDataTimestamp: r.habeas_data_timestamp,
     firma: r.firma, foto: r.foto, fotoCC: r.foto_cc, fotoCCBack: r.foto_cc_back,
@@ -836,12 +841,12 @@ app.get('/api/clients', async (req, res) => {
 app.post('/api/clients', async (req, res) => {
     try {
         const { id, name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
-            email, phone, direccion, ciudad, departamento, contactoPrincipal, joined, debt, obras, foto, fotoCC, fotoCCBack } = req.body;
+            email, phone, direccion, ciudad, departamento, contactoPrincipal, joined, debt, obras, abonos, foto, fotoCC, fotoCCBack } = req.body;
         await pool.query(
-            `INSERT INTO clients(id, name, tipo_persona, nit, regimen, responsable_iva, porc_iva, porc_retencion, email, phone, direccion, ciudad, departamento, contacto_principal, joined, debt, obras, foto, foto_cc, foto_cc_back)
-       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+            `INSERT INTO clients(id, name, tipo_persona, nit, regimen, responsable_iva, porc_iva, porc_retencion, email, phone, direccion, ciudad, departamento, contacto_principal, joined, debt, obras, abonos, foto, foto_cc, foto_cc_back)
+       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
             [id, name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
-                email, phone, direccion, ciudad, departamento, contactoPrincipal, joined || null, debt || 0, JSON.stringify(obras || []), foto || null, fotoCC || null, fotoCCBack || null]
+                email, phone, direccion, ciudad, departamento, contactoPrincipal, joined || null, debt || 0, JSON.stringify(obras || []), JSON.stringify(abonos || []), foto || null, fotoCC || null, fotoCCBack || null]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -850,12 +855,12 @@ app.post('/api/clients', async (req, res) => {
 app.put('/api/clients/:id', async (req, res) => {
     try {
         const { name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
-            email, phone, direccion, ciudad, departamento, contactoPrincipal, joined, debt, obras, foto, fotoCC, fotoCCBack } = req.body;
+            email, phone, direccion, ciudad, departamento, contactoPrincipal, joined, debt, obras, abonos, foto, fotoCC, fotoCCBack } = req.body;
         await pool.query(
             `UPDATE clients SET name = $1, tipo_persona = $2, nit = $3, regimen = $4, responsable_iva = $5, porc_iva = $6, porc_retencion = $7,
-            email = $8, phone = $9, direccion = $10, ciudad = $11, departamento = $12, contacto_principal = $13, joined = $14, debt = $15, obras = $16, foto = $17, foto_cc = $18, foto_cc_back = $19 WHERE id = $20`,
+            email = $8, phone = $9, direccion = $10, ciudad = $11, departamento = $12, contacto_principal = $13, joined = $14, debt = $15, obras = $16, abonos = $17, foto = $18, foto_cc = $19, foto_cc_back = $20 WHERE id = $21`,
             [name, tipoPersona, nit, regimen, responsableIVA, porcIVA, porcRetencion,
-                email, phone, direccion, ciudad, departamento, contactoPrincipal, joined || null, debt || 0, JSON.stringify(obras || []), foto || null, fotoCC || null, fotoCCBack || null, req.params.id]
+                email, phone, direccion, ciudad, departamento, contactoPrincipal, joined || null, debt || 0, JSON.stringify(obras || []), JSON.stringify(abonos || []), foto || null, fotoCC || null, fotoCCBack || null, req.params.id]
         );
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -956,13 +961,13 @@ app.get('/api/cotizaciones', async (req, res) => {
 app.post('/api/cotizaciones', async (req, res) => {
     try {
         const { id, clientId, obraId, fecha, validezDias, metodoPago, responsableTransporte,
-            plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto, fotoCC, fotoCCBack, clausulas, facturaId } = req.body;
+            plazoEntrega, transporte, deposito, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto, fotoCC, fotoCCBack, clausulas, facturaId } = req.body;
         await pool.query(
             `INSERT INTO cotizaciones(id, client_id, obra_id, fecha, validez_dias, metodo_pago, responsable_transporte,
-                plazo_entrega, transporte, notas, estado, items, habeas_data, habeas_data_timestamp, firma, foto, foto_cc, foto_cc_back, clausulas, factura_id)
-                VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+                plazo_entrega, transporte, deposito, notas, estado, items, habeas_data, habeas_data_timestamp, firma, foto, foto_cc, foto_cc_back, clausulas, factura_id)
+                VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
             [id, clientId, obraId, fecha || null, validezDias, metodoPago, responsableTransporte,
-                plazoEntrega, transporte, notas, estado, JSON.stringify(items || []),
+                plazoEntrega, transporte, deposito || 0, notas, estado, JSON.stringify(items || []),
                 habeasData || false, habeasDataTimestamp || null, firma || null, foto || null, fotoCC || null, fotoCCBack || null, JSON.stringify(clausulas || []), facturaId || null]
         );
         res.json({ success: true });
@@ -973,11 +978,11 @@ app.put('/api/cotizaciones/:id', async (req, res) => {
     try {
         console.log('📬 PUT /api/cotizaciones/', req.params.id, req.body);
         const { clientId, obraId, fecha, validezDias, metodoPago, responsableTransporte,
-            plazoEntrega, transporte, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto, fotoCC, fotoCCBack, clausulas, facturaId } = req.body;
+            plazoEntrega, transporte, deposito, notas, estado, items, habeasData, habeasDataTimestamp, firma, foto, fotoCC, fotoCCBack, clausulas, facturaId } = req.body;
         await pool.query(
-            `UPDATE cotizaciones SET client_id = $1, obra_id = $2, fecha = $3, validez_dias = $4, metodo_pago = $5, responsable_transporte = $6, plazo_entrega = $7, transporte = $8, notas = $9, estado = $10, items = $11, habeas_data = $12, habeas_data_timestamp = $13, firma = $14, foto = $15, foto_cc = $16, foto_cc_back = $17, clausulas = $18, factura_id = $19 WHERE id = $20`,
+            `UPDATE cotizaciones SET client_id = $1, obra_id = $2, fecha = $3, validez_dias = $4, metodo_pago = $5, responsable_transporte = $6, plazo_entrega = $7, transporte = $8, deposito = $9, notas = $10, estado = $11, items = $12, habeas_data = $13, habeas_data_timestamp = $14, firma = $15, foto = $16, foto_cc = $17, foto_cc_back = $18, clausulas = $19, factura_id = $20 WHERE id = $21`,
             [clientId, obraId, fecha || null, validezDias, metodoPago, responsableTransporte,
-                plazoEntrega, transporte, notas, estado, JSON.stringify(items || []),
+                plazoEntrega, transporte, deposito || 0, notas, estado, JSON.stringify(items || []),
                 habeasData || false, habeasDataTimestamp || null, firma || null, foto || null, fotoCC || null, fotoCCBack || null, JSON.stringify(clausulas || []), facturaId || null, req.params.id]
         );
         res.json({ success: true });

@@ -45,7 +45,15 @@ class ModalErrorBoundary extends React.Component {
                     onClick={() => { this.setState({ hasError: false, error: null }); this.props.onClose?.(); }}
                     style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
                 >
-                    <div onClick={e => e.stopPropagation()} style={{ background: 'white', padding: '2rem', borderRadius: 12, maxWidth: 500, width: '90%' }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: 'white', padding: '2rem', borderRadius: 12, maxWidth: 500, width: '90%', position: 'relative' }}>
+                        <button
+                            type="button"
+                            aria-label="Cerrar ventana"
+                            onClick={() => { this.setState({ hasError: false, error: null }); this.props.onClose?.(); }}
+                            style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, border: 'none', borderRadius: '50%', background: '#f1f5f9', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                        >
+                            <X size={18} />
+                        </button>
                         <h3 style={{ color: '#ef4444', marginBottom: '1rem' }}>⚠️ Error al cargar el formulario</h3>
                         <pre style={{ background: '#f8fafc', padding: '1rem', borderRadius: 8, fontSize: '0.75rem', overflow: 'auto', maxHeight: 200, color: '#dc2626' }}>
                             {this.state.error?.message || String(this.state.error)}
@@ -717,11 +725,12 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
             {payingInvoice && (
                 <div 
                     onClick={() => setPayingInvoice(null)}
-                    style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}
+                    className="modal-overlay"
+                    style={{ background: 'rgba(0,0,0,0.8)', zIndex: 1100 }}
                 >
-                    <div onClick={e => e.stopPropagation()} className="glass-panel" style={{ maxWidth: 460, width: '100%', padding: 0, overflow: 'hidden', background: 'white', borderRadius: 16 }}>
+                    <div onClick={e => e.stopPropagation()} className="glass-panel responsive-payment-modal" style={{ maxWidth: 920, width: '100%', padding: 0, overflow: 'hidden', background: 'white', borderRadius: 16, maxHeight: '92dvh', display: 'flex', flexDirection: 'column' }}>
                         {/* Header */}
-                        <div style={{ background: 'linear-gradient(135deg,#10b981,#059669)', padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ background: 'linear-gradient(135deg,#10b981,#059669)', padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                 <div style={{ background: 'rgba(255,255,255,0.2)', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                     <DollarSign size={20} color="white" />
@@ -734,15 +743,46 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                             <button onClick={() => setPayingInvoice(null)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 32, height: 32, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
                         </div>
 
-                        <div style={{ padding: '1.75rem' }}>
-                            {/* Amount Box */}
-                            <div style={{ background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 12, padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontWeight: 700, color: '#15803d', fontSize: '0.9rem' }}>Monto a Cobrar</span>
-                                <span style={{ fontSize: '1.7rem', fontWeight: 900, color: '#10b981' }}>${payingInvoice.amount.toLocaleString()}</span>
+                        <div className="responsive-payment-modal__body" style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+                            <div className="responsive-payment-modal__summary">
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem', marginBottom: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.68rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Cliente</span>
+                                        <strong style={{ display: 'block', marginTop: 3, color: '#104166', fontSize: '0.84rem' }}>{getClient(payingInvoice.clientId)?.name || 'N/A'}</strong>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.68rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Obra</span>
+                                        <strong style={{ display: 'block', marginTop: 3, color: '#104166', fontSize: '0.84rem' }}>{getObra(payingInvoice)?.nombre || 'N/A'}</strong>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.68rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Fecha emisión</span>
+                                        <strong style={{ display: 'block', marginTop: 3, color: '#334155', fontSize: '0.84rem' }}>{payingInvoice.date || payingInvoice.fecha || '—'}</strong>
+                                    </div>
+                                    <div>
+                                        <span style={{ display: 'block', fontSize: '0.68rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Ítems</span>
+                                        <strong style={{ display: 'block', marginTop: 3, color: '#334155', fontSize: '0.84rem' }}>{(payingInvoice.items || []).length}</strong>
+                                    </div>
+                                </div>
+
+                                {/* Amount Box */}
+                                <div style={{ background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 12, padding: '1.25rem', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: 700, color: '#15803d', fontSize: '0.9rem' }}>Monto a Cobrar</span>
+                                    <span style={{ fontSize: '1.7rem', fontWeight: 900, color: '#10b981' }}>${payingInvoice.amount.toLocaleString()}</span>
+                                </div>
+
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '0.85rem', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.5, display: 'flex', gap: 10 }}>
+                                    <Clock size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                                    <span>
+                                        {paymentOption === 'Contado' && 'Al confirmar, la remisión de cobro se marcará como PAGADA totalmente.'}
+                                        {paymentOption === 'Abono' && `Se registrará un abono de $${Number(abonoAmount).toLocaleString()} y la remisión de cobro quedará como ABONADA.`}
+                                        {paymentOption === 'Credito' && 'La remisión de cobro quedará pendiente de pago pero habilitada para despacho.'}
+                                    </span>
+                                </div>
                             </div>
 
+                            <div className="responsive-payment-modal__form">
                             {/* Payment Options */}
-                            <div style={{ marginBottom: '1.5rem' }}>
+                            <div style={{ marginBottom: '1.25rem' }}>
                                 <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#64748b', marginBottom: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Opciones de Pago</label>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
                                     {[
@@ -827,16 +867,6 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                 </div>
                             )}
 
-                            {/* Info note */}
-                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '0.85rem', marginBottom: '1.5rem', fontSize: '0.8rem', color: '#64748b', lineHeight: 1.5, display: 'flex', gap: 10 }}>
-                                <Clock size={16} style={{ flexShrink: 0, marginTop: 2 }} />
-                                <span>
-                                    {paymentOption === 'Contado' && 'Al confirmar, la remisión de cobro se marcará como PAGADA totalmente.'}
-                                    {paymentOption === 'Abono' && `Se registrará un abono de $${Number(abonoAmount).toLocaleString()} y la remisión de cobro quedará como ABONADA.`}
-                                    {paymentOption === 'Credito' && 'La remisión de cobro quedará pendiente de pago pero habilitada para despacho.'}
-                                </span>
-                            </div>
-
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <button onClick={() => setPayingInvoice(null)} className="btn btn-secondary" style={{ flex: 1, padding: '0.8rem', borderRadius: 10, fontWeight: 700 }}>Cancelar</button>
                                 <button
@@ -853,6 +883,7 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
                                 >
                                     <CheckCircle size={18} /> Confirmar {paymentOption}
                                 </button>
+                            </div>
                             </div>
                         </div>
                     </div>

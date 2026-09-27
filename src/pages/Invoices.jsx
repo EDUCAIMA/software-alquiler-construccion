@@ -32,6 +32,15 @@ export default function Invoices({ hideHeader = false } = {}) {
     const [showViewModal, setShowViewModal] = useState(false);
     const [viewingInvoice, setViewingInvoice] = useState(null);
 
+    useEffect(() => {
+        if (!showViewModal) return undefined;
+        const handleEscape = (event) => {
+            if (event.key === 'Escape') setShowViewModal(false);
+        };
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, [showViewModal]);
+
     // Pay Invoice Modal
     const [showPayModal, setShowPayModal] = useState(false);
     const [payingInvoice, setPayingInvoice] = useState(null);
@@ -905,14 +914,19 @@ export default function Invoices({ hideHeader = false } = {}) {
                 const invTotal = inv.amount;
                 return (
                     <div className="modal-overlay" onClick={() => setShowViewModal(false)}>
-                        <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: '720px', padding: 0 }}>
+                        <div className="modal-content fadeIn responsive-document-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '980px', padding: 0, maxHeight: '92dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                             {/* Invoice Header */}
-                            <div style={{ background: 'linear-gradient(135deg, #2365AB, #154272)', padding: '2rem', borderRadius: '16px 16px 0 0' }}>
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                         <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'white' }}>{settings?.shortName || 'CIELO'}</div>
-                                         <div style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>{settings?.nameComplement || 'Alquiler de Equipos y Herramientas'}</div>
-                                     </div>
+                            <div style={{ background: 'linear-gradient(135deg, #2365AB, #154272)', padding: '1rem 1.5rem', borderRadius: '16px 16px 0 0' }}>
+                                <div className="flex justify-between items-center" style={{ gap: '1.5rem' }}>
+                                    <div style={{ minWidth: 0, flex: 1, color: 'white' }}>
+                                        <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.72)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Datos del cliente</div>
+                                        <div style={{ fontSize: '1rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{client?.name || 'Cliente sin nombre'}</div>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem 1.25rem', marginTop: 4, fontSize: '0.74rem', color: 'rgba(255,255,255,0.82)' }}>
+                                            <span>Obra: <strong style={{ color: 'white' }}>{client?.obra || 'N/A'}</strong></span>
+                                            {client?.phone && <span>Tel: {client.phone}</span>}
+                                            {client?.email && <span>{client.email}</span>}
+                                        </div>
+                                    </div>
                                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
                                         <div style={{ textAlign: 'right' }}>
                                             <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'white' }}>{inv.id}</div>
@@ -926,18 +940,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                                 </div>
                             </div>
 
-                            <div style={{ padding: '1.5rem 2rem' }}>
-                                {/* Client */}
-                                <div style={{ background: '#f8fafc', borderRadius: 10, padding: '1rem', marginBottom: '1.25rem', border: '1px solid var(--surface-border)' }}>
-                                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Datos del Cliente</div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', fontSize: '0.875rem' }}>
-                                        <div><span style={{ color: 'var(--text-muted)' }}>Empresa:</span> <strong>{client?.name}</strong></div>
-                                        <div><span style={{ color: 'var(--text-muted)' }}>Obra:</span> <strong>{client?.obra || 'N/A'}</strong></div>
-                                        <div><span style={{ color: 'var(--text-muted)' }}>Email:</span> {client?.email}</div>
-                                        <div><span style={{ color: 'var(--text-muted)' }}>Tel:</span> {client?.phone}</div>
-                                    </div>
-                                </div>
-
+                            <div className="responsive-document-modal__body" style={{ padding: '1rem 1.5rem', overflowY: 'auto', flex: 1 }}>
                                 {/* Items */}
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', marginBottom: '1rem' }}>
                                     <thead>
@@ -991,7 +994,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                                 </div>
                             </div>
 
-                            <div className="modal-actions" style={{ padding: '0 2rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div className="modal-actions" style={{ padding: '0 1.5rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <button className="btn btn-secondary" onClick={() => setShowViewModal(false)}>Cerrar</button>
                                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                                     {inv.status === 'Pending' && (
@@ -1031,7 +1034,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                 const client = clients.find(c => c.id === inv.clientId);
                 return (
                     <div className="modal-overlay" onClick={() => setShowPayModal(false)}>
-                        <div className="modal-content fadeIn" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', padding: 0, overflow: 'hidden' }}>
+                        <div className="modal-content fadeIn responsive-payment-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '920px', padding: 0, overflow: 'hidden', maxHeight: '92dvh', display: 'flex', flexDirection: 'column' }}>
                             {/* Header */}
                             <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: '1.75rem 2rem', borderRadius: '16px 16px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -1046,7 +1049,8 @@ export default function Invoices({ hideHeader = false } = {}) {
                                 <button onClick={() => setShowPayModal(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}><X size={18} /></button>
                             </div>
 
-                            <div style={{ padding: '1.75rem 2rem' }}>
+                            <div className="responsive-payment-modal__body" style={{ padding: '1.75rem 2rem', overflowY: 'auto', flex: 1 }}>
+                                <div className="responsive-payment-modal__summary">
                                 {/* Invoice Summary */}
                                 <div style={{ background: '#f8fafc', border: '1px solid var(--surface-border)', borderRadius: 12, padding: '1rem 1.25rem', marginBottom: '1.25rem' }}>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.875rem' }}>
@@ -1062,7 +1066,9 @@ export default function Invoices({ hideHeader = false } = {}) {
                                     <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.95rem' }}>Monto a Cobrar</span>
                                     <span style={{ fontSize: '1.8rem', fontWeight: 800, color: '#10b981' }}>${inv.amount.toLocaleString()}</span>
                                 </div>
+                                </div>
 
+                                <div className="responsive-payment-modal__form">
                                 {/* Payment Options Selector */}
                                 <div className="input-group" style={{ marginBottom: '1.25rem' }}>
                                     <label className="input-label">Tipo de Pago</label>
@@ -1164,6 +1170,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                                         {paymentOption === 'Abono' && `Al confirmar, se registrará un abono de $${Number(abonoAmount).toLocaleString()} y la remisión de cobro quedará como Abonada.`}
                                         {paymentOption === 'Fiado' && `Al confirmar, la remisión de cobro quedará como Fiada y los equipos serán liberados para despacho.`}
                                     </span>
+                                </div>
                                 </div>
                             </div>
 

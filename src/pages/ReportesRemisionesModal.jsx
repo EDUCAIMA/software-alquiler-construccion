@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     X, Download, Filter, Calendar, Users, Package, DollarSign,
     CheckCircle, Clock, Truck, AlertTriangle, FileText, BarChart2,
     RefreshCw, Layers, ArrowUpRight, Search, Check, ChevronDown
 } from 'lucide-react';
-import { format, parseISO, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout } from './pdfTheme';
@@ -45,6 +45,30 @@ const traducirCategoria = (cat) => {
     return MAPA_CATEGORIAS[c] || MAPA_CATEGORIAS[c.toLowerCase()] || c;
 };
 
+const esServicio = (item = {}, product = {}) => {
+    const descriptor = [
+        item.category,
+        item.tipoCobro,
+        item.esquemaCobro,
+        product.category,
+        product.tipoCobro,
+        product.esquemaCobro,
+        item.nombre,
+        product.name
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    return descriptor.includes('servicio') || descriptor.includes('servio ') ||
+        descriptor.includes('unica vez') ||
+        descriptor.includes('única vez') ||
+        descriptor.includes('transporte') ||
+        descriptor.includes('entrega') ||
+        descriptor.includes('recogida') ||
+        descriptor.includes('flete') ||
+        descriptor.includes('acarreo') || descriptor.includes('mano de obra') ||
+        descriptor.includes('armado') || descriptor.includes('desarmado') ||
+        descriptor.includes('depósito') || descriptor.includes('deposito') || descriptor.includes('cargo por');
+};
+
 const MESES_ES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
 const formatearFechaMesLetras = (fechaStr) => {
     if (!fechaStr) return '';
@@ -80,6 +104,7 @@ export default function ReportesRemisionesModal({
     const [fechaHasta, setFechaHasta] = useState(format(endOfMonth(today), 'yyyy-MM-dd'));
     const [reportType, setReportType] = useState(initialReportType || 'cartera'); // 'cartera' | 'ingresos' | 'detallado' | 'equipos'
     const [soloConDeuda, setSoloConDeuda] = useState(true);
+    const [itemKind, setItemKind] = useState('todos'); // 'todos' | 'productos' | 'servicios'
 
     const fDesde = formatearFechaMesLetras(fechaDesde);
     const fHasta = formatearFechaMesLetras(fechaHasta);
@@ -215,10 +240,13 @@ export default function ReportesRemisionesModal({
                 const pId = it.productId || it.nombre;
                 if (!prodMap.has(pId)) {
                     const prod = products.find(p => p.id === pId);
+                    const servicio = esServicio(it, prod);
                     prodMap.set(pId, {
                         id: pId,
                         nombre: it.nombre || prod?.name || pId,
                         categoria: traducirCategoria(prod?.category || it.category),
+                        tipo: servicio ? 'Servicio' : 'Producto',
+                        esServicio: servicio,
                         vecesAlquilado: 0,
                         totalDespachado: 0,
                         totalDevuelto: 0,
@@ -228,16 +256,20 @@ export default function ReportesRemisionesModal({
 
                 const rec = prodMap.get(pId);
                 rec.vecesAlquilado += 1;
-                const c = Number(it.cantidad) || 0;
-                const cd = Number(it.cantidadDevuelta) || 0;
-                rec.totalDespachado += c;
-                rec.totalDevuelto += cd;
-                rec.enCampo += Math.max(0, c - cd);
+                if (!rec.esServicio) {
+                    const c = Number(it.cantidad) || 0;
+                    const cd = Number(it.cantidadDevuelta) || 0;
+                    rec.totalDespachado += c;
+                    rec.totalDevuelto += cd;
+                    rec.enCampo += Math.max(0, c - cd);
+                }
             });
         });
 
-        return Array.from(prodMap.values()).sort((a, b) => b.totalDespachado - a.totalDespachado);
-    }, [remisionesFiltradas, products]);
+        return Array.from(prodMap.values())
+            .filter(item => itemKind === 'todos' || (itemKind === 'servicios' ? item.esServicio : !item.esServicio))
+            .sort((a, b) => b.vecesAlquilado - a.vecesAlquilado || b.totalDespachado - a.totalDespachado);
+    }, [remisionesFiltradas, products, itemKind]);
 
     // ─── Resumen de Cartera y Deudas de Clientes (Quién debe y cuánto) ────────
     const carteraResumen = useMemo(() => {
@@ -292,7 +324,9 @@ export default function ReportesRemisionesModal({
                     ? 'ESTADO DE CARTERA Y SALDOS PENDIENTES'
                     : (reportType === 'ingresos'
                         ? 'CONSOLIDADO DE INGRESOS POR CLIENTE'
-                        : 'INFORME DE REMISIONES Y ALQUILER'),
+                        : (reportType === 'equipos'
+                            ? 'INFORME POR PRODUCTO Y SERVICIO'
+                            : 'INFORME DE REMISIONES Y ALQUILER')),
                 settings,
                 nroDoc,
                 { skipFooter: true, centerTitle: true }
@@ -473,33 +507,35 @@ export default function ReportesRemisionesModal({
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(8.5);
                 doc.setTextColor(30, 41, 59);
-                doc.text('UTILIZACIÓN Y ROTACIÓN DE ÍTEMS / EQUIPOS EN ALQUILER', margin, y);
+                doc.text(`INFORME POR PRODUCTO Y SERVICIO · ${itemKind.toUpperCase()}`, margin, y);
                 y += 3;
 
                 autoTable(doc, {
                     startY: y,
                     margin: { left: margin, right: margin, bottom: 22 },
-                    head: [['#', 'EQUIPO / DESCRIPCIÓN', 'CATEGORÍA', 'DESPACHOS', 'CANTIDAD\nDESPACHADA', 'CANTIDAD\nDEVUELTA', 'SALDO EN\nOBRA']],
+                    head: [['#', 'PRODUCTO / SERVICIO', 'TIPO', 'CATEGORÍA', 'REGISTROS', 'CANTIDAD\nDESPACHADA', 'CANTIDAD\nDEVUELTA', 'SALDO EN\nOBRA']],
                     body: equiposResumen.map((eq, idx) => [
                         idx + 1,
                         eq.nombre.toUpperCase(),
+                        eq.tipo,
                         eq.categoria,
                         eq.vecesAlquilado,
-                        eq.totalDespachado,
-                        eq.totalDevuelto,
-                        eq.enCampo
+                        eq.esServicio ? '—' : eq.totalDespachado,
+                        eq.esServicio ? '—' : eq.totalDevuelto,
+                        eq.esServicio ? '—' : eq.enCampo
                     ]),
                     theme: 'plain',
                     headStyles: { fillColor: [241, 245, 249], textColor: [30, 41, 59], fontSize: 7, fontStyle: 'bold', lineWidth: 0.1, lineColor: [203, 213, 225], halign: 'center', valign: 'middle' },
                     styles: { fontSize: 7, cellPadding: 2, lineWidth: 0.1, lineColor: [226, 232, 240] },
                     columnStyles: {
                         0: { halign: 'center', cellWidth: 8 },
-                        1: { halign: 'left', cellWidth: 70 },
-                        2: { halign: 'center', cellWidth: 22 },
-                        3: { halign: 'center', cellWidth: 23 },
-                        4: { halign: 'center', cellWidth: 24 },
+                        1: { halign: 'left', cellWidth: 54 },
+                        2: { halign: 'center', cellWidth: 18 },
+                        3: { halign: 'center', cellWidth: 20 },
+                        4: { halign: 'center', cellWidth: 22 },
                         5: { halign: 'center', cellWidth: 24 },
-                        6: { halign: 'center', fontStyle: 'bold', cellWidth: 24 }
+                        6: { halign: 'center', cellWidth: 24 },
+                        7: { halign: 'center', fontStyle: 'bold', cellWidth: 24 }
                     }
                 });
             } else {
@@ -905,9 +941,38 @@ export default function ReportesRemisionesModal({
                                 borderBottom: reportType === 'equipos' ? '2px solid #2365AB' : '2px solid transparent'
                             }}
                         >
-                            Rotación de Equipos ({equiposResumen.length})
+                            Productos y Servicios ({equiposResumen.length})
                         </button>
                     </div>
+
+                    {reportType === 'equipos' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Mostrar:</span>
+                            {[
+                                ['todos', 'Todos'],
+                                ['productos', 'Productos'],
+                                ['servicios', 'Servicios']
+                            ].map(([value, label]) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => setItemKind(value)}
+                                    style={{
+                                        padding: '0.4rem 0.75rem',
+                                        borderRadius: 999,
+                                        border: itemKind === value ? '1px solid #2365AB' : '1px solid #cbd5e1',
+                                        background: itemKind === value ? '#eff6ff' : '#fff',
+                                        color: itemKind === value ? '#2365AB' : '#64748b',
+                                        fontSize: '0.78rem',
+                                        fontWeight: 800,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
                     {/* ─── TABLA DE VISTA PREVIA ─────────────────────────────────── */}
                     <div style={{
@@ -1061,9 +1126,10 @@ export default function ReportesRemisionesModal({
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                                 <thead style={{ background: '#f8fafc', position: 'sticky', top: 0, zIndex: 10 }}>
                                     <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textTransform: 'uppercase', fontSize: '0.7rem' }}>
-                                        <th style={{ padding: '0.75rem', textAlign: 'left' }}>Equipo / Ítem</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'left' }}>Producto / Servicio</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'center' }}>Tipo</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'center' }}>Categoría</th>
-                                        <th style={{ padding: '0.75rem', textAlign: 'center' }}>Veces Despachado</th>
+                                        <th style={{ padding: '0.75rem', textAlign: 'center' }}>Registros</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'center' }}>Total Despachado</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'center' }}>Total Devuelto</th>
                                         <th style={{ padding: '0.75rem', textAlign: 'center' }}>Saldo en Obra</th>
@@ -1072,8 +1138,8 @@ export default function ReportesRemisionesModal({
                                 <tbody>
                                     {equiposResumen.length === 0 ? (
                                         <tr>
-                                            <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
-                                                Sin datos de ítems o equipos para los filtros aplicados.
+                                            <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+                                                Sin productos o servicios para los filtros aplicados.
                                             </td>
                                         </tr>
                                     ) : (
@@ -1082,6 +1148,11 @@ export default function ReportesRemisionesModal({
                                                 <td style={{ padding: '0.75rem', fontWeight: 700, color: '#1e293b' }}>
                                                     {eq.nombre}
                                                 </td>
+                                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                    <span style={{ padding: '0.2rem 0.5rem', borderRadius: 999, fontSize: '0.68rem', fontWeight: 800, background: eq.esServicio ? '#f5f3ff' : '#ecfdf5', color: eq.esServicio ? '#7c3aed' : '#047857' }}>
+                                                        {eq.tipo}
+                                                    </span>
+                                                </td>
                                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#64748b' }}>
                                                     {eq.categoria}
                                                 </td>
@@ -1089,13 +1160,13 @@ export default function ReportesRemisionesModal({
                                                     {eq.vecesAlquilado}
                                                 </td>
                                                 <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 700 }}>
-                                                    {eq.totalDespachado}
+                                                    {eq.esServicio ? '—' : eq.totalDespachado}
                                                 </td>
                                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#10b981', fontWeight: 700 }}>
-                                                    {eq.totalDevuelto}
+                                                    {eq.esServicio ? '—' : eq.totalDevuelto}
                                                 </td>
                                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: eq.enCampo > 0 ? '#f97316' : '#64748b', fontWeight: 800 }}>
-                                                    {eq.enCampo}
+                                                    {eq.esServicio ? '—' : eq.enCampo}
                                                 </td>
                                             </tr>
                                         ))

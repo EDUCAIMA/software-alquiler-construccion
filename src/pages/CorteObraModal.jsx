@@ -12,6 +12,14 @@ import { generateInvoicePDF, calcularHorasAlquiler, calcularHoraFin } from './Co
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtCOP = n => `$${(n || 0).toLocaleString('es-CO')}`;
+const esServicio = (item = {}, product = {}) => {
+    const descriptor = [
+        item.category, item.tipoCobro, item.esquemaCobro, item.nombre, item.name,
+        product.category, product.tipoCobro, product.esquemaCobro, product.nombre, product.name
+    ].filter(Boolean).join(' ').toLowerCase();
+    return ['servicio', 'servio ', 'única vez', 'unica vez', 'mano de obra', 'transporte', 'entrega', 'recogida', 'flete', 'acarreo', 'armado', 'desarmado', 'depósito', 'deposito', 'cargo por']
+        .some(term => descriptor.includes(term));
+};
 const calculateBillableDays = (start, end, scheme, billedPeriods = []) => {
     try {
         if (scheme === 'Única Vez' || (scheme || '').toLowerCase().includes('única')) return 1;
@@ -200,7 +208,7 @@ function generateCortePDF(resultado, client, obra, settings, remisiones, invoice
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(35, 101, 171); // #2365AB
-        doc.text(`REMISION #${displayId} - Despachada el ${lines[0].remFecha}`, margin, y + 6);
+        doc.text(`#${displayId} - Despachada el ${lines[0].remFecha}`, margin, y + 6);
         y += 8;
 
         // Etiqueta de estado (devuelto / en obra) al lado derecho de cada equipo.
@@ -283,7 +291,8 @@ function generateCortePDF(resultado, client, obra, settings, remisiones, invoice
         ['SUBTOTAL ALQUILER GLOBAL', resultado.subtotal.toLocaleString('es-CO')],
         ['DESCUENTO', `-${resultado.descuento.toLocaleString('es-CO')}`],
         [`IVA APLICADO (${resultado.porcIVA || 0}%)`, resultado.iva.toLocaleString('es-CO')],
-        [`RETENCIÓN FUENTE (${client?.porcRetencion || 0}%)`, resultado.retencion.toLocaleString('es-CO')]
+        [`RETENCIÓN FUENTE (${client?.porcRetencion || 0}%)`, resultado.retencion.toLocaleString('es-CO')],
+        ...(resultado.pagosPrevios > 0 ? [['ABONOS DEL CLIENTE', `-${resultado.pagosPrevios.toLocaleString('es-CO')}`]] : [])
     ];
 
     totals.forEach(([label, value]) => {
@@ -314,7 +323,7 @@ function generateCortePDF(resultado, client, obra, settings, remisiones, invoice
 }
 
 export default function CorteObraModal({ onClose, initialClientId = '', initialObraId = '' }) {
-    const { clients, remisiones, products, invoices, createInvoice, settings } = useAppContext();
+    const { clients, remisiones, products, invoices, createInvoice, settings, markClientAbonosApplied } = useAppContext();
 
     const [clientId, setClientId] = useState(initialClientId);
     const [clientSearch, setClientSearch] = useState('');
@@ -334,10 +343,16 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     const [customHorasFin, setCustomHorasFin] = useState({}); // key -> string HH:mm
     const [descuentoTipo, setDescuentoTipo] = useState('porcentaje');
     const [descuentoValor, setDescuentoValor] = useState('');
+    const [selectedAbonoIds, setSelectedAbonoIds] = useState([]);
 
     const selectedClient = clients.find(c => c.id === clientId);
     const obrasDisp = selectedClient?.obras || [];
     const selectedObra = obrasDisp.find(o => o.id === obraId);
+    const abonosDisponibles = useMemo(() => (selectedClient?.abonos || []).filter(abono =>
+        !abono.aplicado && Number(abono.saldo ?? abono.monto) > 0 &&
+        abono.aplicarProximoCorte !== false &&
+        (!abono.obraId || !obraId || String(abono.obraId) === String(obraId))
+    ), [selectedClient, obraId]);
     const clientsSorted = useMemo(() => {
         return [...clients].sort((a, b) =>
             (a.name || '').localeCompare((b.name || ''), 'es', { sensitivity: 'base' })
@@ -405,6 +420,12 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         setGenerado(false);
         setSaved(false);
     }, [availableRems]);
+
+    React.useEffect(() => {
+        setSelectedAbonoIds(abonosDisponibles.map(abono => abono.id));
+        setGenerado(false);
+        setSaved(false);
+    }, [clientId, obraId, abonosDisponibles]);
 
     const resultado = useMemo(() => {
         if (!clientId || !fechaInicio || !fechaCorte) return null;
@@ -524,11 +545,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                     const scheme = prod?.esquemaCobro || 'Calendario';
                     const tarifa = Number((item.tarifaDia !== undefined && item.tarifaDia !== null) ? item.tarifaDia : ((item.price !== undefined && item.price !== null) ? item.price : (prod?.value || 0)));
 
-                    const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') ||
-                        (item.tipoCobro || '').toLowerCase().includes('única') ||
-                        (prod?.category || '').toLowerCase().includes('servicio') ||
-                        (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
-                        (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                    const isServ = esServicio(item, prod);
                     const isHora = (item.tipoCobro || '').toLowerCase() === 'hora' || (prod?.tipoCobro || '').toLowerCase() === 'hora';
 
                     if (isServ) {
@@ -776,8 +793,11 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         const retencion = Math.round(subtotalConDescuento * porcRet / 100);
 
         const totalAntesDePagos = subtotalConDescuento + iva + retencion + totalTransporteFiltered;
-        const pagosPrevios = 0;
-        const totalNeto = totalAntesDePagos;
+        const pagosPrevios = abonosDisponibles
+            .filter(abono => selectedAbonoIds.includes(abono.id))
+            .reduce((sum, abono) => sum + (Number(abono.saldo ?? abono.monto) || 0), 0);
+        const pagosAplicados = Math.min(totalAntesDePagos, pagosPrevios);
+        const totalNeto = Math.max(0, totalAntesDePagos - pagosAplicados);
 
         return {
             lineas, // All lines for UI
@@ -789,12 +809,12 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             retencion,
             transporte: totalTransporteFiltered,
             totalAntesDePagos,
-            pagosPrevios,
+            pagosPrevios: pagosAplicados,
             totalNeto,
             porcIVA,
             porcRet
         };
-    }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient, customDays, customDates, customFestivos, descuentoTipo, descuentoValor, aplicarFestivos]);
+    }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient, customDays, customDates, customFestivos, descuentoTipo, descuentoValor, aplicarFestivos, abonosDisponibles, selectedAbonoIds]);
 
     const handleGenerate = () => { if (resultado) setGenerado(true); };
     const handleSaveInvoice = async () => {
@@ -819,7 +839,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                 transporte: resultado.transporte,
                 remisionEnabled: true,
                 remisionCreada: true,
-                paidAmount: 0,
+                paidAmount: resultado.pagosPrevios,
                 descuentoMonto: resultado.descuento,
                 descuentoTipo,
                 descuentoValor: Number(descuentoValor) || 0,
@@ -827,9 +847,14 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                     id: Date.now(),
                     fechaInicio: fechaInicio,
                     fechaCorte: fechaCorte,
-                    status: 'Pendiente'
+                    status: 'Pendiente',
+                    abonoIds: selectedAbonoIds
                 }]
             });
+
+            if (newInvoice && selectedAbonoIds.length > 0) {
+                await markClientAbonosApplied(clientId, selectedAbonoIds, newInvoice.id, resultado.pagosPrevios);
+            }
 
             // Download Invoice PDF
             if (newInvoice) {
@@ -863,7 +888,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
 
     return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '1rem' }} onClick={onClose}>
-            <div style={{
+            <div className="corte-modal" style={{
                 background: '#f8fafc',
                 borderRadius: 24,
                 width: '95vw',
@@ -887,8 +912,8 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                     <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 36, height: 36, color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}><X size={20} /></button>
                 </div>
 
-                <div style={{ padding: '2rem 2.5rem', overflowY: 'auto', flex: 1, height: '100%' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2.5rem', alignItems: 'start', height: '100%' }}>
+                <div className="corte-modal__body" style={{ padding: '2rem 2.5rem', overflowY: 'auto', flex: 1, height: '100%' }}>
+                    <div className="corte-modal__grid" style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '2.5rem', alignItems: 'start', height: '100%' }}>
                         {/* ── Sidebar: Config ── */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '1.25rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
@@ -1068,6 +1093,24 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                             />
                                         </div>
                                     </div>
+                                    {abonosDisponibles.length > 0 && (
+                                        <div>
+                                            <label style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 800, display: 'block', marginBottom: '0.45rem' }}>Abonos disponibles para este corte</label>
+                                            <div style={{ border: '1px solid #bbf7d0', borderRadius: 10, background: '#f0fdf4', overflow: 'hidden' }}>
+                                                {abonosDisponibles.map(abono => (
+                                                    <label key={abono.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.65rem 0.75rem', borderBottom: '1px solid #dcfce7', cursor: 'pointer', fontSize: '0.78rem' }}>
+                                                        <input type="checkbox" checked={selectedAbonoIds.includes(abono.id)} onChange={e => {
+                                                            setSelectedAbonoIds(ids => e.target.checked ? [...ids, abono.id] : ids.filter(id => id !== abono.id));
+                                                            setGenerado(false); setSaved(false);
+                                                        }}/>
+                                                        <span style={{ flex: 1, color: '#166534' }}>{abono.fecha} · {abono.metodoPago}</span>
+                                                        <strong style={{ color: '#047857' }}>{fmtCOP(Number(abono.saldo ?? abono.monto) || 0)}</strong>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                            <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 4 }}>Puedes desmarcar cualquier abono para conservarlo para otro corte.</div>
+                                        </div>
+                                    )}
                                     <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: '0.5rem' }} disabled={!clientId} onClick={handleGenerate}>
                                         <Calculator size={18} /> Calcular Liquidación
                                     </button>
@@ -1101,6 +1144,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                         ['Transporte', fmtCOP(resultado.transporte), '#1e293b'],
                                         ['IVA', fmtCOP(resultado.iva), '#2365AB'],
                                         ['Retención', `-${fmtCOP(resultado.retencion)}`, '#ef4444'],
+                                        ['Abonos aplicados', `-${fmtCOP(resultado.pagosPrevios)}`, '#10b981'],
                                         ['Saldo real', fmtCOP(resultado.totalNeto), resultado.totalNeto === 0 ? '#16a34a' : '#1e293b'],
                                     ].map(([k, v, c]) => (
                                         <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.25rem 0' }}>
@@ -1173,7 +1217,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                         <div style={{ background: '#f8fafc', padding: '1rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                                                 <Truck size={18} style={{ color: isSelected ? '#2563eb' : '#64748b' }} />
-                                                                <span style={{ fontWeight: 800, color: '#104166', fontSize: '1rem' }}>Remisión #{displayId}</span>
+                                                                <span style={{ fontWeight: 800, color: '#104166', fontSize: '1rem' }}>#{displayId}</span>
                                                                 <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 500 }}>— Despachada el {lines[0].remFecha}</span>
                                                             </div>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>

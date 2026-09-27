@@ -22,6 +22,8 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
     });
     const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
     const [notas, setNotas] = useState(initialData?.notas || 'Cotización sujeto a disponibilidad de equipos.');
+    const [fecha, setFecha] = useState(initialData?.fecha || format(new Date(), 'yyyy-MM-dd'));
+    const [deposito, setDeposito] = useState(initialData?.deposito || 0);
     const [items, setItems] = useState(initialData?.items ? [...initialData.items] : []);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterPropiedad, setFilterPropiedad] = useState('Todos'); // 'Todos' | 'Propio' | 'Terceros'
@@ -29,6 +31,12 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
 
     const selectedClient = clients.find(c => c.id === clientId);
     const obras = selectedClient?.obras || [];
+    const isServiceProduct = (prod = {}) => {
+        const descriptor = [prod.category, prod.tipoCobro, prod.esquemaCobro, prod.name, prod.nombre]
+            .filter(Boolean).join(' ').toLowerCase();
+        return ['servicio', 'servio ', 'única vez', 'unica vez', 'mano de obra', 'transporte', 'entrega', 'recogida', 'flete', 'acarreo', 'armado', 'desarmado', 'depósito', 'deposito', 'cargo por']
+            .some(term => descriptor.includes(term));
+    };
 
     // ─── Mapa de Popularidad / Veces Alquilado ──────────────────────────────────
     // Se computa la cantidad total alquilada y despachada para cada producto
@@ -123,13 +131,11 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
     const total = subtotal + iva + ret;
 
     const handleProductClick = (prod) => {
-        const isServ = (prod.category || '').toLowerCase().includes('servicio') ||
-                       (prod.tipoCobro || '').toLowerCase().includes('servicio') ||
-                       (prod.esquemaCobro || '').toLowerCase().includes('única');
+        const isServ = isServiceProduct(prod);
         const existingIdx = items.findIndex(i => i.productId === prod.id);
         if (existingIdx >= 0) {
             const newItems = [...items];
-            const nextQty = newItems[existingIdx].cantidad + 1;
+            const nextQty = isServ ? 1 : newItems[existingIdx].cantidad + 1;
             if (!isServ && nextQty > prod.availableStock) {
                 Swal.fire({
                     title: 'Stock Insuficiente',
@@ -157,8 +163,9 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                 cantidad: 1,
                 dias: isServ ? 1 : defaultDays,
                 tarifaDia: Number(prod.value) || 0,
-                tipoCobro: prod.tipoCobro,
-                category: prod.category
+                tipoCobro: isServ ? 'Servicio' : prod.tipoCobro,
+                esquemaCobro: isServ ? 'Única Vez' : prod.esquemaCobro,
+                category: isServ ? 'Servicio' : prod.category
             }]);
         }
     };
@@ -166,11 +173,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
     const updateItemQty = (idx, delta) => {
         const newItems = [...items];
         const prod = (products || []).find(p => p && p.id === newItems[idx].productId);
-        const isServ = (newItems[idx].tipoCobro || '').toLowerCase().includes('servicio') ||
-                       (newItems[idx].category || '').toLowerCase().includes('servicio') ||
-                       (prod?.category || '').toLowerCase().includes('servicio') ||
-                       (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
-                       (prod?.esquemaCobro || '').toLowerCase().includes('única');
+        const isServ = isServiceProduct({ ...prod, ...newItems[idx] });
         const curr = Number(newItems[idx].cantidad) || 0;
         const nextQty = curr + delta;
         if (!isServ && prod && nextQty > prod.availableStock) {
@@ -189,11 +192,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
     const setItemQtyDirect = (idx, val) => {
         const newItems = [...items];
         const prod = (products || []).find(p => p && p.id === newItems[idx].productId);
-        const isServ = (newItems[idx].tipoCobro || '').toLowerCase().includes('servicio') ||
-                       (newItems[idx].category || '').toLowerCase().includes('servicio') ||
-                       (prod?.category || '').toLowerCase().includes('servicio') ||
-                       (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
-                       (prod?.esquemaCobro || '').toLowerCase().includes('única');
+        const isServ = isServiceProduct({ ...prod, ...newItems[idx] });
         
         let newQty = val === '' ? '' : Math.max(1, parseInt(val, 10) || 1);
         if (!isServ && prod && typeof newQty === 'number') {
@@ -239,7 +238,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
         if (!clientId || !obraId || items.length === 0) return;
         onSave({
             clientId, obraId, 
-            notas, items,
+            fecha, deposito: Number(deposito) || 0, notas, items,
             validezDias: initialData?.validezDias || 15, // Default as requested to remove field
             metodoPago: initialData?.metodoPago || 'Crédito 30 días', // Default as requested to remove field
             plazoEntrega: initialData?.plazoEntrega || '24 horas' // Default as requested to remove field
@@ -257,6 +256,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
         <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1.5rem' }}>
             <div 
                 onClick={e => e.stopPropagation()}
+                className="quote-modal"
                 style={{ background: '#ffffff', borderRadius: 24, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', width: '100%', maxWidth: 1240, height: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 
                 {/* Header */}
@@ -264,20 +264,20 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <div style={{ background: '#2365AB', color: 'white', padding: '0.6rem', borderRadius: 12 }}><FilePlus size={24} /></div>
                         <div>
-                            <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, color: '#1e293b' }}>Nueva Cotización</h2>
+                            <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 900, color: '#1e293b' }}>{initialData ? 'Editar Cotización' : 'Nueva Cotización'}</h2>
                             <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>Configure el cliente y seleccione los equipos para la propuesta.</p>
                         </div>
                     </div>
                     <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button>
                 </div>
 
-                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                <div className="quote-modal-layout" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                     
                     {/* Left Panel: Configuration & Product Grid */}
                     <div style={{ flex: 2, display: 'flex', flexDirection: 'column', borderRight: '1px solid #e2e8f0', background: '#ffffff' }}>
                         
                         {/* Config Area */}
-                        <div style={{ padding: '1.5rem 2.5rem', borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.25rem', alignItems: 'end' }}>
+                        <div className="quote-config-grid" style={{ padding: '1.5rem 2.5rem', borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '1.25rem', alignItems: 'end' }}>
                             <div>
                                 <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Cliente *</label>
                                 <div style={{ position: 'relative' }}>
@@ -380,6 +380,14 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                     <option value="">Seleccione Obra</option>
                                     {obras.map(o => <option key={o.id} value={o.id}>{o.nombre}</option>)}
                                 </select>
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Fecha *</label>
+                                <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={IS} />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase' }}>Depósito</label>
+                                <input type="number" min="0" value={deposito} onChange={e => setDeposito(e.target.value)} placeholder="0" style={IS} />
                             </div>
                         </div>
 
@@ -488,7 +496,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                                 <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e293b', lineHeight: 1.1, marginBottom: '0.35rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.35rem' }}>
                                                     <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#10b981', whiteSpace: 'nowrap' }}>
-                                                        {fmtCOP(p.value)}<span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 400 }}>/d</span>
+                                                        {fmtCOP(p.value)}<span style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 400 }}>{isServiceProduct(p) ? '/servicio' : '/d'}</span>
                                                     </div>
                                                     
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -499,18 +507,18 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                                             padding: '1px 5px',
                                                             borderRadius: 4,
                                                             background: '#ffffff',
-                                                            color: (p.availableStock ?? p.stock) > 0 ? '#10b981' : '#ef4444',
-                                                            border: (p.availableStock ?? p.stock) > 0 ? '0.2px solid #10b981' : '0.2px solid #ef4444',
+                                                            color: isServiceProduct(p) ? '#0369a1' : ((p.availableStock ?? p.stock) > 0 ? '#10b981' : '#ef4444'),
+                                                            border: isServiceProduct(p) ? '0.2px solid #7dd3fc' : ((p.availableStock ?? p.stock) > 0 ? '0.2px solid #10b981' : '0.2px solid #ef4444'),
                                                             lineHeight: '1.2',
                                                             whiteSpace: 'nowrap',
                                                             display: 'inline-block'
                                                         }}>
-                                                            {(p.availableStock ?? p.stock ?? 0)} disp.
+                                                            {isServiceProduct(p) ? 'Servicio' : `${(p.availableStock ?? p.stock ?? 0)} disp.`}
                                                         </span>
 
                                                         {inList && (
                                                             <div style={{ background: '#2365AB', color: 'white', minWidth: 20, height: 20, padding: '0 4px', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 800 }}>
-                                                                {inList.cantidad}
+                                                                {isServiceProduct(p) ? '✓' : inList.cantidad}
                                                             </div>
                                                         )}
                                                     </div>
@@ -543,12 +551,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                     {items.map((item, idx) => {
                                         const prod = (products || []).find(p => p && p.id === item.productId);
                                         const isTerceros = prod?.tipoPropiedad === 'Terceros';
-                                        const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') ||
-                                                       (item.tipoCobro || '').toLowerCase().includes('única') ||
-                                                       (item.category || '').toLowerCase().includes('servicio') ||
-                                                       (prod?.category || '').toLowerCase().includes('servicio') ||
-                                                       (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
-                                                       (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                                        const isServ = isServiceProduct({ ...prod, ...item });
                                         const isHora = (item.tipoCobro || '').toLowerCase() === 'hora' || (prod?.tipoCobro || '').toLowerCase() === 'hora';
                                         const lineTotal = item.cantidad * (isServ ? 1 : item.dias) * item.tarifaDia;
 
@@ -617,19 +620,25 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                                 )}
 
                                                 <div style={{ display: 'grid', gridTemplateColumns: isServ ? '1fr' : '1fr 1fr', gap: '1rem' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                        <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Cant:</div>
-                                                        <input 
-                                                            type="number" 
-                                                            min="1" 
-                                                            value={item.cantidad} 
-                                                            onChange={(e) => setItemQtyDirect(idx, e.target.value)}
-                                                            onBlur={() => {
-                                                                if (!item.cantidad || item.cantidad < 1) setItemQtyDirect(idx, 1);
-                                                            }}
-                                                            style={{ width: '100%', padding: '0.3rem', border: '1px solid #e2e8f0', borderRadius: 8, textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }} 
-                                                        />
-                                                    </div>
+                                                    {isServ ? (
+                                                        <div style={{ padding: '0.45rem 0.65rem', borderRadius: 8, background: '#e0f2fe', color: '#0369a1', fontSize: '0.75rem', fontWeight: 800, textAlign: 'center' }}>
+                                                            Servicio sin cantidad · no afecta inventario
+                                                        </div>
+                                                    ) : (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Cant:</div>
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                value={item.cantidad}
+                                                                onChange={(e) => setItemQtyDirect(idx, e.target.value)}
+                                                                onBlur={() => {
+                                                                    if (!item.cantidad || item.cantidad < 1) setItemQtyDirect(idx, 1);
+                                                                }}
+                                                                style={{ width: '100%', padding: '0.3rem', border: '1px solid #e2e8f0', borderRadius: 8, textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }}
+                                                            />
+                                                        </div>
+                                                    )}
                                                     {!isServ && (
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                             <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>{isHora ? 'Horas:' : 'Días:'}</div>
@@ -656,6 +665,10 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
 
                         {/* Totals Section */}
                         <div style={{ padding: '1.5rem', background: 'white', borderTop: '1px solid #e2e8f0' }}>
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', display: 'block', marginBottom: '0.4rem', textTransform: 'uppercase' }}>Notas de la cotización</label>
+                                <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={3} placeholder="Condiciones, observaciones o instrucciones para el cliente…" style={{ ...IS, resize: 'vertical', minHeight: 76 }} />
+                            </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
                                     <span>Subtotal</span>
@@ -671,10 +684,16 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                         <span style={{ fontWeight: 600, color: '#991b1b' }}>-{fmtCOP(ret)}</span>
                                     </div>
                                 )}
+                                {Number(deposito) > 0 && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
+                                        <span>Depósito reembolsable</span>
+                                        <span style={{ fontWeight: 700, color: '#0369a1' }}>{fmtCOP(deposito)}</span>
+                                    </div>
+                                )}
                                 <div style={{ height: '1px', background: '#e2e8f0', margin: '0.4rem 0' }}></div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.25rem', fontWeight: 900, color: '#1e293b' }}>
-                                    <span>Total</span>
-                                    <span style={{ color: '#10b981' }}>{fmtCOP(total)}</span>
+                                    <span>{Number(deposito) > 0 ? 'Total + depósito' : 'Total'}</span>
+                                    <span style={{ color: '#10b981' }}>{fmtCOP(total + (Number(deposito) || 0))}</span>
                                 </div>
                             </div>
                             <button 

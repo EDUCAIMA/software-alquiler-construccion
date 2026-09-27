@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Users, Package, FileText, ArrowUpRight, ArrowDownRight,
   TrendingUp, Wrench, AlertTriangle, Clock, ShieldAlert, CheckCircle, Bell,
-  Truck, Calculator, UserCheck, Forklift, Building2, Briefcase
+  Truck, Calculator, UserCheck, Forklift, Building2, Briefcase, X
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import * as echarts from 'echarts';
@@ -1175,8 +1175,9 @@ export default function Dashboard() {
 
       {/* Vista de Datos Modal */}
       {dataViewOpen && (
-        <div className="modal-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-          <div className="modal-content" style={{ width: '90%', maxWidth: '600px', padding: '2rem', borderRadius: '16px' }}>
+        <div className="modal-backdrop" onClick={() => setDataViewOpen(false)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+          <div className="modal-content" onClick={event => event.stopPropagation()} style={{ width: '90%', maxWidth: '600px', padding: '2rem', borderRadius: '16px', position: 'relative' }}>
+            <button type="button" aria-label="Cerrar ventana" onClick={() => setDataViewOpen(false)} style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, border: 'none', borderRadius: '50%', background: 'var(--background-secondary)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={18} /></button>
             <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <FileText style={{ color: COLORS.blue }} /> Vista de Datos: Facturación Reciente
             </h2>
@@ -1215,8 +1216,9 @@ export default function Dashboard() {
 
       {/* Vista de Datos Cartera Modal */}
       {carteraDataViewOpen && (
-        <div className="modal-backdrop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-          <div className="modal-content" style={{ width: '90%', maxWidth: '600px', padding: '2rem', borderRadius: '16px' }}>
+        <div className="modal-backdrop" onClick={() => setCarteraDataViewOpen(false)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+          <div className="modal-content" onClick={event => event.stopPropagation()} style={{ width: '90%', maxWidth: '600px', padding: '2rem', borderRadius: '16px', position: 'relative' }}>
+            <button type="button" aria-label="Cerrar ventana" onClick={() => setCarteraDataViewOpen(false)} style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, border: 'none', borderRadius: '50%', background: 'var(--background-secondary)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={18} /></button>
             <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <FileText style={{ color: COLORS.orange }} /> Vista de Datos: Cartera Pendiente
             </h2>

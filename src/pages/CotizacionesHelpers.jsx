@@ -23,6 +23,15 @@ const ESTADO_CFG = {
 
 const fmtCOP = n => `$${(Number(n) || 0).toLocaleString('es-CO')}`;
 
+const esItemServicio = (item = {}, product = {}) => {
+    const descriptor = [
+        item.category, item.tipoCobro, item.esquemaCobro, item.nombre, item.name,
+        product.category, product.tipoCobro, product.esquemaCobro, product.nombre, product.name
+    ].filter(Boolean).join(' ').toLowerCase();
+    return ['servicio', 'servio ', 'única vez', 'unica vez', 'mano de obra', 'transporte', 'entrega', 'recogida', 'flete', 'acarreo', 'armado', 'desarmado', 'depósito', 'deposito', 'cargo por']
+        .some(term => descriptor.includes(term));
+};
+
 // ─── PDF Cotización al Cliente (Nuevo Formato Profesional) ────────────────────────
 function generateCotizacionPDF(cot, client, obra, settings) {
     try {
@@ -53,7 +62,7 @@ function generateCotizacionPDF(cot, client, obra, settings) {
 
         // --- TABLA DE ITEMS ESTILO PROFESIONAL ---
         const getItemSubtotal = (i) => {
-            const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+            const isServ = esItemServicio(i);
             return Number(i.cantidad) * (isServ ? 1 : Number(i.dias)) * Number(i.tarifaDia);
         };
         const subtotal = cot.items.reduce((s, i) => s + getItemSubtotal(i), 0);
@@ -62,18 +71,19 @@ function generateCotizacionPDF(cot, client, obra, settings) {
         const iva = Math.round(subtotal * porcIVA / 100);
         const ret = Math.round(subtotal * porcRet / 100);
         const total = subtotal + iva + ret;
+        const deposito = Math.max(0, Number(cot.deposito) || 0);
 
         autoTable(doc, {
             startY: y,
             margin: { left: margin, right: margin },
             head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
             body: cot.items.map((i, idx) => {
-                const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+                const isServ = esItemServicio(i);
                 return [
                     idx + 1,
                     i.nombre.toUpperCase(),
-                    i.cantidad,
-                    isServ ? '1 (Única)' : i.dias,
+                    isServ ? '—' : i.cantidad,
+                    isServ ? 'SERVICIO' : i.dias,
                     fmtN(i.tarifaDia),
                     fmtN(getItemSubtotal(i))
                 ];
@@ -114,7 +124,7 @@ function generateCotizacionPDF(cot, client, obra, settings) {
         
         // Recuadro Observaciones / Son
         doc.setLineWidth(0.2);
-        doc.rect(margin, footerY, obsW, 35);
+        doc.rect(margin, footerY, obsW, deposito > 0 ? 42 : 35);
         doc.setFontSize(7.5);
         doc.setFont('helvetica', 'bold');
         doc.text('COTIZACIÓN EN PESOS (COP)', margin + 2, footerY + 5);
@@ -135,7 +145,8 @@ function generateCotizacionPDF(cot, client, obra, settings) {
             ['DESCUENTO', '0'],
             ['SUB-TOTAL', fmtN(subtotal)],
             [`IVA (${porcIVA}%)`, fmtN(iva)],
-            [`RETENCIÓN (${porcRet}%)`, fmtN(ret)]
+            [`RETENCIÓN (${porcRet}%)`, fmtN(ret)],
+            ...(deposito > 0 ? [['DEPÓSITO REEMBOLSABLE', fmtN(deposito)]] : [])
         ];
 
         let ty = footerY;
@@ -157,8 +168,8 @@ function generateCotizacionPDF(cot, client, obra, settings) {
         doc.rect(totX + 50, ty, 30, 9, 'S');
         doc.setFontSize(9);
         doc.setFont('helvetica', 'extrabold');
-        doc.text('TOTAL', totX + 2, ty + 6);
-        doc.text(`$${fmtN(total)}`, totX + 78, ty + 6, { align: 'right' });
+        doc.text(deposito > 0 ? 'TOTAL + DEPÓSITO' : 'TOTAL', totX + 2, ty + 6);
+        doc.text(`$${fmtN(total + deposito)}`, totX + 78, ty + 6, { align: 'right' });
 
         y = ty + 20;
 
@@ -242,13 +253,13 @@ function generateContratoPDF(cot, client, obra, settings) {
             margin: { left: margin, right: margin },
             head: [['ITE', 'EQUIPO / HERRAMIENTA', 'CAN.', 'DÍAS', 'TARIFA/DÍA', 'SUBTOTAL']],
             body: cot.items.map((i, idx) => {
-                const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+                const isServ = esItemServicio(i);
                 const rowTot = i.cantidad * (isServ ? 1 : i.dias) * i.tarifaDia;
                 return [
                     idx + 1,
                     i.nombre.toUpperCase(),
-                    i.cantidad,
-                    isServ ? '1 (Única)' : i.dias,
+                    isServ ? '—' : i.cantidad,
+                    isServ ? 'SERVICIO' : i.dias,
                     i.tarifaDia.toLocaleString('es-CO'),
                     rowTot.toLocaleString('es-CO')
                 ];
@@ -280,7 +291,7 @@ function generateContratoPDF(cot, client, obra, settings) {
                 5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
             },
             foot: [['', '', '', '', 'TOTAL ANTES DE IMP.', (cot.items.reduce((s, i) => {
-                const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+                const isServ = esItemServicio(i);
                 return s + (i.cantidad * (isServ ? 1 : i.dias) * i.tarifaDia);
             }, 0)).toLocaleString('es-CO')]],
             footStyles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [30, 41, 59], halign: 'right', lineWidth: 0.1, lineColor: [30, 41, 59] },
@@ -621,6 +632,7 @@ function generateRemisionPDF(rem, client, obra, settings) {
             margin: { left: margin, right: margin },
             head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANTIDAD', 'DEVUELTA', 'PENDIENTE']],
             body: rem.items.map((i, idx) => {
+                const isService = esItemServicio(i);
                 const hrs = i.horasCalculadas || calcularHorasAlquiler(i.horaInicio, i.horaFin);
                 let timeInfo = '';
                 if (i.horaInicio || i.horaFin) {
@@ -629,9 +641,9 @@ function generateRemisionPDF(rem, client, obra, settings) {
                 return [
                     idx + 1,
                     (i.nombre || i.productId || 'EQUIPO').toUpperCase() + timeInfo,
-                    i.cantidad || 0,
-                    i.cantidadDevuelta || 0,
-                    (i.cantidad || 0) - (i.cantidadDevuelta || 0)
+                    isService ? 'SERVICIO' : (i.cantidad || 0),
+                    isService ? '—' : (i.cantidadDevuelta || 0),
+                    isService ? '—' : (i.cantidad || 0) - (i.cantidadDevuelta || 0)
                 ];
             }),
             theme: 'plain',
@@ -682,6 +694,122 @@ function generateRemisionPDF(rem, client, obra, settings) {
     } catch (error) {
         console.error('Error generating Remision PDF:', error);
         alert('Error al generar el PDF de la remisión.');
+    }
+}
+
+// ─── Ticket térmico Remisión (80 mm) ────────────────────────────────────────
+function generateRemisionTicket(rem, client, obra, settings) {
+    const escapeHtml = value => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+
+    const items = (rem?.items || []).map((item, index) => {
+        const isService = esItemServicio(item);
+        const quantity = isService ? 'SERVICIO' : `${Number(item.cantidad) || 0} UND`;
+        const returned = Number(item.cantidadDevuelta) || 0;
+        const pending = Math.max(0, (Number(item.cantidad) || 0) - returned);
+        const detail = isService
+            ? 'Cobro único · no afecta inventario'
+            : `Dev: ${returned} · Pend: ${pending}`;
+
+        return `<div class="item">
+            <div class="item-name">${index + 1}. ${escapeHtml(item.nombre || item.productId || 'Equipo')}</div>
+            <div class="item-row"><strong>${escapeHtml(quantity)}</strong><span>${escapeHtml(detail)}</span></div>
+        </div>`;
+    }).join('');
+
+    const logo = settings?.logoTicket || settings?.logoPDF || settings?.logo || '';
+    const itemCount = Math.max(1, (rem?.items || []).length);
+    const noteLines = rem?.notas ? Math.ceil(String(rem.notas).length / 36) : 0;
+    const ticketHeightMm = Math.max(105, Math.min(500, 82 + (itemCount * 13) + (noteLines * 4) + (logo ? 18 : 0)));
+    const printFrame = document.createElement('iframe');
+    printFrame.setAttribute('aria-hidden', 'true');
+    printFrame.style.position = 'fixed';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    printFrame.style.visibility = 'hidden';
+    document.body.appendChild(printFrame);
+
+    const ticketHtml = `<!doctype html>
+    <html lang="es"><head><meta charset="utf-8"><title>Ticket ${escapeHtml(rem?.id)}</title>
+    <style>
+        @page { size: 80mm ${ticketHeightMm}mm; margin: 3mm; }
+        * { box-sizing: border-box; }
+        html, body { width: 74mm; min-width: 74mm; max-width: 74mm; margin: 0; padding: 0; }
+        body { color: #000; background: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.35; }
+        .center { text-align: center; }
+        .logo { max-width: 52mm; max-height: 18mm; object-fit: contain; margin: 0 auto 4px; display: block; }
+        h1 { margin: 2px 0; font-size: 16px; }
+        .muted { font-size: 9px; }
+        .rule { border-top: 1px dashed #000; margin: 7px 0; }
+        .meta-row, .item-row { display: flex; justify-content: space-between; gap: 8px; }
+        .meta-row span:first-child { flex: 0 0 24mm; }
+        .meta-row strong { text-align: right; overflow-wrap: anywhere; }
+        .item { padding: 5px 0; border-bottom: 1px dotted #555; }
+        .item-name { font-weight: 800; text-transform: uppercase; overflow-wrap: anywhere; }
+        .item-row { margin-top: 2px; font-size: 9px; }
+        .notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .signature { margin-top: 24mm; border-top: 1px solid #000; padding-top: 3px; text-align: center; }
+        .footer { margin-top: 8px; text-align: center; font-size: 9px; }
+        @media print {
+            html, body { width: 74mm !important; min-width: 74mm !important; max-width: 74mm !important; }
+            .no-print { display: none; }
+        }
+    </style></head><body>
+        ${logo ? `<img class="logo" src="${escapeHtml(logo)}" alt="Logo">` : ''}
+        <div class="center">
+            <strong>${escapeHtml(settings?.companyName || settings?.shortName || 'CIELO')}</strong>
+            <h1>#${escapeHtml(rem?.id || 'REM')}</h1>
+            <div class="muted">REMISIÓN DE DESPACHO</div>
+        </div>
+        <div class="rule"></div>
+        <div class="meta-row"><span>Fecha</span><strong>${escapeHtml(rem?.fecha || '—')}</strong></div>
+        <div class="meta-row"><span>Estado</span><strong>${escapeHtml(rem?.estado || '—')}</strong></div>
+        <div class="meta-row"><span>Cliente</span><strong>${escapeHtml(client?.name || rem?.clientId || '—')}</strong></div>
+        <div class="meta-row"><span>Obra</span><strong>${escapeHtml(obra?.nombre || rem?.obraId || '—')}</strong></div>
+        <div class="meta-row"><span>Dirección</span><strong>${escapeHtml(obra?.ubicacion || client?.direccion || '—')}</strong></div>
+        <div class="rule"></div>
+        <strong>DETALLE</strong>
+        ${items || '<div class="item">Sin ítems</div>'}
+        ${rem?.notas ? `<div class="rule"></div><div class="notes"><strong>Notas:</strong> ${escapeHtml(rem.notas)}</div>` : ''}
+        <div class="signature">Recibido por el cliente</div>
+        <div class="footer">Gracias · Conserve este comprobante</div>
+    </body></html>`;
+
+    const frameWindow = printFrame.contentWindow;
+    const frameDocument = printFrame.contentDocument;
+    if (!frameWindow || !frameDocument) {
+        printFrame.remove();
+        alert('No fue posible preparar la impresión del ticket.');
+        return;
+    }
+
+    const cleanup = () => window.setTimeout(() => printFrame.remove(), 100);
+    frameWindow.addEventListener('afterprint', cleanup, { once: true });
+    frameDocument.open();
+    frameDocument.write(ticketHtml);
+    frameDocument.close();
+
+    const printTicket = async () => {
+        const images = Array.from(frameDocument.images);
+        await Promise.all(images.map(image => image.complete
+            ? Promise.resolve()
+            : new Promise(resolve => {
+                image.addEventListener('load', resolve, { once: true });
+                image.addEventListener('error', resolve, { once: true });
+            })));
+        frameWindow.focus();
+        frameWindow.print();
+    };
+
+    if (frameDocument.readyState === 'complete') {
+        printTicket();
+    } else {
+        frameWindow.addEventListener('load', printTicket, { once: true });
     }
 }
 
@@ -1021,7 +1149,7 @@ export function generateInvoicePDF(invoice, client, products, settings) {
             }
 
             const remFecha = groupItems[0]?.remFecha || '';
-            doc.text(`REMISIÓN #${remId} ${remFecha ? `— DESPACHADA EL ${remFecha}` : ''}`, margin, y);
+            doc.text(`#${remId} ${remFecha ? `— DESPACHADA EL ${remFecha}` : ''}`, margin, y);
             y += 5;
         } else if (idx > 0) {
             y = doc.lastAutoTable.finalY + 10;
@@ -1047,19 +1175,15 @@ export function generateInvoicePDF(invoice, client, products, settings) {
                 const qty = Number(item.quantity || item.cantidad || 0);
                 const days = Number(item.days || item.dias || 1);
                 const price = Number(item.price || item.tarifaDia || 0);
-                const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') ||
-                    (item.tipoCobro || '').toLowerCase().includes('única') ||
-                    (prod?.category || '').toLowerCase().includes('servicio') ||
-                    (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
-                    (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                const isServ = esItemServicio(item, prod);
 
                 return [
                     gIdx + 1,
                     tagger ? tagger.cell(gIdx, productName, '', { noTag: isServ }) : productName.toUpperCase(),
-                    qty,
-                    days,
+                    isServ ? '—' : qty,
+                    isServ ? 'SERVICIO' : days,
                     `$${price.toLocaleString('es-CO')}`,
-                    `$${(qty * days * price).toLocaleString('es-CO')}`
+                    `$${(qty * (isServ ? 1 : days) * price).toLocaleString('es-CO')}`
                 ];
             }),
             didDrawCell: tagger ? tagger.didDrawCell : undefined,
@@ -1345,4 +1469,4 @@ export function generateDevolucionPDF(devData, client, obra, settings, products 
     }
 }
 
-export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, generateCortePDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP, exportClientPDF, calcularHorasAlquiler, calcularHoraFin };
+export { generateCotizacionPDF, generateContratoPDF, generatePagarePDF, generateCartaPDF, generateRemisionPDF, generateRemisionTicket, generateCortePDF, SignatureCanvas, WebcamCapture, HabeasDataModal, ESTADO_CFG, fmtCOP, exportClientPDF, calcularHorasAlquiler, calcularHoraFin };

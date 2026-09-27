@@ -8,7 +8,7 @@ import { differenceInDays, format } from 'date-fns';
 import Swal from 'sweetalert2';
 import { 
     fmtCOP, generateCotizacionPDF, generateContratoPDF, generatePagarePDF, 
-    generateCartaPDF, generateRemisionPDF, generateCortePDF, generateDevolucionPDF 
+    generateCartaPDF, generateRemisionPDF, generateRemisionTicket, generateCortePDF, generateDevolucionPDF
 } from './CotizacionesHelpers';
 import { ActionSection, ActionBtn, ProcessTimeline, BADGE, REM_ICON } from './CotComponents';
 import { useAppContext } from '../context/AppContext';
@@ -30,6 +30,13 @@ const ESTADO_REM_CFG = {
     Cancelada: { color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
 };
 
+const esServicio = (item = {}) => {
+    const descriptor = [item.category, item.tipoCobro, item.esquemaCobro, item.nombre, item.name]
+        .filter(Boolean).join(' ').toLowerCase();
+    return ['servicio', 'servio ', 'única vez', 'unica vez', 'mano de obra', 'transporte', 'entrega', 'recogida', 'flete', 'acarreo', 'armado', 'desarmado', 'depósito', 'deposito', 'cargo por']
+        .some(term => descriptor.includes(term));
+};
+
 const formatBase64 = (str) => {
     if (!str || typeof str !== 'string') return str;
     if (str.startsWith('data:') || str.startsWith('http')) return str;
@@ -47,6 +54,37 @@ export default function CotDetailPanel({
     const { users, editRemision, deleteRemision, products = [], clients = [] } = useAppContext();
     const [activeTab, setActiveTab] = useState('cotizacion');
     const [editingRemisionTarget, setEditingRemisionTarget] = useState(null);
+    const updateQuoteField = async (field, value, successText) => {
+        if (!onUpdateCot) return;
+        try {
+            await onUpdateCot(cot.id, { [field]: value });
+            Swal.fire({ title: 'Actualizado', text: successText, icon: 'success', confirmButtonColor: '#2365AB' });
+        } catch (error) {
+            Swal.fire({ title: 'Error', text: error.message, icon: 'error', confirmButtonColor: '#ef4444' });
+        }
+    };
+    const handleEditFecha = async () => {
+        const { value } = await Swal.fire({
+            title: 'Editar fecha de la cotización', input: 'date', inputValue: cot.fecha || format(new Date(), 'yyyy-MM-dd'),
+            showCancelButton: true, confirmButtonText: 'Guardar', cancelButtonText: 'Cancelar', confirmButtonColor: '#2365AB'
+        });
+        if (value) await updateQuoteField('fecha', value, 'La fecha de la cotización fue actualizada.');
+    };
+    const handleEditNotas = async () => {
+        const { value } = await Swal.fire({
+            title: 'Editar notas para el cliente', input: 'textarea', inputValue: cot.notas || '',
+            inputPlaceholder: 'Condiciones, observaciones o instrucciones…', inputAttributes: { 'aria-label': 'Notas de la cotización' },
+            showCancelButton: true, confirmButtonText: 'Guardar notas', cancelButtonText: 'Cancelar', confirmButtonColor: '#2365AB'
+        });
+        if (value !== undefined) await updateQuoteField('notas', value, 'Las notas quedaron guardadas en la cotización.');
+    };
+    const handleEditDeposito = async () => {
+        const { value } = await Swal.fire({
+            title: 'Depósito reembolsable', input: 'number', inputValue: Number(cot.deposito) || 0,
+            inputAttributes: { min: 0, step: 1000 }, showCancelButton: true, confirmButtonText: 'Guardar depósito', cancelButtonText: 'Cancelar', confirmButtonColor: '#2365AB'
+        });
+        if (value !== undefined) await updateQuoteField('deposito', Math.max(0, Number(value) || 0), 'El depósito de la cotización fue actualizado.');
+    };
     const handleEditMetodoPago = async () => {
         const options = {
             'Crédito 30 días': 'Crédito 30 días',
@@ -113,12 +151,13 @@ export default function CotDetailPanel({
 
     const cfg = ESTADO_CFG[cot.estado] || ESTADO_CFG['Borrador'];
     const subtotal = cot.items.reduce((s, i) => {
-        const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
+        const isServ = esServicio(i);
         return s + (i.cantidad * (isServ ? 1 : i.dias) * i.tarifaDia);
     }, 0);
     const iva = client?.responsableIVA ? Math.round(subtotal * (client?.porcIVA || 0) / 100) : 0;
     const ret = Math.round(subtotal * (client?.porcRetencion || 0) / 100);
     const totalVal = cot.type === 'inv' ? cot.amount : (subtotal + iva + ret + (cot.transporte || 0));
+    const deposito = Number(cot.deposito) || 0;
     const relatedInvoice = invoices.find(inv => inv.id === cot.id || inv.id === cot.facturaId || inv.cotizacionId === cot.id) || (cot.type === 'inv' ? cot : null);
     
     // --- Lógica de Liquidación Dinámica por Ítem ---
@@ -221,7 +260,7 @@ export default function CotDetailPanel({
 
     return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }} onClick={onClose}>
-            <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 850, height: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 30px 100px -12px rgba(0,0,0,0.45)', border: '1px solid rgba(0,0,0,0.1)' }} onClick={e => e.stopPropagation()}>
+            <div className="quote-detail-modal" style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 980, height: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 30px 100px -12px rgba(0,0,0,0.45)', border: '1px solid rgba(0,0,0,0.1)' }} onClick={e => e.stopPropagation()}>
 
                 {/* ── Header ── */}
                 <div style={{ 
@@ -361,7 +400,7 @@ export default function CotDetailPanel({
                                     </thead>
                                     <tbody>
                                         {cot.items.map((item, idx) => {
-                                            const isServ = (item.tipoCobro || '').toLowerCase().includes('servicio') || (item.category || '').toLowerCase().includes('servicio') || (item.esquemaCobro || '').toLowerCase().includes('única');
+                                            const isServ = esServicio(item);
                                             const lineTot = item.cantidad * (isServ ? 1 : item.dias) * item.tarifaDia;
                                             return (
                                                 <tr key={idx} style={{ 
@@ -370,7 +409,7 @@ export default function CotDetailPanel({
                                                 }}>
                                                     <td style={{ padding: '0.7rem 0.85rem', fontWeight: 600, color: '#1e293b', fontSize: '0.8rem' }}>{item.nombre}</td>
                                                     <td style={{ padding: '0.7rem 0.5rem', textAlign: 'center', color: '#1e293b', fontSize: '0.8rem', whiteSpace: 'nowrap', fontWeight: 600 }}>
-                                                        {item.cantidad} u × {isServ ? 'Cobro Único' : `${item.dias}d`}
+                                                        {isServ ? 'Servicio · Cobro único' : `${item.cantidad} u × ${item.dias}d`}
                                                     </td>
                                                     <td style={{ padding: '0.7rem 0.85rem', fontWeight: 600, color: '#1e293b', textAlign: 'right', fontSize: '0.8rem' }}>
                                                         {fmtCOP(lineTot)}
@@ -386,7 +425,8 @@ export default function CotDetailPanel({
                                             ['Subtotal', fmtCOP(subtotal)],
                                             ['IVA', fmtCOP(iva)],
                                             ['Retención', fmtCOP(ret)],
-                                            ['Transporte', fmtCOP(cot.transporte || 0)]
+                                            ['Transporte', fmtCOP(cot.transporte || 0)],
+                                            ...(deposito > 0 ? [['Depósito reembolsable', fmtCOP(deposito)]] : [])
                                         ].map(([label, value]) => (
                                             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#1e293b' }}>
                                                 <span style={{ fontWeight: 600 }}>{label}</span>
@@ -394,14 +434,21 @@ export default function CotDetailPanel({
                                             </div>
                                         ))}
                                         <div style={{ borderTop: '2px solid #1e293b', marginTop: '0.5rem', paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                                            <span style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.9rem' }}>TOTAL</span>
-                                            <span style={{ fontWeight: 800, color: '#1e293b', fontSize: '1.1rem' }}>{fmtCOP(totalVal)}</span>
+                                            <span style={{ fontWeight: 800, color: '#1e293b', fontSize: '0.9rem' }}>{deposito > 0 ? 'TOTAL + DEPÓSITO' : 'TOTAL'}</span>
+                                            <span style={{ fontWeight: 800, color: '#1e293b', fontSize: '1.1rem' }}>{fmtCOP(totalVal + deposito)}</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
                             <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '0.75rem 0.85rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', padding: '0.25rem 0', borderBottom: '1px solid #f1f5f9' }}>
+                                    <span style={{ color: '#64748b' }}>Fecha Cotización</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <span style={{ fontWeight: 600, color: '#104166' }}>{cot.fecha || '—'}</span>
+                                        {onUpdateCot && <button onClick={handleEditFecha} title="Editar fecha" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2365AB', padding: 2, display: 'flex' }}><Edit2 size={12} /></button>}
+                                    </div>
+                                </div>
                                 {/* Método Pago */}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', padding: '0.25rem 0', borderBottom: '1px solid #f1f5f9' }}>
                                     <span style={{ color: '#64748b' }}>Método Pago</span>
@@ -446,9 +493,21 @@ export default function CotDetailPanel({
                                         <span style={{ fontWeight: 600, color: '#104166' }}>{cot.plazoEntrega}</span>
                                     </div>
                                 )}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', padding: '0.25rem 0', borderTop: '1px solid #f1f5f9' }}>
+                                    <span style={{ color: '#64748b' }}>Depósito reembolsable</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <span style={{ fontWeight: 700, color: '#0369a1' }}>{fmtCOP(deposito)}</span>
+                                        {onUpdateCot && <button onClick={handleEditDeposito} title="Editar depósito" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2365AB', padding: 2, display: 'flex' }}><Edit2 size={12} /></button>}
+                                    </div>
+                                </div>
                             </div>
 
-                            {cot.notas && <div style={{ fontSize: '0.78rem', color: '#64748b', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.65rem 0.85rem' }}>{cot.notas}</div>}
+                            <div style={{ fontSize: '0.78rem', color: '#64748b', background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: '0.65rem 0.85rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{cot.notas || 'Sin notas para el cliente.'}</div>
+                                    {onUpdateCot && <button onClick={handleEditNotas} title="Editar notas" style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2365AB', borderRadius: 7, padding: 6, cursor: 'pointer', display: 'flex', flexShrink: 0 }}><Edit2 size={14} /></button>}
+                                </div>
+                            </div>
 
                             {(cot.firma || cot.signature || cot.foto || cot.photo || cot.fotoCC || cot.ccPhoto) && (
                                 <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 12, padding: '0.85rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
@@ -557,6 +616,7 @@ export default function CotDetailPanel({
                                                     <span style={{ fontSize: '0.68rem', fontWeight: 900, color: remCfg.color, background: remCfg.bg, padding: '4px 10px', borderRadius: 8 }}>{rem.estado}</span>
                                                     <button onClick={() => setEditingRemisionTarget(rem)} title="Editar Remisión" style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: 10, padding: '6px', cursor: 'pointer' }}><Edit2 size={16} /></button>
                                                     <button onClick={() => onPrintRemision(rem)} title="Imprimir Remisión" style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: 10, padding: '6px', cursor: 'pointer' }}><Printer size={16} /></button>
+                                                    <button onClick={() => generateRemisionTicket(rem, client, obra, settings)} title="Ticket térmico 80 mm" style={{ background: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4', borderRadius: 10, padding: '6px', cursor: 'pointer' }}><FileText size={16} /></button>
                                                     <button 
                                                         onClick={async () => {
                                                             const result = await Swal.fire({

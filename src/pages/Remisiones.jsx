@@ -6,7 +6,7 @@ import {
     ChevronLeft, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Trash2, Ban,
     Printer, Download, Activity, TrendingUp, Edit3, BarChart2
 } from 'lucide-react';
-import { generateRemisionPDF, generateDevolucionPDF, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
+import { generateRemisionPDF, generateRemisionTicket, generateDevolucionPDF, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
 import { useAppContext } from '../context/AppContext';
 import { format, differenceInDays } from 'date-fns';
 import Swal from 'sweetalert2';
@@ -29,6 +29,18 @@ const sField = (label, value, color) => (
         <div style={{ fontSize: '0.9rem', fontWeight: 700, color: color || 'var(--text-primary)', marginTop: 2 }}>{value}</div>
     </div>
 );
+
+const isServiceProduct = (prod = {}) => {
+    const descriptor = [prod.category, prod.tipoCobro, prod.esquemaCobro, prod.nombre, prod.name]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+    return descriptor.includes('servicio') || descriptor.includes('servio ') || descriptor.includes('única vez') || descriptor.includes('unica vez') ||
+        descriptor.includes('transporte') || descriptor.includes('entrega') || descriptor.includes('recogida') ||
+        descriptor.includes('flete') || descriptor.includes('acarreo') || descriptor.includes('mano de obra') ||
+        descriptor.includes('armado') || descriptor.includes('desarmado') || descriptor.includes('depósito') ||
+        descriptor.includes('deposito') || descriptor.includes('cargo por');
+};
 
 // ─── Modal: Nueva Remisión ────────────────────────────────────────────────────
 function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, facturaPreload, settings }) {
@@ -56,20 +68,24 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
 
     const selectedClient = clients.find(c => c.id === clientId);
     const obrasDisp = selectedClient?.obras || [];
+    const selectedProduct = products.find(p => p.id === selProd);
+    const selectedIsService = isServiceProduct(selectedProduct);
 
     const addItem = () => {
-        if (!selProd || selCant < 1) return;
+        if (!selProd || (!selectedIsService && selCant < 1)) return;
         const prod = products.find(p => p.id === selProd);
         if (!prod) return;
+        const isService = isServiceProduct(prod);
+        const quantity = isService ? 1 : selCant;
         // Check maintenance block
-        const hasPending = maintenances.some(
+        const hasPending = !isService && maintenances.some(
             m => m.productId === selProd && (m.status === 'Pendiente' || m.status === 'En Proceso')
         );
         if (hasPending) {
             setBlockError(`⛔ BLOQUEO: "${prod.name}" tiene un mantenimiento pendiente o en proceso. Resuelva el mantenimiento antes de despachar.`);
             return;
         }
-        if (selCant > prod.availableStock) {
+        if (!isService && quantity > prod.availableStock) {
             setBlockError(`Stock insuficiente. Disponible en bodega: ${prod.availableStock}`);
             return;
         }
@@ -77,8 +93,8 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
         const existing = items.findIndex(i => i.productId === selProd);
         if (existing >= 0) {
             const updated = [...items];
-            const totalWanted = updated[existing].cantidad + selCant;
-            if (totalWanted > prod.availableStock) {
+            const totalWanted = isService ? 1 : updated[existing].cantidad + quantity;
+            if (!isService && totalWanted > prod.availableStock) {
                 setBlockError(`Stock insuficiente. Ya tienes ${updated[existing].cantidad} agregados y el disponible en bodega total es ${prod.availableStock}.`);
                 return;
             }
@@ -88,9 +104,11 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
             setItems(prev => [...prev, { 
                 productId: selProd, 
                 nombre: prod.name, 
-                cantidad: selCant, 
+                cantidad: quantity,
                 tarifaDia: prod.value,
                 tipoCobro: prod.tipoCobro || 'Día',
+                category: prod.category,
+                esquemaCobro: prod.esquemaCobro,
                 horaInicio: '',
                 horaFin: '',
                 horasCalculadas: 0
@@ -201,19 +219,21 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                                 <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#104166', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                     <Package size={16} color="#2365AB" /> Agregar Equipo
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px auto', gap: '1rem', alignItems: 'end' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: selectedIsService ? '1fr 110px auto' : '1fr 80px auto', gap: '1rem', alignItems: 'end' }}>
                                     <div>
                                         <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Equipo / Herramienta</label>
                                         <select value={selProd} onChange={e => { setSelProd(e.target.value); setBlockError(''); }} style={SS}>
                                             <option value="">Seleccionar...</option>
-                                            {products.filter(p => p.availableStock > 0).map(p => (
-                                                <option key={p.id} value={p.id}>{p.name} (Disp: {p.availableStock} | ${p.value.toLocaleString()}/día)</option>
+                                            {products.filter(p => isServiceProduct(p) || p.availableStock > 0).map(p => (
+                                                <option key={p.id} value={p.id}>{p.name} ({isServiceProduct(p) ? 'Servicio · sin cantidad' : `Disp: ${p.availableStock}`} | ${p.value.toLocaleString()})</option>
                                             ))}
                                         </select>
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Cant.</label>
-                                        <input type="number" min="1" value={selCant} onChange={e => setSelCant(Number(e.target.value) || 1)} style={IS} />
+                                        <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>{selectedIsService ? 'Tipo' : 'Cant.'}</label>
+                                        {selectedIsService
+                                            ? <div style={{ ...IS, textAlign: 'center', color: '#0369a1', background: '#e0f2fe', fontWeight: 800 }}>SERVICIO</div>
+                                            : <input type="number" min="1" value={selCant} onChange={e => setSelCant(Number(e.target.value) || 1)} style={IS} />}
                                     </div>
                                     <button className="btn btn-primary" onClick={addItem} style={{ height: 42, padding: '0 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={18} /></button>
                                 </div>
@@ -279,7 +299,7 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                                                                     </span>
                                                                 )}
                                                             </td>
-                                                            <td style={{ padding: '0.75rem 1rem' }}>{item.cantidad}</td>
+                                                            <td style={{ padding: '0.75rem 1rem' }}>{isServiceProduct({ ...prod, ...item }) ? 'Servicio' : item.cantidad}</td>
                                                             <td style={{ padding: '0.75rem 1rem', color: '#10b981', fontWeight: 500 }}>
                                                                 ${item.tarifaDia?.toLocaleString()} {isHora ? '/ hora' : '/ día'}
                                                             </td>
@@ -348,13 +368,16 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                                 </div>
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                                     <tbody>
-                                        {items.map((item, idx) => (
-                                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#104166' }}>{item.nombre}</td>
-                                                <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{item.cantidad} unidad(es)</td>
-                                                <td style={{ padding: '0.75rem 1rem', fontWeight: 500, color: '#10b981', textAlign: 'right' }}>${(item.tarifaDia * item.cantidad).toLocaleString()}/día</td>
-                                            </tr>
-                                        ))}
+                                        {items.map((item, idx) => {
+                                            const service = isServiceProduct(item);
+                                            return (
+                                                <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600, color: '#104166' }}>{item.nombre}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{service ? 'Servicio' : `${item.cantidad} unidad(es)`}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 500, color: '#10b981', textAlign: 'right' }}>${Number(item.tarifaDia || 0).toLocaleString()}{service ? ' · cobro único' : '/día'}</td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
@@ -388,12 +411,15 @@ function NuevaRemisionModal({ onClose, onSave, clients, products, maintenances, 
                                 </p>
                             </div>
 
-                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: '1.5rem', width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: '1.5rem', width: '100%', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
                                 <button className="btn btn-secondary" onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: 48 }}>
                                     Cerrar Ventana
                                 </button>
                                 <button className="btn btn-primary" onClick={() => generateRemisionPDF(createdRem, selectedClient, obrasDisp.find(o => o.id === obraId), settings)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: 48 }}>
-                                    <Printer size={18} /> Imprimir Remisión
+                                    <Download size={18} /> Generar PDF
+                                </button>
+                                <button className="btn btn-primary" onClick={() => generateRemisionTicket(createdRem, selectedClient, obrasDisp.find(o => o.id === obraId), settings)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', height: 48, background: '#0f766e' }}>
+                                    <Printer size={18} /> Ticket térmico
                                 </button>
                             </div>
                         </div>
@@ -576,7 +602,7 @@ function VerifyDispatchModal({ rem, onClose, onConfirm, clients, products }) {
                                     return (
                                         <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                             <td style={{ padding: '0.75rem' }}>{displayName}</td>
-                                            <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 800, color: '#2365AB' }}>{item.cantidad}</td>
+                                            <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 800, color: '#2365AB' }}>{isServiceProduct({ ...prodInfo, ...item }) ? 'Servicio' : item.cantidad}</td>
                                         </tr>
                                     );
                                 })}
@@ -612,6 +638,7 @@ export default function Remisiones() {
     const [editingRemisionTarget, setEditingRemisionTarget] = useState(null);
     const [showReportesModal, setShowReportesModal] = useState(false);
     const [blockMsg, setBlockMsg] = useState('');
+    const [activeView, setActiveView] = useState('pendientes');
 
     React.useEffect(() => {
         if (globalPreload) {
@@ -814,8 +841,31 @@ export default function Remisiones() {
                 </div>
             </div>
 
+            <div className="remisiones-tabs" role="tablist" aria-label="Secciones de despachos y devoluciones">
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeView === 'pendientes'}
+                    onClick={() => setActiveView('pendientes')}
+                    className={activeView === 'pendientes' ? 'remisiones-tab active' : 'remisiones-tab'}
+                >
+                    <CreditCard size={17} /> Pendientes por despachar
+                    <span>{pendingInvoices.length}</span>
+                </button>
+                <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeView === 'remisiones'}
+                    onClick={() => setActiveView('remisiones')}
+                    className={activeView === 'remisiones' ? 'remisiones-tab active' : 'remisiones-tab'}
+                >
+                    <Truck size={17} /> Remisiones generadas
+                    <span>{remisiones.length}</span>
+                </button>
+            </div>
+
             {/* ─── Facturas Pagadas Pendientes de Remisión ─────────────────────── */}
-            {pendingInvoices.length > 0 && (
+            {activeView === 'pendientes' && (
                 <div style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(5,150,105,0.05))', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 14, padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
                         <CreditCard size={18} style={{ color: '#10b981' }} />
@@ -824,6 +874,7 @@ export default function Remisiones() {
                         </span>
                         <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>Clic en "Crear Remisión" para despachar</span>
                     </div>
+                    {pendingInvoices.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                         {pendingInvoices.map(inv => {
                             const client = clients.find(c => c.id === inv.clientId);
@@ -851,6 +902,13 @@ export default function Remisiones() {
                             );
                         })}
                     </div>
+                    ) : (
+                        <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                            <CheckCircle size={34} style={{ color: '#10b981', marginBottom: '0.65rem' }} />
+                            <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>No hay facturas pendientes por despachar</div>
+                            <div style={{ fontSize: '0.82rem', marginTop: 4 }}>Las facturas pagadas aparecerán aquí cuando estén listas para crear su remisión.</div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -869,7 +927,7 @@ export default function Remisiones() {
 
 
             {/* Filters */}
-            <div className="glass-panel p-6 mb-6" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {activeView === 'remisiones' && <div className="glass-panel p-6 mb-6" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
                     <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por ID, cliente u obra…"
@@ -903,10 +961,10 @@ export default function Remisiones() {
                 >
                     <BarChart2 size={16} /> Generar Reporte
                 </button>
-            </div>
+            </div>}
 
             {/* Table */}
-            <div className="glass-panel p-6">
+            {activeView === 'remisiones' && <div className="glass-panel p-6">
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
@@ -945,8 +1003,19 @@ export default function Remisiones() {
                                 const obra = client?.obras?.find(o => o.id === rem.obraId);
                                 const cfg = ESTADO_CFG[rem.estado] || ESTADO_CFG['Activa'];
                                 const dias = rem.estado !== 'Cerrada' ? differenceInDays(new Date(), new Date(rem.fecha)) : '—';
-                                const totalItems = rem.items?.reduce((s, i) => s + (Number(i.cantidad) || 0), 0) || 0;
-                                const totalDev = rem.items?.reduce((s, i) => s + (Number(i.cantidadDevuelta) || 0), 0) || 0;
+                                const isServiceItem = i => {
+                                    const prod = products.find(p => p.id === i.productId);
+                                    return (i.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                        (i.esquemaCobro || '').toLowerCase().includes('única') ||
+                                        (i.category || '').toLowerCase().includes('servicio') ||
+                                        (prod?.category || '').toLowerCase().includes('servicio') ||
+                                        (prod?.tipoCobro || '').toLowerCase().includes('servicio') ||
+                                        (prod?.esquemaCobro || '').toLowerCase().includes('única');
+                                };
+                                const physicalItems = (rem.items || []).filter(i => !isServiceItem(i));
+                                const serviceCount = (rem.items || []).filter(isServiceItem).length;
+                                const totalItems = physicalItems.reduce((s, i) => s + (Number(i.cantidad) || 0), 0);
+                                const totalDev = physicalItems.reduce((s, i) => s + (Number(i.cantidadDevuelta) || 0), 0);
                                 const canReturn = rem.estado !== 'Cerrada' && rem.estado !== 'Cancelada';
                                 return (
                                     <tr key={rem.id} style={{ borderBottom: '1px solid var(--surface-border)' }}
@@ -967,7 +1036,7 @@ export default function Remisiones() {
                                             {format(new Date(rem.fecha + 'T12:00:00'), 'dd/MM/yy')}
                                         </td>
                                         <td style={{ padding: '0.85rem' }}>
-                                            <div style={{ fontSize: '0.82rem' }}>{totalItems} unds. / {totalDev} devueltas</div>
+                                            <div style={{ fontSize: '0.82rem' }}>{totalItems} unds. / {totalDev} devueltas{serviceCount > 0 ? ` · ${serviceCount} servicio(s)` : ''}</div>
                                             <div style={{ height: 4, background: 'var(--surface-border)', borderRadius: 999, width: 80, marginTop: 4, overflow: 'hidden' }}>
                                                 <div style={{ height: '100%', width: `${totalItems > 0 ? Math.round(totalDev / totalItems * 100) : 0}%`, background: '#10b981', borderRadius: 999 }} />
                                             </div>
@@ -1039,7 +1108,15 @@ export default function Remisiones() {
                                                     onClick={() => generateRemisionPDF(rem, client, obra, settings)}
                                                     className="btn btn-sm"
                                                     style={{ background: 'rgba(35, 101, 171, 0.08)', color: '#2365AB', border: '1px solid rgba(35, 101, 171, 0.2)', padding: '0.4rem', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                                    title="Imprimir Remisión"
+                                                    title="Generar PDF"
+                                                >
+                                                    <Download size={13} />
+                                                </button>
+                                                <button
+                                                    onClick={() => generateRemisionTicket(rem, client, obra, settings)}
+                                                    className="btn btn-sm"
+                                                    style={{ background: 'rgba(15,118,110,0.08)', color: '#0f766e', border: '1px solid rgba(15,118,110,0.2)', padding: '0.4rem', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    title="Imprimir ticket térmico de 80 mm"
                                                 >
                                                     <Printer size={13} />
                                                 </button>
@@ -1181,7 +1258,7 @@ export default function Remisiones() {
                         </button>
                     </div>
                 </div>
-            </div>
+            </div>}
 
             {/* Modals */}
             {showNueva && (

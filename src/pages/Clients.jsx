@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
     ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Search, Plus, 
-    Printer, Trash2, Edit3, X, Mail, Phone, MapPin, Download, User, Building2, Receipt, Percent, FileText, Truck, Eye, CheckCircle, Clock, AlertTriangle, ShieldAlert, Package, PackageOpen, UploadCloud
+    Printer, Trash2, Edit3, X, Mail, Phone, MapPin, Download, User, Building2, Receipt, Percent, FileText, Truck, Eye, CheckCircle, Clock, AlertTriangle, ShieldAlert, Package, PackageOpen, UploadCloud, DollarSign
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { exportClientPDF, generateRemisionPDF } from './CotizacionesHelpers';
+import { exportClientPDF, generateRemisionPDF, generateRemisionTicket } from './CotizacionesHelpers';
 import { NuevaRemisionModal, ESTADO_CFG } from './RemisionComponents';
 import EditRemisionModal from './EditRemisionModal';
 import jsPDF from 'jspdf';
@@ -1166,13 +1166,71 @@ function AddEditThirdPartyProductForm({ mode, providerName, initialProduct, onSa
     );
 }
 
-function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices, products, onDelete, remisiones, addRemision, editRemision, maintenances, settings }) {
+function ClientAbonoModal({ client, onClose, onSave }) {
+    const [form, setForm] = useState({
+        monto: '', fecha: format(new Date(), 'yyyy-MM-dd'), metodoPago: 'Transferencia',
+        obraId: '', notas: '', aplicarProximoCorte: true
+    });
+    const [saving, setSaving] = useState(false);
+
+    const submit = async (event) => {
+        event.preventDefault();
+        if ((Number(form.monto) || 0) <= 0) return;
+        setSaving(true);
+        try {
+            await onSave(client.id, form);
+            onClose();
+            Swal.fire({ title: 'Abono registrado', text: 'Quedó disponible para aplicarlo en un próximo corte.', icon: 'success', confirmButtonColor: '#10b981' });
+        } catch (error) {
+            Swal.fire({ title: 'No se pudo registrar', text: error.message, icon: 'error', confirmButtonColor: '#ef4444' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="modal-overlay" style={{ zIndex: 2200 }} onClick={onClose}>
+            <div className="modal-content fadeIn" style={{ maxWidth: 720, padding: 0, overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '1.25rem 1.5rem', background: 'linear-gradient(135deg,#10b981,#047857)', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div><div style={{ fontWeight: 900, fontSize: '1.05rem' }}>Registrar abono</div><div style={{ fontSize: '0.78rem', opacity: 0.85 }}>{client.name}</div></div>
+                    <button onClick={onClose} style={{ border: 0, background: 'rgba(255,255,255,.18)', color: 'white', borderRadius: 8, padding: 6, display: 'flex', cursor: 'pointer' }}><X size={18}/></button>
+                </div>
+                <form onSubmit={submit} style={{ padding: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: '1rem', overflowY: 'auto' }}>
+                    <InputField label="Valor del abono *" type="number" min="1" required value={form.monto} onChange={e => setForm(f => ({ ...f, monto: e.target.value }))}/>
+                    <InputField label="Fecha *" type="date" required value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))}/>
+                    <SelectField label="Método de pago" value={form.metodoPago} onChange={e => setForm(f => ({ ...f, metodoPago: e.target.value }))}>
+                        <option>Efectivo</option><option>Transferencia</option><option>Cheque</option><option>Tarjeta</option><option>Otro</option>
+                    </SelectField>
+                    <SelectField label="Obra (opcional)" value={form.obraId} onChange={e => setForm(f => ({ ...f, obraId: e.target.value }))}>
+                        <option value="">Todas / sin asignar</option>
+                        {(client.obras || []).map(obra => <option key={obra.id} value={obra.id}>{obra.nombre}</option>)}
+                    </SelectField>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{ display: 'block', fontSize: '0.8rem', color: '#475569', marginBottom: 6, fontWeight: 700 }}>Notas</label>
+                        <textarea className="input-base" rows={3} value={form.notas} onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} style={{ width: '100%', resize: 'vertical' }}/>
+                    </div>
+                    <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, padding: '0.85rem 1rem', border: '1px solid #bfdbfe', background: '#eff6ff', borderRadius: 10, color: '#1e3a8a', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={form.aplicarProximoCorte} onChange={e => setForm(f => ({ ...f, aplicarProximoCorte: e.target.checked }))}/>
+                        Dejar disponible para descontar en el siguiente corte
+                    </label>
+                    <div className="modal-actions" style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+                        <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+                        <button type="submit" className="btn btn-primary" disabled={saving || !form.monto}><DollarSign size={16}/> {saving ? 'Guardando…' : 'Registrar abono'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices, products, onDelete, remisiones, addRemision, editRemision, maintenances, settings, addClientAbono }) {
     const { deleteRemision } = useAppContext();
     const [tab, setTab] = useState('datos');
     const [showObraModal, setShowObraModal] = useState(false);
     const [editingObra, setEditingObra] = useState(null);
     const [showRemisionModal, setShowRemisionModal] = useState(false);
     const [editingRemisionTarget, setEditingRemisionTarget] = useState(null);
+    const [showAbonoModal, setShowAbonoModal] = useState(false);
     const [expandedRemIds, setExpandedRemIds] = useState([]);
 
     const toggleExpandRemision = (id) => {
@@ -1398,6 +1456,9 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
     const totalFacturado = clientInvoices.reduce((s, i) => s + (Number(i?.amount) || 0), 0);
     const totalPagado = clientInvoices.filter(i => i?.status === 'Paid').reduce((s, i) => s + (Number(i?.amount) || 0), 0);
     const deuda = Number(client?.debt) || 0;
+    const abonosCliente = client?.abonos || [];
+    const abonosDisponibles = abonosCliente.filter(a => !a.aplicado);
+    const saldoAbonos = abonosDisponibles.reduce((sum, a) => sum + (Number(a.saldo ?? a.monto) || 0), 0);
     const obrasActivas = (client?.obras || []).filter(o => o && o.estado === 'Activa').length;
 
     const handleDelete = () => {
@@ -1461,6 +1522,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
         { k: 'datos',    label: 'Información' },
         { k: 'obras',    label: `Obras (${client?.obras?.length || 0})` },
         { k: 'remisiones', label: `Remisiones (${clientRemisiones.length})` },
+        { k: 'abonos', label: `Abonos (${abonosCliente.length})` },
         { k: 'historial',label: `Historial (${clientInvoices.length})` },
     ];
 
@@ -1468,7 +1530,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
         <>
             <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', backdropFilter:'blur(6px)', zIndex:1000 }} />
             <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:1001, display:'flex', alignItems:'center', justifyContent:'center', padding:'1.5rem' }}>
-                <div onClick={e => e.stopPropagation()} style={{
+                <div onClick={e => e.stopPropagation()} className="client-detail-shell" style={{
                     width:'100%', maxWidth:1180, height:'90vh',
                     display:'flex', overflow:'hidden',
                     borderRadius:'20px', boxShadow:'0 32px 80px -12px rgba(0,0,0,0.4)',
@@ -1476,7 +1538,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                     animation:'cdFadeIn 0.22s ease'
                 }}>
 
-                    <div style={{
+                    <div className="client-detail-sidebar" style={{
                         width:270, flexShrink:0,
                         background:'linear-gradient(160deg,#0c2340 0%,#1a406e 100%)',
                         display:'flex', flexDirection:'column', padding:'2rem 1.5rem', gap:'1.25rem', overflowY:'auto'
@@ -1500,6 +1562,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                             { label:'Facturado',    value:`$${totalFacturado.toLocaleString()}`, color:'#93c5fd' },
                             { label:'Pagado',       value:`$${totalPagado.toLocaleString()}`,    color:'#6ee7b7' },
                             { label:'Deuda',        value:`$${deuda.toLocaleString()}`,           color: deuda > 0 ? '#fca5a5' : '#6ee7b7' },
+                            { label:'Abonos disponibles', value:`$${saldoAbonos.toLocaleString()}`, color:'#6ee7b7' },
                             { label:'Obras Activas',value: obrasActivas,                          color:'#fde68a' },
                             { label:'Total Obras',  value: client.obras?.length || 0,             color:'rgba(255,255,255,0.6)' },
                         ].map(({ label, value, color }) => (
@@ -1519,6 +1582,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
 
                         {[
                             { icon:<Download size={14}/>, label:'Exportar PDF', action:() => exportClientPDF(client, invoices, products, settings), danger:false },
+                            { icon:<DollarSign size={14}/>, label:'Registrar abono', action:() => setShowAbonoModal(true), danger:false },
                             { icon:<Truck size={14}/>,    label:'Nueva Remisión', action:() => setShowRemisionModal(true), danger:false },
                             { icon:<Edit3 size={14}/>,    label:'Editar',       action:() => onEdit(client), danger:false },
                             { icon:<Trash2 size={14}/>,  label:'Eliminar',     action:handleDelete, danger:true },
@@ -1754,7 +1818,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                         marginTop: 'auto'
                                                     }}>
                                                         <div>
-                                                            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.05em', display: 'block' }}>CARTERA:</span>
+                                                            <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 800, letterSpacing: '0.05em', display: 'block' }}>DEUDA TOTAL EN OBRA:</span>
                                                             {obra.presupuesto > 0 ? (
                                                                 <span style={{ fontSize: '0.68rem', color: '#94a3b8' }}>Ppto: ${(obra.presupuesto||0).toLocaleString()}</span>
                                                             ) : (
@@ -1946,6 +2010,15 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                                                 title="Imprimir Remisión"
                                                             >
                                                                 <Printer size={15} />
+                                                            </button>
+
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); generateRemisionTicket(rem, client, obra, settings); }}
+                                                                className="btn btn-outline btn-sm"
+                                                                style={{ padding: '0.35rem 0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isExpanded ? 'rgba(255,255,255,0.15)' : '#f0fdfa', borderColor: isExpanded ? 'rgba(255,255,255,0.3)' : '#99f6e4', color: isExpanded ? '#ffffff' : '#0f766e' }}
+                                                                title="Ticket térmico 80 mm"
+                                                            >
+                                                                <FileText size={15}/>
                                                             </button>
 
                                                             <button 
@@ -2198,12 +2271,47 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
                                     </div>
                                 )}
                             </>)}
+
+                            {tab === 'abonos' && (<>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                                    <SectionLabel icon={<DollarSign size={13}/>} color="#10b981">Abonos y anticipos del cliente</SectionLabel>
+                                    <button className="btn btn-primary btn-sm" onClick={() => setShowAbonoModal(true)}><Plus size={14}/> Registrar abono</button>
+                                </div>
+                                <div style={{ padding: '1rem', borderRadius: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between' }}>
+                                    <span style={{ color: '#166534', fontWeight: 700 }}>Saldo disponible para próximos cortes</span>
+                                    <strong style={{ color: '#047857', fontSize: '1.1rem' }}>${saldoAbonos.toLocaleString('es-CO')}</strong>
+                                </div>
+                                {abonosCliente.length === 0 ? (
+                                    <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8', border: '1px dashed #cbd5e1', borderRadius: 12 }}>Este cliente todavía no tiene abonos registrados.</div>
+                                ) : (
+                                    <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                                            <thead><tr style={{ background: '#f8fafc' }}>{['Fecha','Valor','Método','Obra','Aplicación','Notas'].map(h => <th key={h} style={{ padding: '0.75rem', textAlign: 'left', color: '#64748b', fontSize: '0.68rem', textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
+                                            <tbody>{[...abonosCliente].reverse().map(abono => {
+                                                const obraAbono = (client.obras || []).find(o => o.id === abono.obraId);
+                                                return <tr key={abono.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                                    <td style={{ padding: '0.75rem' }}>{abono.fecha}</td>
+                                                    <td style={{ padding: '0.75rem', fontWeight: 800, color: '#047857' }}>
+                                                        ${Number(abono.monto).toLocaleString('es-CO')}
+                                                        {Number(abono.saldo ?? abono.monto) !== Number(abono.monto) && <span style={{ display: 'block', fontSize: '0.68rem', color: '#64748b' }}>Saldo: ${Number(abono.saldo || 0).toLocaleString('es-CO')}</span>}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem' }}>{abono.metodoPago}</td>
+                                                    <td style={{ padding: '0.75rem' }}>{obraAbono?.nombre || 'Todas'}</td>
+                                                    <td style={{ padding: '0.75rem' }}><span style={{ padding: '3px 8px', borderRadius: 999, background: abono.aplicado ? '#e2e8f0' : '#dcfce7', color: abono.aplicado ? '#475569' : '#166534', fontWeight: 700, fontSize: '0.7rem' }}>{abono.aplicado ? `Aplicado ${abono.facturaId || ''}` : (abono.aplicarProximoCorte ? 'Disponible' : 'No aplicar aún')}</span></td>
+                                                    <td style={{ padding: '0.75rem', color: '#64748b' }}>{abono.notas || '—'}</td>
+                                                </tr>;
+                                            })}</tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </>)}
                         </div>
                     </div>
                 </div>
             </div>
 
             {showObraModal && <ObraModal initialData={editingObra} onSave={obra => { if(editingObra) { onEditObra(client.id, editingObra.id, obra); } else { onAddObra(client.id, obra); } setShowObraModal(false); setEditingObra(null); }} onClose={() => { setShowObraModal(false); setEditingObra(null); }} />}
+            {showAbonoModal && <ClientAbonoModal client={client} onSave={addClientAbono} onClose={() => setShowAbonoModal(false)} />}
             
             {showRemisionModal && (
                 <NuevaRemisionModal 
@@ -2270,7 +2378,7 @@ function ClientDetail({ client, onClose, onEdit, onAddObra, onEditObra, invoices
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Clients() {
     const { 
-        clients, addClient, editClient, deleteClient, addObra, editObra,
+        clients, addClient, editClient, deleteClient, addObra, editObra, addClientAbono,
         invoices, products, addProduct, editProduct, deleteProduct, remisiones, addRemision, editRemision, maintenances, settings, checkPassword,
         providers, addProvider, editProvider, deleteProvider, cuentasPorPagar = []
     } = useAppContext();
@@ -2860,6 +2968,7 @@ export default function Clients() {
                     editRemision={editRemision}
                     maintenances={maintenances}
                     settings={settings}
+                    addClientAbono={addClientAbono}
                     onDelete={(id) => {
                         deleteClient(id);
                         setSelectedClient(null);

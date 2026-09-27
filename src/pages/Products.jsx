@@ -14,6 +14,99 @@ import { applyStandardLayout } from './pdfTheme';
 import * as echarts from 'echarts';
 import EquipmentUsageReportModal from './EquipmentUsageReportModal';
 
+const isServiceProduct = (product = {}) => {
+    const descriptor = [product.category, product.tipoCobro, product.esquemaCobro, product.name, product.nombre]
+        .filter(Boolean).join(' ').toLowerCase();
+    return ['servicio', 'servio ', 'única vez', 'unica vez', 'mano de obra', 'transporte', 'entrega', 'recogida', 'flete', 'acarreo', 'armado', 'desarmado', 'depósito', 'deposito', 'cargo por']
+        .some(term => descriptor.includes(term));
+};
+
+const buildInventoryData = (products = [], remisiones = [], clients = [], maintenances = []) => {
+    const physicalProducts = products.filter(product => !isServiceProduct(product));
+    const fieldDetails = [];
+
+    const summary = physicalProducts.map(product => {
+        let enObra = 0;
+        remisiones.filter(rem => rem.estado !== 'Cancelada').forEach(rem => {
+            const client = clients.find(c => c.id === rem.clientId);
+            const obra = client?.obras?.find(o => o.id === rem.obraId);
+            (rem.items || []).filter(item => item.productId === product.id).forEach(item => {
+                const pendiente = Math.max(0, (Number(item.cantidad) || 0) - (Number(item.cantidadDevuelta) || 0));
+                if (pendiente <= 0) return;
+                enObra += pendiente;
+                fieldDetails.push({
+                    codigo: product.id,
+                    producto: product.name,
+                    cantidad: pendiente,
+                    cliente: client?.name || rem.clientId || '—',
+                    obra: obra?.nombre || rem.obraId || '—',
+                    fecha: rem.fecha || '—',
+                    remision: rem.id || '—'
+                });
+            });
+        });
+
+        const total = Math.max(0, Number(product.totalStock) || 0);
+        const hasDamageOrMaintenance = product.estado === 'Dado de baja' || maintenances.some(m =>
+            m.productId === product.id && ['Pendiente', 'En Proceso'].includes(m.status)
+        );
+        const danado = product.estado === 'Dado de baja'
+            ? Math.max(0, total - enObra)
+            : (hasDamageOrMaintenance ? Math.min(1, Math.max(0, total - enObra)) : 0);
+        const bodega = Math.max(0, total - enObra - danado);
+
+        return { codigo: product.id, producto: product.name, categoria: product.category || '—', total, bodega, enObra, danado };
+    });
+
+    return { summary, fieldDetails };
+};
+
+const generateInventoryPDF = (products, remisiones, clients, maintenances, settings) => {
+    const { summary, fieldDetails } = buildInventoryData(products, remisiones, clients, maintenances);
+    const doc = new jsPDF({ orientation: 'landscape', format: 'letter', unit: 'mm' });
+    const margin = 10;
+    let y = applyStandardLayout(doc, 'INVENTARIO GENERAL', settings, format(new Date(), 'yyyyMMdd'), { skipFooter: true, centerTitle: true });
+
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Corte de inventario: ${format(new Date(), 'dd/MM/yyyy HH:mm')} · Los servicios se excluyen porque no manejan cantidades.`, margin, y);
+    y += 5;
+
+    autoTable(doc, {
+        startY: y,
+        margin: { left: margin, right: margin, bottom: 14 },
+        head: [['CÓDIGO', 'HERRAMIENTA / EQUIPO', 'CATEGORÍA', 'TOTAL', 'EN BODEGA', 'EN OBRA', 'DAÑADO / MANT.']],
+        body: summary.map(row => [row.codigo, row.producto, row.categoria, row.total, row.bodega, row.enObra, row.danado]),
+        theme: 'grid',
+        headStyles: { fillColor: [35, 101, 171], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
+        styles: { fontSize: 8, cellPadding: 2.2, textColor: [30, 41, 59], lineColor: [203, 213, 225], lineWidth: 0.1 },
+        columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 65 }, 2: { cellWidth: 45 }, 3: { halign: 'center' }, 4: { halign: 'center' }, 5: { halign: 'center' }, 6: { halign: 'center' } }
+    });
+
+    doc.addPage();
+    y = applyStandardLayout(doc, 'UBICACIÓN DETALLADA DE EQUIPOS', settings, format(new Date(), 'yyyyMMdd'), { skipFooter: true, centerTitle: true });
+    autoTable(doc, {
+        startY: y,
+        margin: { left: margin, right: margin, bottom: 14 },
+        head: [['CÓDIGO', 'EQUIPO', 'CANT.', 'CLIENTE', 'OBRA', 'FECHA DESPACHO', '#REM']],
+        body: fieldDetails.length > 0
+            ? fieldDetails.map(row => [row.codigo, row.producto, row.cantidad, row.cliente, row.obra, row.fecha, row.remision])
+            : [['—', 'No hay equipos actualmente en obra', '0', '—', '—', '—', '—']],
+        theme: 'grid',
+        headStyles: { fillColor: [15, 118, 110], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
+        styles: { fontSize: 7.5, cellPadding: 2.2, textColor: [30, 41, 59], lineColor: [203, 213, 225], lineWidth: 0.1 },
+        columnStyles: { 0: { cellWidth: 20 }, 1: { cellWidth: 48 }, 2: { cellWidth: 14, halign: 'center' }, 3: { cellWidth: 48 }, 4: { cellWidth: 48 }, 5: { cellWidth: 30, halign: 'center' }, 6: { cellWidth: 25, halign: 'center' } }
+    });
+
+    const pageCount = doc.getNumberOfPages();
+    for (let page = 1; page <= pageCount; page++) {
+        doc.setPage(page);
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Página ${page} de ${pageCount}`, doc.internal.pageSize.getWidth() - margin, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
+    }
+    doc.save(`Inventario_General_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+};
 
 // ─── DropZone – definido FUERA del componente para evitar re-montaje ─────────
 function DropZone({ state, setter, fileInputRef }) {
@@ -780,6 +873,10 @@ export default function Products() {
     const [activeTab, setActiveTab] = useState('Todos'); // 'Todos' | 'Propio' | 'Terceros'
     const [search, setSearch] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
+    const inventoryById = useMemo(() => {
+        const { summary } = buildInventoryData(products, remisiones, clients, maintenances);
+        return new Map(summary.map(row => [row.codigo, row]));
+    }, [products, remisiones, clients, maintenances]);
 
     const handleSort = (key) => {
         let direction = 'asc';
@@ -930,6 +1027,13 @@ export default function Products() {
                     />
                 </div>
                 <button
+                    onClick={() => generateInventoryPDF(products, remisiones, clients, maintenances, settings)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.52rem 0.95rem', borderRadius: 8, background: '#0f766e', border: '1px solid #0f766e', color: 'white', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    title="Inventario completo: bodega, obra, daño y ubicación detallada"
+                >
+                    <Download size={16}/> Exportar inventario PDF
+                </button>
+                <button
                     onClick={() => setShowUsageModal(true)}
                     style={{
                         display: 'flex',
@@ -966,7 +1070,10 @@ export default function Products() {
                                     { label: 'Imagen', key: null, w: '70px' },
                                     { label: 'Nombre', key: 'name', w: 'auto' },
                                     { label: 'Propiedad', key: 'tipoPropiedad', w: '140px' },
-                                    { label: 'Stock', key: 'totalStock', w: '90px' },
+                                    { label: 'Total', key: 'totalStock', w: '70px' },
+                                    { label: 'Bodega', key: null, w: '75px' },
+                                    { label: 'En obra', key: null, w: '75px' },
+                                    { label: 'Dañado', key: null, w: '75px' },
                                     { label: 'Valor', key: 'value', w: '130px' },
                                     { label: 'Días calendario facturables', key: 'esquemaCobro', w: '200px' },
                                     { label: 'Estado', key: 'estado', w: '110px' },
@@ -1001,6 +1108,8 @@ export default function Products() {
                             {paginatedProducts.map(p => {
                                 const blocked = hasPendingMaint(p.id);
                                 const isBaja = p.estado === 'Dado de baja';
+                                const isService = isServiceProduct(p);
+                                const inventory = inventoryById.get(p.id) || { total: 0, bodega: 0, enObra: 0, danado: 0 };
                                 return (
                                     <tr key={p.id} style={{ opacity: isBaja ? 0.6 : 1 }}>
                                         <td style={{ fontWeight: 600, color: 'var(--primary)' }}>
@@ -1033,9 +1142,12 @@ export default function Products() {
                                         </td>
                                         <td>
                                             <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)' }}>
-                                                {p.availableStock} / {p.totalStock}
+                                                {isService ? '—' : inventory.total}
                                             </div>
                                         </td>
+                                        <td style={{ textAlign: 'center', fontWeight: 800, color: '#047857' }}>{isService ? '—' : inventory.bodega}</td>
+                                        <td style={{ textAlign: 'center', fontWeight: 800, color: inventory.enObra > 0 ? '#d97706' : '#64748b' }}>{isService ? '—' : inventory.enObra}</td>
+                                        <td style={{ textAlign: 'center', fontWeight: 800, color: inventory.danado > 0 ? '#dc2626' : '#64748b' }}>{isService ? '—' : inventory.danado}</td>
                                         <td>
                                             <div style={{ fontWeight: 600, color: '#104166' }}>
                                                 {(p.tipoCobro === 'Servicio' || p.category === 'Servicio' || p.esquemaCobro === 'Única Vez')
@@ -1053,6 +1165,8 @@ export default function Products() {
                                         <td>
                                             {isBaja ? (
                                                 <div className="badge" style={{ background: '#f97316', color: 'white', fontSize: '0.72rem', boxShadow: '0 2px 4px rgba(249,115,22,0.3)' }}>BAJA</div>
+                                            ) : isService ? (
+                                                <div className="badge" style={{ background: '#0369a1', color: 'white', fontSize: '0.72rem' }}>SERVICIO</div>
                                             ) : (
                                                 <div className={`badge`}
                                                     style={{ 
@@ -1271,7 +1385,8 @@ export default function Products() {
                                             ...prev,
                                             category: cat,
                                             tipoCobro: isServ ? 'Servicio' : (prev.tipoCobro === 'Servicio' ? 'Día' : prev.tipoCobro),
-                                            esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro
+                                            esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro,
+                                            totalStock: isServ ? 0 : (prev.totalStock || 1)
                                         }));
                                     }}>
                                     <option value="">Seleccione…</option>
@@ -1283,8 +1398,8 @@ export default function Products() {
                                 </select>
                             </div>
                             <div className="input-group" style={{ margin: 0 }}>
-                                <label className="input-label">Stock Total</label>
-                                <input type="number" min="1" className="input-base" value={newProduct.totalStock}
+                                <label className="input-label">{isServiceProduct(newProduct) ? 'Inventario' : 'Stock Total'}</label>
+                                <input type={isServiceProduct(newProduct) ? 'text' : 'number'} min="0" disabled={isServiceProduct(newProduct)} className="input-base" value={isServiceProduct(newProduct) ? 'No aplica a servicios' : newProduct.totalStock}
                                     onChange={e => setNewProduct(prev => ({ ...prev, totalStock: parseInt(e.target.value) || 1 }))} />
                             </div>
                         </div>
@@ -1303,7 +1418,8 @@ export default function Products() {
                                             setNewProduct(prev => ({
                                                 ...prev,
                                                 tipoCobro: tc,
-                                                esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro
+                                                esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro,
+                                                totalStock: isServ ? 0 : (prev.totalStock || 1)
                                             }));
                                         }}>
                                         <option value="Día">Día</option>
@@ -1372,7 +1488,8 @@ export default function Products() {
                                             ...prev,
                                             category: cat,
                                             tipoCobro: isServ ? 'Servicio' : (prev.tipoCobro === 'Servicio' ? 'Día' : prev.tipoCobro),
-                                            esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro
+                                            esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro,
+                                            totalStock: isServ ? 0 : (prev.totalStock || 1)
                                         }));
                                     }}>
                                     <option value="">Seleccione…</option>
@@ -1386,8 +1503,8 @@ export default function Products() {
                                 </select>
                             </div>
                             <div className="input-group" style={{ margin: 0 }}>
-                                <label className="input-label">Stock Total</label>
-                                <input type="number" min="1" className="input-base" value={editingProduct.totalStock}
+                                <label className="input-label">{isServiceProduct(editingProduct) ? 'Inventario' : 'Stock Total'}</label>
+                                <input type={isServiceProduct(editingProduct) ? 'text' : 'number'} min="0" disabled={isServiceProduct(editingProduct)} className="input-base" value={isServiceProduct(editingProduct) ? 'No aplica a servicios' : editingProduct.totalStock}
                                     onChange={e => setEditingProduct(prev => ({ ...prev, totalStock: parseInt(e.target.value) || 1 }))} />
                             </div>
                         </div>
@@ -1405,7 +1522,8 @@ export default function Products() {
                                             setEditingProduct(prev => ({
                                                 ...prev,
                                                 tipoCobro: tc,
-                                                esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro
+                                                esquemaCobro: isServ ? 'Única Vez' : prev.esquemaCobro,
+                                                totalStock: isServ ? 0 : (prev.totalStock || 1)
                                             }));
                                         }}>
                                         <option value="Día">Día</option>

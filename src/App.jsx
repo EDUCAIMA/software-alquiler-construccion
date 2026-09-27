@@ -43,6 +43,80 @@ function AccessDenied() {
   );
 }
 
+// Unifica el cierre de todas las ventanas emergentes, incluso las más antiguas.
+function GlobalModalDismiss() {
+  useEffect(() => {
+    const isVisible = (element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+
+    const getModalOverlays = () => {
+      const overlays = new Set(document.querySelectorAll('.modal-overlay, .modal-backdrop, [data-modal-overlay="true"]'));
+
+      document.querySelectorAll('body div').forEach((element) => {
+        const style = window.getComputedStyle(element);
+        if (style.position !== 'fixed') return;
+        const rect = element.getBoundingClientRect();
+        const coversViewport = rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9;
+        const hasBackdrop = style.backgroundColor !== 'rgba(0, 0, 0, 0)' || style.backdropFilter !== 'none';
+        if (coversViewport && hasBackdrop) overlays.add(element);
+      });
+
+      return [...overlays].filter(isVisible).sort((a, b) => {
+        const zA = Number.parseInt(window.getComputedStyle(a).zIndex, 10) || 0;
+        const zB = Number.parseInt(window.getComputedStyle(b).zIndex, 10) || 0;
+        if (zA !== zB) return zA - zB;
+        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+    };
+
+    const findCloseButton = (overlay) => [...overlay.querySelectorAll('button')].find((button) => {
+      const label = `${button.getAttribute('aria-label') || ''} ${button.getAttribute('title') || ''} ${button.textContent || ''}`.toLowerCase();
+      return button.hasAttribute('data-modal-close') || button.querySelector('.lucide-x') || /\bcerrar\b/.test(label);
+    });
+
+    const closeTopModal = () => {
+      const overlays = getModalOverlays();
+      const overlay = overlays.at(-1);
+      if (!overlay) return false;
+      const closeButton = findCloseButton(overlay);
+      if (closeButton) closeButton.click();
+      else overlay.click();
+      return true;
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      // SweetAlert gestiona su propio Escape y puede estar encima de otro modal.
+      if ([...document.querySelectorAll('.swal2-container')].some(isVisible)) return;
+      if (closeTopModal()) event.preventDefault();
+    };
+
+    const handleBackdropClick = (event) => {
+      const overlay = event.target;
+      if (!(overlay instanceof HTMLElement) || !overlay.isConnected) return;
+      const style = window.getComputedStyle(overlay);
+      const rect = overlay.getBoundingClientRect();
+      const isExplicitOverlay = overlay.matches('.modal-overlay, .modal-backdrop, [data-modal-overlay="true"]');
+      const isFullscreenBackdrop = style.position === 'fixed' && rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9;
+      if (!isExplicitOverlay && !isFullscreenBackdrop) return;
+      const closeButton = findCloseButton(overlay);
+      if (closeButton && overlay.isConnected) closeButton.click();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('click', handleBackdropClick);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('click', handleBackdropClick);
+    };
+  }, []);
+
+  return null;
+}
+
 // ─── Top Navigation Bar ───────────────────────────────────────────────────────
 function Topbar() {
   const location = useLocation();
@@ -453,7 +527,7 @@ function AppShell() {
 
   return (
     <Layout>
-      <Routes>
+        <Routes>
         <Route path="/" element={<ProtectedRoute requireDashboard><Dashboard /></ProtectedRoute>} />
         <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
         <Route path="/comercial" element={<ProtectedRoute><Comercial /></ProtectedRoute>} />
@@ -470,7 +544,7 @@ function AppShell() {
         <Route path="/settings" element={<ProtectedRoute requireDashboard><SettingsPage /></ProtectedRoute>} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+        </Routes>
     </Layout>
   );
 }
@@ -479,6 +553,7 @@ function App() {
   return (
     <AppProvider>
       <BrowserRouter>
+        <GlobalModalDismiss />
         <AppShell />
       </BrowserRouter>
     </AppProvider>
