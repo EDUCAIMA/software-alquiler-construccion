@@ -1,16 +1,57 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle, Shield, PenTool, Camera, FileText, MapPin, Printer, ShieldCheck, Mail, Phone, ExternalLink } from 'lucide-react';
+import {
+    ArrowLeft, BadgeCheck, Camera, Check, CheckCircle2, ChevronRight,
+    CircleDollarSign, FileCheck2, FileText, IdCard, LockKeyhole, Mail,
+    MapPin, Package, PenTool, Phone, ShieldCheck, Sparkles, UserRound
+} from 'lucide-react';
 import { SignatureCanvas, WebcamCapture, fmtCOP } from './CotizacionesHelpers';
+import './PublicCotizacionApproval.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+const isServiceItem = (item = {}) => {
+    const descriptor = [item.tipoCobro, item.category, item.esquemaCobro, item.nombre, item.name]
+        .filter(Boolean).join(' ').toLowerCase();
+    return ['servicio', 'única vez', 'unica vez', 'transporte', 'entrega', 'recogida', 'flete', 'acarreo']
+        .some(term => descriptor.includes(term));
+};
+
+const formatDocumentDate = (date) => {
+    if (!date) return '—';
+    const parsed = new Date(`${date}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return date;
+    return parsed.toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' });
+};
+
+function PortalLoader() {
+    return <div className="approval-state-page"><div className="approval-loader" /><h2>Preparando tu cotización</h2><p>Estamos cargando la información de forma segura.</p></div>;
+}
+
+function PortalError() {
+    return <div className="approval-state-page"><div className="approval-state-icon"><FileText size={34} /></div><h2>Documento no encontrado</h2><p>El enlace es inválido o la cotización ya no se encuentra disponible.</p></div>;
+}
+
+function CaptureCard({ number, title, description, icon: Icon, complete, children }) {
+    return (
+        <article className={`approval-capture-card${complete ? ' is-complete' : ''}`}>
+            <div className="approval-capture-card__head">
+                <div className="approval-capture-card__icon">{React.createElement(Icon, { size: 18 })}</div>
+                <div><span>Paso {number}</span><h4>{title}</h4></div>
+                <div className="approval-capture-card__status">{complete ? <><Check size={13} /> Listo</> : 'Pendiente'}</div>
+            </div>
+            <p>{description}</p>
+            <div className="approval-capture-card__body">{children}</div>
+        </article>
+    );
+}
 
 export default function PublicCotizacionApproval() {
     const { id } = useParams();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [step, setStep] = useState(1); // 1 = Review, 2 = Approve
+    const [step, setStep] = useState(1);
     const [approved, setApproved] = useState(false);
     const [firma, setFirma] = useState(null);
     const [foto, setFoto] = useState(null);
@@ -24,271 +65,169 @@ export default function PublicCotizacionApproval() {
             .then(json => {
                 if (json.error) throw new Error(json.error);
                 setData(json);
-                setLoading(false);
-                if (json.cot.estado === 'Aprobada' || json.cot.estado === 'Facturada') {
-                    setApproved(true);
-                }
+                if (['Aprobada', 'Facturada'].includes(json.cot.estado)) setApproved(true);
             })
-            .catch(err => {
-                setError(err.message);
-                setLoading(false);
-            });
+            .catch(err => setError(err.message))
+            .finally(() => setLoading(false));
     }, [id]);
 
+    const quoteSummary = useMemo(() => {
+        if (!data) return null;
+        const { cot, client } = data;
+        const subtotal = (cot.items || []).reduce((sum, item) => {
+            const period = isServiceItem(item) ? 1 : (Number(item.dias) || 1);
+            return sum + (Number(item.cantidad) || 0) * period * (Number(item.tarifaDia) || 0);
+        }, 0);
+        const ivaRate = client?.responsableIVA ? (Number(client?.porcIVA) || 0) : 0;
+        const retentionRate = Number(client?.porcRetencion) || 0;
+        const iva = Math.round(subtotal * ivaRate / 100);
+        const retention = Math.round(subtotal * retentionRate / 100);
+        const transport = Number(cot.transporte) || 0;
+        const deposit = Number(cot.deposito) || 0;
+        return { subtotal, ivaRate, iva, retentionRate, retention, transport, deposit, total: subtotal + iva + retention + transport + deposit };
+    }, [data]);
+
+    const goToStep = (nextStep) => {
+        setStep(nextStep);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     const handleApprove = async () => {
-        if (!firma) {
-            alert('Por favor, realice la firma antes de confirmar.');
-            return;
-        }
-        if (!foto || !fotoCC || !fotoCCBack) {
-            alert('Por favor, capture todas las fotografías de seguridad (Rostro, CC Frontal y CC Posterior).');
-            return;
-        }
+        if (!firma || !foto || !fotoCC || !fotoCCBack) return;
         setSaving(true);
         try {
-            const res = await fetch(`${API_BASE_URL}/api/public/cotizaciones/${id}/approve`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            const response = await fetch(`${API_BASE_URL}/api/public/cotizaciones/${id}/approve`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ firma, foto, fotoCC, fotoCCBack })
             });
-            if (res.ok) {
-                setApproved(true);
-                setStep(1);
-            } else {
-                alert('No se pudo procesar la aprobación. Intente de nuevo.');
-            }
-        } catch (e) {
-            console.error(e);
-            alert('Error al conectar con el servidor.');
+            if (!response.ok) throw new Error('No se pudo procesar la aprobación.');
+            setApproved(true);
+            setStep(1);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch (approvalError) {
+            console.error(approvalError);
+            alert('No se pudo procesar la aprobación. Intente de nuevo.');
         } finally {
             setSaving(false);
         }
     };
 
-    if (loading) return (
-        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
-            <div style={{ width: 40, height: 40, border: '4px solid #e2e8f0', borderTopColor: '#2365AB', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-            <p style={{ marginTop: '1rem', color: '#1e293b', fontWeight: 600 }}>Cargando información...</p>
-            <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-        </div>
-    );
-    
-    if (error) return (
-        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center', background: '#f8fafc' }}>
-            <FileText size={64} color="#ef4444" style={{ marginBottom: '1.5rem', opacity: 0.3 }} />
-            <h2 style={{ color: '#0f172a', fontSize: '1.5rem', fontWeight: 800 }}>Documento No Encontrado</h2>
-            <p style={{ color: '#64748b', maxWidth: 400, marginTop: '0.5rem' }}>Lo sentimos, parece que el enlace es inválido o la cotización ya no está disponible.</p>
-        </div>
-    );
+    if (loading) return <PortalLoader />;
+    if (error || !data || !quoteSummary) return <PortalError />;
 
     const { cot, client, settings } = data;
-    const obra = client?.obras?.find(o => o.id === cot.obraId);
-    const subtotal = cot.items.reduce((s, i) => {
-        const isServ = (i.tipoCobro || '').toLowerCase().includes('servicio') || (i.category || '').toLowerCase().includes('servicio') || (i.esquemaCobro || '').toLowerCase().includes('única');
-        return s + (i.cantidad * (isServ ? 1 : i.dias) * i.tarifaDia);
-    }, 0);
-    const total = subtotal + (cot.transporte || 0);
+    const obra = client?.obras?.find(item => item.id === cot.obraId);
+    const companyName = settings?.companyName || 'CIELO ALQUILER DE EQUIPOS Y HERRAMIENTAS';
+    const itemCount = (cot.items || []).length;
+    const approvalReady = Boolean(firma && foto && fotoCC && fotoCCBack && !saving);
+
+    const renderItemRows = (mobile = false) => (cot.items || []).map((item, index) => {
+        const service = isServiceItem(item);
+        const quantity = Number(item.cantidad) || 0;
+        const period = service ? 1 : (Number(item.dias) || 1);
+        const lineTotal = quantity * period * (Number(item.tarifaDia) || 0);
+        const key = `${mobile ? 'mobile-' : ''}${item.productId || item.nombre}-${index}`;
+
+        if (mobile) return (
+            <article className="approval-mobile-item" key={key}>
+                <div className="approval-mobile-item__top">
+                    <span className="approval-item-index">{String(index + 1).padStart(2, '0')}</span>
+                    <strong>{item.nombre || item.name}</strong>
+                    <span className={`approval-type-pill${service ? ' is-service' : ''}`}>{service ? 'Servicio' : `${period} ${period === 1 ? 'día' : 'días'}`}</span>
+                </div>
+                <div className="approval-mobile-item__facts">
+                    <span><small>Cantidad</small><strong>{quantity}</strong></span>
+                    <span><small>Tarifa</small><strong>{fmtCOP(item.tarifaDia)}</strong></span>
+                    <span><small>Subtotal</small><strong>{fmtCOP(lineTotal)}</strong></span>
+                </div>
+            </article>
+        );
+
+        return (
+            <tr key={key}>
+                <td><span className="approval-item-index">{String(index + 1).padStart(2, '0')}</span><strong>{item.nombre || item.name}</strong></td>
+                <td>{quantity}</td>
+                <td><span className={`approval-type-pill${service ? ' is-service' : ''}`}>{service ? 'Servicio' : `${period} ${period === 1 ? 'día' : 'días'}`}</span></td>
+                <td>{fmtCOP(item.tarifaDia)}</td>
+                <td>{fmtCOP(lineTotal)}</td>
+            </tr>
+        );
+    });
 
     return (
-        <div style={{ minHeight: '100vh', background: '#f1f5f9', padding: '1rem' }}>
-            <div style={{ maxWidth: 850, margin: '0 auto', background: 'white', borderRadius: 20, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
-                
-                {/* Modern Header */}
-                <div style={{ background: 'linear-gradient(135deg, #104166, #2365AB)', padding: '2.5rem 2rem', color: 'white', position: 'relative' }}>
-                    <div style={{ position: 'absolute', top: 0, right: 0, padding: '1.5rem', opacity: 0.1 }}><ShieldCheck size={120} /></div>
-                    <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-                        {settings?.logo ? (
-                            <img src={settings.logo} alt="Logo" style={{ maxHeight: 70, borderRadius: 10, background: 'white', padding: 8 }} />
-                        ) : (
-                            <div style={{ width: 60, height: 60, borderRadius: 12, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={30} /></div>
-                        )}
-                        <div>
-                            <h1 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0, letterSpacing: '-0.02em' }}>Portal de Aprobación Online</h1>
-                            <p style={{ opacity: 0.9, fontSize: '0.95rem', marginTop: 4, fontWeight: 500 }}>{settings?.companyName}</p>
+        <main className="approval-page">
+            <div className="approval-page__glow approval-page__glow--one" /><div className="approval-page__glow approval-page__glow--two" />
+            <section className="approval-shell">
+                <header className="approval-header">
+                    <div className="approval-header__orb"><ShieldCheck size={168} /></div>
+                    <div className="approval-brand">
+                        <div className="approval-brand__logo">{settings?.logo ? <img src={settings.logo} alt={`Logo de ${companyName}`} /> : <FileCheck2 size={31} />}</div>
+                        <div className="approval-brand__copy">
+                            <span className="approval-brand__eyebrow"><LockKeyhole size={13} /> Portal seguro</span>
+                            <h1>Portal de Aprobación Online</h1><p>{companyName}</p>
                         </div>
                     </div>
-                </div>
+                    <div className="approval-header__document"><span>Cotización</span><strong>#{id}</strong><small><span className="approval-live-dot" /> Documento vigente</small></div>
+                </header>
 
-                {approved ? (
-                    <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-                        <div style={{ background: '#f0fdf4', color: '#10b981', width: 90, height: 90, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem', boxShadow: '0 10px 20px rgba(16,185,129,0.1)' }}>
-                            <CheckCircle size={50} />
-                        </div>
-                        <h2 style={{ color: '#0f172a', fontSize: '1.75rem', fontWeight: 800, marginBottom: '0.75rem' }}>¡Transacción Exitosa!</h2>
-                        <p style={{ color: '#475569', fontSize: '1.1rem', maxWidth: 500, margin: '0 auto 2.5rem', lineHeight: 1.6 }}>La cotización <strong>#{id}</strong> ha sido aprobada formalmente. Hemos recibido su firma y registro fotográfico correctamente.</p>
-                        
-                        <div style={{ background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0', padding: '1.5rem', maxWidth: 450, margin: '0 auto' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', textAlign: 'left' }}>
-                                <div style={{ background: '#e0f2fe', p: 10, borderRadius: 10 }}><Mail size={20} color="#0369a1" /></div>
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a' }}>Comprobante Enviado</div>
-                                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Se ha enviado una notificación al área comercial para el alistamiento de su equipo.</div>
-                                </div>
+                {!approved && <div className="approval-progress" aria-label={`Paso ${step} de 2`}>
+                    <div className={`approval-progress__step is-active${step > 1 ? ' is-done' : ''}`}><span>{step > 1 ? <Check size={14} /> : '1'}</span><div><strong>Revisar</strong><small>Datos y valores</small></div></div>
+                    <div className={`approval-progress__line${step > 1 ? ' is-done' : ''}`} />
+                    <div className={`approval-progress__step${step === 2 ? ' is-active' : ''}`}><span>2</span><div><strong>Confirmar</strong><small>Firma y seguridad</small></div></div>
+                </div>}
+
+                {approved ? <div className="approval-success">
+                    <div className="approval-success__icon"><CheckCircle2 size={54} /></div>
+                    <span className="approval-success__eyebrow"><Sparkles size={14} /> Aprobación completada</span>
+                    <h2>¡Cotización aprobada correctamente!</h2>
+                    <p>Recibimos la firma y el registro de seguridad para la cotización <strong>#{id}</strong>. Nuestro equipo comercial continuará con el proceso.</p>
+                    <div className="approval-success__receipt"><div><FileCheck2 size={20} /><span><small>Documento</small><strong>#{id}</strong></span></div><div><BadgeCheck size={20} /><span><small>Estado</small><strong>Aprobada</strong></span></div></div>
+                    <div className="approval-security-note"><LockKeyhole size={18} /><span><strong>Registro recibido de forma segura</strong><small>La empresa fue notificada para continuar con el alistamiento.</small></span></div>
+                </div> : step === 1 ? <div className="approval-content">
+                    <div className="approval-intro"><div><span className="approval-section-kicker">Propuesta comercial</span><h2>Revisa tu cotización</h2><p>Confirma que los datos, equipos y valores sean correctos antes de continuar con la firma.</p></div><div className="approval-secure-chip"><ShieldCheck size={17} /> Documento protegido</div></div>
+
+                    <div className="approval-info-grid">
+                        <article className="approval-info-card"><div className="approval-info-card__icon"><UserRound size={21} /></div><div className="approval-info-card__content"><span>Cliente</span><h3>{client?.name || 'Cliente'}</h3><p><IdCard size={14} /> NIT/CC {client?.nit || client?.cedula || client?.documento || '—'}</p><p><MapPin size={14} /> {obra?.nombre || 'Obra no especificada'}{obra?.ubicacion ? ` · ${obra.ubicacion}` : ''}</p></div></article>
+                        <article className="approval-info-card approval-info-card--accent"><div className="approval-info-card__icon"><FileCheck2 size={21} /></div><div className="approval-info-card__content"><span>Detalles del documento</span><div className="approval-document-facts"><div><small>Nº documento</small><strong>#{id}</strong></div><div><small>Fecha de emisión</small><strong>{formatDocumentDate(cot.fecha)}</strong></div><div><small>Validez</small><strong className="is-warning">{cot.validezDias || 15} días</strong></div></div></div></article>
+                    </div>
+
+                    <section className="approval-items-section">
+                        <div className="approval-items-section__head"><div><span className="approval-section-kicker">Detalle de la propuesta</span><h3>Equipos y servicios</h3></div><span className="approval-count-badge"><Package size={14} /> {itemCount} {itemCount === 1 ? 'ítem' : 'ítems'}</span></div>
+                        <div className="approval-table-wrap"><table className="approval-items-table"><thead><tr><th>Descripción</th><th>Cantidad</th><th>Periodo</th><th>Tarifa</th><th>Subtotal</th></tr></thead><tbody>{renderItemRows()}</tbody></table></div>
+                        <div className="approval-mobile-items">{renderItemRows(true)}</div>
+                        <div className="approval-totals">
+                            <div className="approval-totals__note"><CircleDollarSign size={20} /><div><strong>Valores expresados en COP</strong><span>La tarifa corresponde al periodo indicado.</span></div></div>
+                            <div className="approval-totals__values">
+                                <div><span>Subtotal</span><strong>{fmtCOP(quoteSummary.subtotal)}</strong></div>
+                                {quoteSummary.transport > 0 && <div><span>Transporte</span><strong>{fmtCOP(quoteSummary.transport)}</strong></div>}
+                                {quoteSummary.iva > 0 && <div><span>IVA ({quoteSummary.ivaRate}%)</span><strong>{fmtCOP(quoteSummary.iva)}</strong></div>}
+                                {quoteSummary.retention > 0 && <div><span>Retención ({quoteSummary.retentionRate}%)</span><strong>{fmtCOP(quoteSummary.retention)}</strong></div>}
+                                {quoteSummary.deposit > 0 && <div><span>Depósito reembolsable</span><strong>{fmtCOP(quoteSummary.deposit)}</strong></div>}
+                                <div className="approval-totals__grand"><span>Total a aprobar</span><strong>{fmtCOP(quoteSummary.total)}</strong></div>
                             </div>
                         </div>
+                    </section>
+                    <div className="approval-action-panel"><div><LockKeyhole size={19} /><span><strong>Siguiente: validación segura</strong><small>Necesitarás firmar y tomar tres fotografías.</small></span></div><button type="button" onClick={() => goToStep(2)}>Aprobar y continuar <ChevronRight size={20} /></button></div>
+                </div> : <div className="approval-content approval-signing">
+                    <button type="button" className="approval-back-link" onClick={() => goToStep(1)}><ArrowLeft size={17} /> Volver a la cotización</button>
+                    <div className="approval-intro"><div><span className="approval-section-kicker">Validación de identidad</span><h2>Firma y registro de seguridad</h2><p>Completa los cuatro registros para confirmar la aprobación de la cotización #{id}.</p></div><div className="approval-secure-chip"><LockKeyhole size={17} /> Información cifrada</div></div>
+                    <div className="approval-privacy-banner"><ShieldCheck size={22} /><div><strong>Tus datos están protegidos</strong><span>Las capturas se utilizan exclusivamente para validar esta transacción.</span></div></div>
+                    <CaptureCard number="1 de 4" title="Firma digital" description="Firma dentro del recuadro utilizando el dedo o el cursor." icon={PenTool} complete={Boolean(firma)}><div className="approval-signature-pad"><SignatureCanvas onSave={setFirma} onClear={() => setFirma(null)} /></div></CaptureCard>
+                    <div className="approval-camera-grid">
+                        <CaptureCard number="2 de 4" title="Foto de rostro" description="Ubica tu rostro de frente y con buena iluminación." icon={UserRound} complete={Boolean(foto)}><WebcamCapture onCapture={setFoto} /></CaptureCard>
+                        <CaptureCard number="3 de 4" title="Documento frontal" description="Asegúrate de que los datos sean legibles." icon={IdCard} complete={Boolean(fotoCC)}><WebcamCapture onCapture={setFotoCC} /></CaptureCard>
+                        <CaptureCard number="4 de 4" title="Documento posterior" description="Captura la cara posterior completa." icon={Camera} complete={Boolean(fotoCCBack)}><WebcamCapture onCapture={setFotoCCBack} /></CaptureCard>
                     </div>
-                ) : (
-                    <>
-                        {step === 1 ? (
-                            <div style={{ padding: '2rem' }}>
-                                {/* Data Grid */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-                                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
-                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#2365AB', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>Información del Cliente</div>
-                                        <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1.1rem' }}>{client?.name}</div>
-                                        <div style={{ fontSize: '0.9rem', color: '#64748b', marginTop: 4 }}>NIT/CC: {client?.nit}</div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: '0.75rem', color: '#475569', fontSize: '0.85rem' }}>
-                                            <MapPin size={14} /> {obra?.nombre || 'Ubicación Actual'}
-                                        </div>
-                                    </div>
-                                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem', background: '#f8fafc' }}>
-                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#2365AB', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>Resumen de Cotización</div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                            <span style={{ color: '#64748b', fontSize: '0.9rem' }}>Nº Documento</span>
-                                            <span style={{ fontWeight: 800, color: '#0f172a' }}>#{id}</span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                            <span style={{ color: '#64748b', fontSize: '0.9rem' }}>Fecha Emisión</span>
-                                            <span style={{ fontWeight: 700, color: '#0f172a' }}>{cot.fecha}</span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <span style={{ color: '#64748b', fontSize: '0.9rem' }}>Validez</span>
-                                            <span style={{ fontWeight: 700, color: '#f59e0b' }}>{cot.validezDias} días</span>
-                                        </div>
-                                    </div>
-                                </div>
+                    <div className="approval-final-actions"><button type="button" className="approval-secondary-button" onClick={() => goToStep(1)}><ArrowLeft size={18} /> Atrás</button><button type="button" className="approval-primary-button" onClick={handleApprove} disabled={!approvalReady}>{saving ? <><span className="approval-button-loader" /> Procesando...</> : <><CheckCircle2 size={20} /> Confirmar aprobación</>}</button></div>
+                    {!approvalReady && !saving && <p className="approval-required-note">Completa la firma y las tres fotografías para habilitar la aprobación.</p>}
+                </div>}
 
-                                {/* Items Table */}
-                                <div style={{ border: '1px solid #e2e8f0', borderRadius: 16, overflowX: 'auto', marginBottom: '2.5rem' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
-                                        <thead style={{ background: '#f1f5f9' }}>
-                                            <tr>
-                                                <th style={{ textAlign: 'left', padding: '1rem 1.5rem', color: '#475569', fontWeight: 700 }}>Descripción del Equipo</th>
-                                                <th style={{ textAlign: 'center', padding: '1rem 1rem', color: '#475569', fontWeight: 700 }}>Cant.</th>
-                                                <th style={{ textAlign: 'center', padding: '1rem 1rem', color: '#475569', fontWeight: 700 }}>Días</th>
-                                                <th style={{ textAlign: 'right', padding: '1rem 1.5rem', color: '#475569', fontWeight: 700 }}>Subtotal</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {cot.items.map((it, idx) => {
-                                                const isServ = (it.tipoCobro || '').toLowerCase().includes('servicio') || (it.category || '').toLowerCase().includes('servicio') || (it.esquemaCobro || '').toLowerCase().includes('única');
-                                                const lineTot = it.cantidad * (isServ ? 1 : it.dias) * it.tarifaDia;
-                                                return (
-                                                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                        <td style={{ padding: '1.25rem 1.5rem', fontWeight: 600, color: '#1e293b' }}>{it.nombre}</td>
-                                                        <td style={{ textAlign: 'center', padding: '1.25rem 1rem', color: '#64748b' }}>{it.cantidad}</td>
-                                                        <td style={{ textAlign: 'center', padding: '1.25rem 1rem', color: '#64748b' }}>{isServ ? 'Servicio' : it.dias}</td>
-                                                        <td style={{ textAlign: 'right', padding: '1.25rem 1.5rem', color: '#0f172a', fontWeight: 800 }}>{fmtCOP(lineTot)}</td>
-                                                    </tr>
-                                                );
-                                            })}
-                                            {cot.transporte > 0 && (
-                                                <tr style={{ borderBottom: '1px solid #f1f5f9', background: '#fffcf5' }}>
-                                                    <td colSpan={3} style={{ padding: '1rem 1.5rem', fontWeight: 700, color: '#92400e', textAlign: 'right' }}>Servicio de Transporte y Logística</td>
-                                                    <td style={{ textAlign: 'right', padding: '1rem 1.5rem', color: '#92400e', fontWeight: 800 }}>{fmtCOP(cot.transporte)}</td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                        <tfoot>
-                                            <tr style={{ background: '#0f172a', color: 'white' }}>
-                                                <td colSpan={3} style={{ padding: '1.5rem', fontWeight: 800, textAlign: 'right', fontSize: '1.1rem' }}>VALOR TOTAL DE LA ORDEN</td>
-                                                <td style={{ padding: '1.5rem', textAlign: 'right', fontWeight: 900, fontSize: '1.4rem' }}>{fmtCOP(total)}</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-
-                                <button 
-                                    onClick={() => setStep(2)}
-                                    style={{ width: '100%', padding: '1.25rem', borderRadius: 16, background: '#10b981', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: '1.2rem', boxShadow: '0 10px 25px rgba(16,185,129,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}
-                                >
-                                    Aprobar y Proceder a Firmar <ExternalLink size={20} />
-                                </button>
-                                <p style={{ textAlign: 'center', fontSize: '0.8rem', color: '#94a3b8', marginTop: '1.25rem' }}>Documento electrónico válido para inicio de trámites administrativos.</p>
-                            </div>
-                        ) : (
-                            <div style={{ padding: '2rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                                    <h3 style={{ margin: 0, color: '#0f172a', fontSize: '1.25rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <PenTool size={22} color="#2365AB" /> Registro de Seguridad
-                                    </h3>
-                                    <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>Paso 2 de 2</div>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                                    <div>
-                                        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#334155', marginBottom: '0.75rem' }}>1. Firma Bio-Digital</div>
-                                        <div style={{ border: '2px dashed #cbd5e1', borderRadius: 16, background: '#f8fafc', overflow: 'hidden' }}>
-                                            <SignatureCanvas onSave={setFirma} onClear={() => setFirma(null)} />
-                                        </div>
-                                    </div>
-
-                                    <div className="security-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-                                        <div>
-                                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '0.6rem' }}>1. Foto Rostro</div>
-                                            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem', background: '#f8fafc', display: 'flex', justifyContent: 'center' }}>
-                                                <WebcamCapture onCapture={setFoto} />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '0.6rem' }}>2. CC Frontal</div>
-                                            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem', background: '#f8fafc', display: 'flex', justifyContent: 'center' }}>
-                                                <WebcamCapture onCapture={setFotoCC} />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155', marginBottom: '0.6rem' }}>3. CC Posterior</div>
-                                            <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem', background: '#f8fafc', display: 'flex', justifyContent: 'center' }}>
-                                                <WebcamCapture onCapture={setFotoCCBack} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.75rem', textAlign: 'center' }}>Capture su rostro y su documento de identidad para validar la transacción.</p>
-
-                                </div>
-
-                                <div style={{ display: 'flex', gap: '1rem', marginTop: '3rem' }}>
-                                    <button 
-                                        onClick={() => setStep(1)}
-                                        style={{ flex: 1, padding: '1.1rem', borderRadius: 14, background: 'white', color: '#64748b', border: '1px solid #cbd5e1', cursor: 'pointer', fontWeight: 700 }}
-                                    >
-                                        Atrás
-                                    </button>
-                                    <button 
-                                        onClick={handleApprove}
-                                        disabled={!firma || saving}
-                                        style={{ flex: 2, padding: '1.1rem', borderRadius: 14, background: (firma && !saving) ? '#2365AB' : '#cbd5e1', color: 'white', border: 'none', cursor: (firma && !saving) ? 'pointer' : 'not-allowed', fontWeight: 800, fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', boxShadow: (firma && !saving) ? '0 10px 20px rgba(35,101,171,0.2)' : 'none' }}
-                                    >
-                                        {saving ? 'Procesando...' : (
-                                            <>Finalizar Aprobación <CheckCircle size={20} /></>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </>
-                )}
-                
-                <div style={{ background: '#f8fafc', padding: '2rem', textAlign: 'center', borderTop: '1px solid #f1f5f9' }}>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '1.5rem', marginBottom: '1rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#64748b' }}><Mail size={14} /> {settings?.email}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#64748b' }}><Phone size={14} /> {settings?.phone}</div>
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', opacity: 0.8 }}>
-                        © {new Date().getFullYear()} {settings?.companyName}. Este es un documento seguro firmado electrónicamente bajo la Ley 527 de 1999 de Colombia.
-                    </div>
-                </div>
-            </div>
-            {/* Simple CSS Hack for Responsive Mobile */}
-            <style>{`
-                @media (max-width: 650px) {
-                    .security-grid { grid-template-columns: 1fr !important; gap: 1rem !important; }
-                    table { font-size: 0.8rem !important; }
-                    th, td { padding: 0.75rem 0.5rem !important; }
-                    h1 { font-size: 1.2rem !important; }
-                    .canvas-container canvas { height: 120px !important; }
-                }
-            `}</style>
-        </div>
+                <footer className="approval-footer">
+                    <div className="approval-footer__brand"><ShieldCheck size={18} /><span><strong>Proceso seguro</strong><small>Documento electrónico verificable</small></span></div>
+                    <div className="approval-footer__contact">{settings?.email && <a href={`mailto:${settings.email}`}><Mail size={14} /> {settings.email}</a>}{settings?.phone && <a href={`tel:${settings.phone}`}><Phone size={14} /> {settings.phone}</a>}</div>
+                    <p>© {new Date().getFullYear()} {companyName}. Firma electrónica conforme a la Ley 527 de 1999 de Colombia.</p>
+                </footer>
+            </section>
+        </main>
     );
 }

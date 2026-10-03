@@ -533,15 +533,15 @@ function WebcamCapture({ onCapture }) {
     const reset = () => { setPhoto(null); onCapture(null); };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
             {photo ? (
                 <div style={{ textAlign: 'center' }}>
-                    <img src={photo} alt="Foto" style={{ width: 200, borderRadius: 8, border: '2px solid #10b981' }} />
+                    <img src={photo} alt="Foto" style={{ width: '100%', maxWidth: 200, borderRadius: 8, border: '2px solid #10b981' }} />
                     <button onClick={reset} style={{ display: 'block', margin: '6px auto 0', fontSize: '0.75rem', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Tomar otra</button>
                 </div>
             ) : (
                 <>
-                    <video ref={videoRef} autoPlay style={{ width: active ? 280 : 0, height: active ? 'auto' : 0, borderRadius: 8, border: active ? '1px solid #2365AB' : 'none' }} />
+                    <video ref={videoRef} autoPlay playsInline style={{ width: active ? '100%' : 0, maxWidth: 280, height: active ? 'auto' : 0, borderRadius: 8, border: active ? '1px solid #2365AB' : 'none' }} />
                     {!active ? (
                         <button onClick={startCam} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.6rem 1.25rem', borderRadius: 8, background: '#2365AB', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem' }}>
                             <Camera size={15} /> Activar Cámara
