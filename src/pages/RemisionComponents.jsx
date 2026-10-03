@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Truck, Clock, CheckCircle, AlertTriangle, X, ChevronRight, Package, Plus, MapPin, Info, Printer, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { generateRemisionPDF, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
+import RemisionProductPicker from './RemisionProductPicker';
+import { isRemisionServiceProduct } from './remisionUtils';
 
 export const ESTADO_CFG = {
     'Activa': { color: '#2365AB', bg: 'rgba(35, 101, 171,0.12)', Icon: Truck },
@@ -28,6 +30,9 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
                 nombre: products.find(p => p.id === i.productId)?.name || i.nombre || i.name || i.productId,
                 cantidad: i.quantity || i.cantidad || 0,
                 tarifaDia: i.price || i.tarifaDia || 0,
+                tipoCobro: i.tipoCobro,
+                category: i.category,
+                esquemaCobro: i.esquemaCobro,
             }));
         }
         return [];
@@ -38,20 +43,23 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
 
     const selectedClient = clients.find(c => c.id === clientId);
     const obrasDisp = selectedClient?.obras || [];
+    const selectedProduct = products.find(p => p.id === selProd);
+    const selectedIsService = isRemisionServiceProduct(selectedProduct);
 
     const addItem = () => {
         if (!selProd || selCant < 1) return;
         const prod = products.find(p => p.id === selProd);
         if (!prod) return;
+        const isService = isRemisionServiceProduct(prod);
         // Check maintenance block
-        const hasPending = maintenances.some(
+        const hasPending = !isService && maintenances.some(
             m => m.productId === selProd && (m.status === 'Pendiente' || m.status === 'En Proceso')
         );
         if (hasPending) {
             setBlockError(`⛔ BLOQUEO: "${prod.name}" tiene un mantenimiento pendiente o en proceso. Resuelva el mantenimiento antes de despachar.`);
             return;
         }
-        if (selCant > prod.availableStock) {
+        if (!isService && selCant > prod.availableStock) {
             setBlockError(`Stock insuficiente. Disponible: ${prod.availableStock}`);
             return;
         }
@@ -59,7 +67,12 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
         const existing = items.findIndex(i => i.productId === selProd);
         if (existing >= 0) {
             const updated = [...items];
-            updated[existing].cantidad += selCant;
+            const totalWanted = Number(updated[existing].cantidad) + selCant;
+            if (!isService && totalWanted > prod.availableStock) {
+                setBlockError(`Stock insuficiente. Ya tienes ${updated[existing].cantidad} agregados y hay ${prod.availableStock} disponibles.`);
+                return;
+            }
+            updated[existing].cantidad = totalWanted;
             setItems(updated);
         } else {
             setItems(prev => [...prev, { 
@@ -68,6 +81,8 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
                 cantidad: selCant, 
                 tarifaDia: prod.value,
                 tipoCobro: prod.tipoCobro || 'Día',
+                category: prod.category,
+                esquemaCobro: prod.esquemaCobro,
                 horaInicio: '',
                 horaFin: '',
                 horasCalculadas: 0
@@ -184,23 +199,18 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
                             {/* Add item */}
                             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1.25rem' }}>
                                 <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#104166', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <Package size={16} color="#2365AB" /> Agregar Equipo
+                                    <Package size={16} color="#2365AB" /> Agregar Equipo o Servicio
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px auto', gap: '1rem', alignItems: 'end' }}>
+                                <div className="remision-add-item-grid">
                                     <div>
-                                        <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Equipo / Herramienta</label>
-                                        <select value={selProd} onChange={e => { setSelProd(e.target.value); setBlockError(''); }} style={SS}>
-                                            <option value="">Seleccionar...</option>
-                                            {products.filter(p => p.availableStock > 0).map(p => (
-                                                <option key={p.id} value={p.id}>{p.name} (Disp: {p.availableStock} | ${p.value.toLocaleString()}/día)</option>
-                                            ))}
-                                        </select>
+                                        <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Buscar equipo o servicio</label>
+                                        <RemisionProductPicker key={selProd || 'empty'} products={products} value={selProd} onChange={productId => { setSelProd(productId); setBlockError(''); }} />
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Cant.</label>
+                                        <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>{selectedIsService ? 'Cant. servicios' : 'Cant.'}</label>
                                         <input type="number" min="1" value={selCant} onChange={e => setSelCant(Number(e.target.value) || 1)} style={IS} />
                                     </div>
-                                    <button className="btn btn-primary" onClick={addItem} style={{ height: 42, padding: '0 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={18} /></button>
+                                    <button className="btn btn-primary remision-add-item-button" onClick={addItem} disabled={!selProd} aria-label="Agregar equipo o servicio"><Plus size={18} /></button>
                                 </div>
                                 {blockError && (
                                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginTop: '1rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '0.75rem' }}>
@@ -216,7 +226,7 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                                         <thead>
                                             <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                                                {['Equipo', 'Cant.', 'Tarifa/día', 'Acción'].map(h => (
+                                                {['Equipo / Servicio', 'Cant.', 'Tarifa', 'Acción'].map(h => (
                                                     <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.7rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                                                 ))}
                                             </tr>
@@ -224,6 +234,7 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
                                         <tbody>
                                             {items.map((item, idx) => {
                                                 const prod = products.find(p => p.id === item.productId);
+                                                const isService = isRemisionServiceProduct({ ...prod, ...item });
                                                 const isHora = (item.tipoCobro || prod?.tipoCobro || '').toLowerCase() === 'hora';
 
                                                 const handleTimeChange = (field, val) => {
@@ -263,10 +274,15 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
                                                                         Por Horas
                                                                     </span>
                                                                 )}
+                                                                {isService && (
+                                                                    <span style={{ fontSize: '0.65rem', background: '#e8f8f2', color: '#08795a', padding: '1px 6px', borderRadius: 4, fontWeight: 700, marginLeft: 6 }}>
+                                                                        Servicio
+                                                                    </span>
+                                                                )}
                                                             </td>
                                                             <td style={{ padding: '0.75rem 1rem' }}>{item.cantidad}</td>
                                                             <td style={{ padding: '0.75rem 1rem', color: '#10b981', fontWeight: 500 }}>
-                                                                ${item.tarifaDia?.toLocaleString()} {isHora ? '/ hora' : '/ día'}
+                                                                ${item.tarifaDia?.toLocaleString()} {isHora ? '/ hora' : isService ? '/ servicio' : '/ día'}
                                                             </td>
                                                             <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                                                                 <button onClick={() => removeItem(idx)} style={{ background: '#fee2e2', border: 'none', cursor: 'pointer', color: '#ef4444', display: 'inline-flex', padding: '0.4rem', borderRadius: 6, transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#fecaca'} onMouseLeave={e => e.currentTarget.style.background = '#fee2e2'}><X size={14} /></button>
@@ -299,7 +315,7 @@ export function NuevaRemisionModal({ onClose, onSave, clients, products, mainten
                                 </div>
                             ) : (
                                 <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: 12, fontSize: '0.9rem', fontWeight: 500 }}>
-                                    Agrega al menos un equipo a la remisión
+                                    Agrega al menos un equipo o servicio a la remisión
                                 </div>
                             )}
 
