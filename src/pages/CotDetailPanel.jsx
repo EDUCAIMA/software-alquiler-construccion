@@ -176,6 +176,10 @@ export default function CotDetailPanel({
     const dynamicItems = [];
 
     (cot.items || []).forEach(cotItem => {
+        // Los servicios se cobran por la cantidad cotizada, pero no generan
+        // permanencia en obra ni recargos diarios por devolución.
+        if (esServicio(cotItem)) return;
+
         const tarifaDia = Number(cotItem.tarifaDia) || 0;
         const diasCotizados = Number(cotItem.dias) || 0;
         const nombre = cotItem.nombre || cotItem.name || 'Equipo';
@@ -420,7 +424,7 @@ export default function CotDetailPanel({
                                                 }}>
                                                     <td style={{ padding: '0.7rem 0.85rem', fontWeight: 600, color: '#1e293b', fontSize: '0.8rem' }}>{item.nombre}</td>
                                                     <td style={{ padding: '0.7rem 0.5rem', textAlign: 'center', color: '#1e293b', fontSize: '0.8rem', whiteSpace: 'nowrap', fontWeight: 600 }}>
-                                                        {isServ ? 'Servicio · Cobro único' : `${item.cantidad} u × ${item.dias}d`}
+                                                        {isServ ? `${item.cantidad} servicio${Number(item.cantidad) === 1 ? '' : 's'}` : `${item.cantidad} u × ${item.dias}d`}
                                                     </td>
                                                     <td style={{ padding: '0.7rem 0.85rem', fontWeight: 600, color: '#1e293b', textAlign: 'right', fontSize: '0.8rem' }}>
                                                         {fmtCOP(lineTot)}

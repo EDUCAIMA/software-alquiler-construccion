@@ -135,7 +135,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
         const existingIdx = items.findIndex(i => i.productId === prod.id);
         if (existingIdx >= 0) {
             const newItems = [...items];
-            const nextQty = isServ ? 1 : newItems[existingIdx].cantidad + 1;
+            const nextQty = (Number(newItems[existingIdx].cantidad) || 0) + 1;
             if (!isServ && nextQty > prod.availableStock) {
                 Swal.fire({
                     title: 'Stock Insuficiente',
@@ -518,7 +518,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
 
                                                         {inList && (
                                                             <div style={{ background: '#2365AB', color: 'white', minWidth: 20, height: 20, padding: '0 4px', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 800 }}>
-                                                                {isServiceProduct(p) ? '✓' : inList.cantidad}
+                                                                {inList.cantidad}
                                                             </div>
                                                         )}
                                                     </div>
@@ -535,7 +535,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
                         <div style={{ padding: '1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1e293b' }}>
-                                <Package size={18} /> Equipos Seleccionados ({items.length})
+                                <Package size={18} /> Equipos y Servicios ({items.length})
                             </h4>
                             {items.length > 0 && <button onClick={() => setItems([])} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>Vaciar lista</button>}
                         </div>
@@ -594,7 +594,7 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                                         </span>
                                                         {isServ && (
                                                             <span style={{ fontSize: '0.65rem', background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 6, fontWeight: 700 }}>
-                                                                Cobro Único
+                                                                Por servicio
                                                             </span>
                                                         )}
                                                         {isHora && (
@@ -619,26 +619,26 @@ export default function NuevaCotizacionModal({ onClose, onSave, clients, product
                                                     </div>
                                                 )}
 
+                                                {isServ && (
+                                                    <div style={{ marginBottom: '0.65rem', padding: '0.4rem 0.65rem', borderRadius: 8, background: '#e0f2fe', color: '#0369a1', fontSize: '0.72rem', fontWeight: 700, textAlign: 'center' }}>
+                                                        La cantidad indica cuántas veces se cobrará el servicio · no afecta inventario
+                                                    </div>
+                                                )}
                                                 <div style={{ display: 'grid', gridTemplateColumns: isServ ? '1fr' : '1fr 1fr', gap: '1rem' }}>
-                                                    {isServ ? (
-                                                        <div style={{ padding: '0.45rem 0.65rem', borderRadius: 8, background: '#e0f2fe', color: '#0369a1', fontSize: '0.75rem', fontWeight: 800, textAlign: 'center' }}>
-                                                            Servicio sin cantidad · no afecta inventario
-                                                        </div>
-                                                    ) : (
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                            <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Cant:</div>
-                                                            <input
-                                                                type="number"
-                                                                min="1"
-                                                                value={item.cantidad}
-                                                                onChange={(e) => setItemQtyDirect(idx, e.target.value)}
-                                                                onBlur={() => {
-                                                                    if (!item.cantidad || item.cantidad < 1) setItemQtyDirect(idx, 1);
-                                                                }}
-                                                                style={{ width: '100%', padding: '0.3rem', border: '1px solid #e2e8f0', borderRadius: 8, textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }}
-                                                            />
-                                                        </div>
-                                                    )}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>{isServ ? 'Servicios:' : 'Cant:'}</div>
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            step="1"
+                                                            value={item.cantidad}
+                                                            onChange={(e) => setItemQtyDirect(idx, e.target.value)}
+                                                            onBlur={() => {
+                                                                if (!item.cantidad || item.cantidad < 1) setItemQtyDirect(idx, 1);
+                                                            }}
+                                                            style={{ width: '100%', padding: '0.3rem', border: '1px solid #e2e8f0', borderRadius: 8, textAlign: 'center', fontWeight: 700, fontSize: '0.85rem' }}
+                                                        />
+                                                    </div>
                                                     {!isServ && (
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                             <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>{isHora ? 'Horas:' : 'Días:'}</div>

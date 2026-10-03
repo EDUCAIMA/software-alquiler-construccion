@@ -444,8 +444,14 @@ export const AppProvider = ({ children }) => {
         productId: i.productId,
         nombre: i.nombre || i.name,
         quantity: i.cantidad,
-        days: i.dias,
+        days: ((i.tipoCobro || '').toLowerCase().includes('servicio') ||
+          (i.tipoCobro || '').toLowerCase().includes('única') ||
+          (i.category || '').toLowerCase().includes('servicio') ||
+          (i.esquemaCobro || '').toLowerCase().includes('única')) ? 1 : i.dias,
         price: i.tarifaDia,
+        tipoCobro: i.tipoCobro,
+        esquemaCobro: i.esquemaCobro,
+        category: i.category,
       }));
       const subtotal = items.reduce((t, i) => t + (i.quantity * i.days * i.price), 0);
       const client = clients.find(c => c.id === cot.clientId);

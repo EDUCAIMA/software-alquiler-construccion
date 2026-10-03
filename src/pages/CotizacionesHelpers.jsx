@@ -82,7 +82,7 @@ function generateCotizacionPDF(cot, client, obra, settings) {
                 return [
                     idx + 1,
                     i.nombre.toUpperCase(),
-                    isServ ? '—' : i.cantidad,
+                    i.cantidad,
                     isServ ? 'SERVICIO' : i.dias,
                     fmtN(i.tarifaDia),
                     fmtN(getItemSubtotal(i))
@@ -258,7 +258,7 @@ function generateContratoPDF(cot, client, obra, settings) {
                 return [
                     idx + 1,
                     i.nombre.toUpperCase(),
-                    isServ ? '—' : i.cantidad,
+                    i.cantidad,
                     isServ ? 'SERVICIO' : i.dias,
                     i.tarifaDia.toLocaleString('es-CO'),
                     rowTot.toLocaleString('es-CO')
@@ -1180,7 +1180,7 @@ export function generateInvoicePDF(invoice, client, products, settings) {
                 return [
                     gIdx + 1,
                     tagger ? tagger.cell(gIdx, productName, '', { noTag: isServ }) : productName.toUpperCase(),
-                    isServ ? '—' : qty,
+                    qty,
                     isServ ? 'SERVICIO' : days,
                     `$${price.toLocaleString('es-CO')}`,
                     `$${(qty * (isServ ? 1 : days) * price).toLocaleString('es-CO')}`

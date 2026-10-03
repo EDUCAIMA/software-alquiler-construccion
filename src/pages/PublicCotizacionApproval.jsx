@@ -177,7 +177,7 @@ export default function PublicCotizacionApproval() {
                                                     <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                         <td style={{ padding: '1.25rem 1.5rem', fontWeight: 600, color: '#1e293b' }}>{it.nombre}</td>
                                                         <td style={{ textAlign: 'center', padding: '1.25rem 1rem', color: '#64748b' }}>{it.cantidad}</td>
-                                                        <td style={{ textAlign: 'center', padding: '1.25rem 1rem', color: '#64748b' }}>{isServ ? '1 (Única)' : it.dias}</td>
+                                                        <td style={{ textAlign: 'center', padding: '1.25rem 1rem', color: '#64748b' }}>{isServ ? 'Servicio' : it.dias}</td>
                                                         <td style={{ textAlign: 'right', padding: '1.25rem 1.5rem', color: '#0f172a', fontWeight: 800 }}>{fmtCOP(lineTot)}</td>
                                                     </tr>
                                                 );
