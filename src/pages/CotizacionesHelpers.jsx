@@ -7,10 +7,12 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { format, addDays, differenceInDays } from 'date-fns';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTableModule from 'jspdf-autotable';
 import { applyStandardLayout, drawInfoGrid, createEquipoTagger } from './pdfTheme';
 import { calcularHorasAlquiler, calcularHoraFin } from './cotizacionesUtils';
+
+const autoTable = typeof autoTableModule === 'function' ? autoTableModule : autoTableModule.default;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ESTADO_CFG = {
@@ -33,13 +35,15 @@ const esItemServicio = (item = {}, product = {}) => {
 };
 
 // ─── PDF Cotización al Cliente (Nuevo Formato Profesional) ────────────────────────
-function generateCotizacionPDF(cot, client, obra, settings) {
+function generateCotizacionPDF(cot, client, obra, settings, { download = true } = {}) {
     try {
         const doc = new jsPDF({ orientation: 'portrait', format: 'letter', unit: 'mm' });
         const W = doc.internal.pageSize.getWidth();
         const H = doc.internal.pageSize.getHeight();
         const margin = 10;
         const fmtN = n => (Number(n) || 0).toLocaleString('es-CO');
+        const fmtMoney = n => `$${fmtN(n)}`;
+        const tableFontSize = 7.5;
 
         // --- ENCABEZADO Y GRID ---
         let y = applyStandardLayout(doc, 'COTIZACIÓN', settings, cot.id);
@@ -66,40 +70,45 @@ function generateCotizacionPDF(cot, client, obra, settings) {
             return Number(i.cantidad) * (isServ ? 1 : Number(i.dias)) * Number(i.tarifaDia);
         };
         const subtotal = cot.items.reduce((s, i) => s + getItemSubtotal(i), 0);
+        const descuento = Math.min(subtotal, Math.max(0, Number(cot.descuentoMonto) || 0));
+        const subtotalNeto = subtotal - descuento;
         const porcIVA = client?.responsableIVA ? (client?.porcIVA || 0) : 0;
         const porcRet = client?.porcRetencion || 0;
-        const iva = Math.round(subtotal * porcIVA / 100);
-        const ret = Math.round(subtotal * porcRet / 100);
-        const total = subtotal + iva + ret;
+        const iva = Math.round(subtotalNeto * porcIVA / 100);
+        const ret = Math.round(subtotalNeto * porcRet / 100);
+        const total = subtotalNeto + iva + ret;
         const deposito = Math.max(0, Number(cot.deposito) || 0);
 
         autoTable(doc, {
             startY: y,
             margin: { left: margin, right: margin },
-            head: [['ITE', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
+            head: [['ITEM', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
             body: cot.items.map((i, idx) => {
                 const isServ = esItemServicio(i);
                 return [
                     idx + 1,
-                    i.nombre.toUpperCase(),
+                    String(i.nombre || i.name || 'EQUIPO / SERVICIO').toUpperCase(),
                     i.cantidad,
-                    isServ ? 'SERVICIO' : i.dias,
-                    fmtN(i.tarifaDia),
-                    fmtN(getItemSubtotal(i))
+                    isServ ? 'N/A' : i.dias,
+                    fmtMoney(i.tarifaDia),
+                    fmtMoney(getItemSubtotal(i))
                 ];
             }),
             theme: 'plain',
             headStyles: { 
                 fillColor: [241, 245, 249], 
                 textColor: [30, 41, 59], 
-                fontSize: 7.5, 
+                font: 'helvetica',
+                fontSize: tableFontSize,
                 fontStyle: 'bold', 
                 halign: 'center',
                 lineWidth: 0.1,
                 lineColor: [30, 41, 59]
             },
             styles: { 
-                fontSize: 7.5, 
+                font: 'helvetica',
+                fontSize: tableFontSize,
+                fontStyle: 'normal',
                 cellPadding: 2, 
                 textColor: [30, 41, 59], 
                 halign: 'center',
@@ -107,12 +116,12 @@ function generateCotizacionPDF(cot, client, obra, settings) {
                 lineColor: [30, 41, 59]
             },
             columnStyles: {
-                0: { cellWidth: 10 },
-                1: { halign: 'left', cellWidth: 'auto' },
-                2: { cellWidth: 15 },
-                3: { cellWidth: 15 },
+                0: { cellWidth: 11 },
+                1: { halign: 'left', cellWidth: 92.5 },
+                2: { cellWidth: 14 },
+                3: { cellWidth: 14 },
                 4: { halign: 'right', cellWidth: 25 },
-                5: { halign: 'right', cellWidth: 30, fontStyle: 'bold' }
+                5: { halign: 'right', cellWidth: 38 }
             }
         });
 
@@ -141,19 +150,19 @@ function generateCotizacionPDF(cot, client, obra, settings) {
         const totH = 7;
         
         const totals = [
-            ['SUB-TOTAL', fmtN(subtotal)],
-            ['DESCUENTO', '0'],
-            ['SUB-TOTAL', fmtN(subtotal)],
-            [`IVA (${porcIVA}%)`, fmtN(iva)],
-            [`RETENCIÓN (${porcRet}%)`, fmtN(ret)],
-            ...(deposito > 0 ? [['DEPÓSITO REEMBOLSABLE', fmtN(deposito)]] : [])
+            ['SUBTOTAL BRUTO', fmtMoney(subtotal)],
+            ['DESCUENTO', descuento > 0 ? `-${fmtMoney(descuento)}` : fmtMoney(0)],
+            ['SUBTOTAL NETO', fmtMoney(subtotalNeto)],
+            [`IVA (${porcIVA}%)`, fmtMoney(iva)],
+            [`RETENCIÓN (${porcRet}%)`, fmtMoney(ret)],
+            ...(deposito > 0 ? [['DEPÓSITO REEMBOLSABLE', fmtMoney(deposito)]] : [])
         ];
 
         let ty = footerY;
         totals.forEach(([label, value]) => {
             doc.rect(totX, ty, 50, totH);
             doc.rect(totX + 50, ty, 30, totH);
-            doc.setFontSize(7);
+            doc.setFontSize(tableFontSize);
             doc.setFont('helvetica', 'bold');
             doc.text(label, totX + 2, ty + 4.5);
             doc.setFont('helvetica', 'normal');
@@ -166,10 +175,11 @@ function generateCotizacionPDF(cot, client, obra, settings) {
         doc.rect(totX, ty, 50, 9, 'F');
         doc.rect(totX, ty, 50, 9, 'S');
         doc.rect(totX + 50, ty, 30, 9, 'S');
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'extrabold');
+        doc.setFontSize(tableFontSize);
+        doc.setFont('helvetica', 'bold');
         doc.text(deposito > 0 ? 'TOTAL + DEPÓSITO' : 'TOTAL', totX + 2, ty + 6);
-        doc.text(`$${fmtN(total + deposito)}`, totX + 78, ty + 6, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.text(fmtMoney(total + deposito), totX + 78, ty + 6, { align: 'right' });
 
         y = ty + 20;
 
@@ -207,10 +217,12 @@ function generateCotizacionPDF(cot, client, obra, settings) {
         doc.text('Firma Autorizada', margin + 30, y + 4, { align: 'center' });
         doc.text('Aceptado Cliente', W - margin - 30, y + 4, { align: 'center' });
 
-        doc.save(`Cotizacion_${cot.id}.pdf`);
+        if (download) doc.save(`Cotizacion_${cot.id}.pdf`);
+        return doc;
     } catch (error) {
         console.error('Error generating PDF:', error);
         alert('Error al generar el PDF de cotización.');
+        return null;
     }
 }
 

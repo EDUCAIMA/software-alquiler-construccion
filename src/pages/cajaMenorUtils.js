@@ -72,8 +72,12 @@ export function buildMovimientosCajaMenor({
                 referencia: inv.id,
                 concepto: `Pago en efectivo — Remisión ${inv.id}${ab.tipo ? ` (${ab.tipo})` : ''}`,
                 tercero: client?.name || 'N/A',
+                identificacion: client?.nit || '',
+                metodoPago: ab.metodoPago || 'Efectivo',
                 entrada: Number(ab.monto) || 0,
                 salida: 0,
+                movimientoTipo: 'pago_remision',
+                movimientoId: `${inv.id}-AB${idx}`,
             });
         });
     });
@@ -89,8 +93,13 @@ export function buildMovimientosCajaMenor({
             referencia: ing.referencia_soporte || ing.id,
             concepto: ing.concepto || 'Ingreso directo',
             tercero: ing.origen || '—',
+            identificacion: '',
+            metodoPago: ing.metodo_pago || 'Efectivo',
             entrada: Number(ing.monto) || 0,
             salida: 0,
+            movimientoTipo: 'ingreso_caja_menor',
+            movimientoId: ing.id,
+            _raw: ing,
         });
     });
 
@@ -107,8 +116,13 @@ export function buildMovimientosCajaMenor({
                 ? `${g.subtipo_gasto}${g.descripcion ? ` — ${g.descripcion}` : ''}`
                 : (g.descripcion || 'Egreso en efectivo'),
             tercero: g.proveedor_beneficiario || '—',
+            identificacion: '',
+            metodoPago: g.metodo_pago || 'Efectivo',
             entrada: 0,
             salida: Number(g.costo) || 0,
+            movimientoTipo: 'gasto_mantenimiento',
+            movimientoId: g.id,
+            _raw: g,
         });
     });
 
@@ -122,8 +136,12 @@ export function buildMovimientosCajaMenor({
             referencia: r.referencia_soporte || r.id,
             concepto: r.concepto || 'Retiro de caja menor',
             tercero: r.responsable || '—',
+            identificacion: '',
+            metodoPago: 'Efectivo',
             entrada: 0,
             salida: Number(r.monto) || 0,
+            movimientoTipo: 'retiro_caja_menor',
+            movimientoId: r.id,
             _raw: r,
         });
     });

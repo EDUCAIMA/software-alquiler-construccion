@@ -84,6 +84,7 @@ export const AppProvider = ({ children }) => {
   const [gastosMantenimiento, setGastosMantenimiento] = useState([]);
   const [ingresosCajaMenor, setIngresosCajaMenor] = useState([]);
   const [retirosCajaMenor, setRetirosCajaMenor] = useState([]);
+  const [recibosCaja, setRecibosCaja] = useState([]);
   const [empleados, setEmpleados] = useState([]);
   const [liquidaciones, setLiquidaciones] = useState([]);
   const [logs, setLogs] = useState([]);
@@ -117,7 +118,7 @@ export const AppProvider = ({ children }) => {
     try {
       const fetchSafe = (url, fallback) => api.get(url).catch(e => { console.error(`Error fetching ${url}:`, e); return fallback; });
       
-      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs, provs, icm, rcm, cxp] = await Promise.all([
+      const [p, c, inv, cot, rem, maint, g, emp, liq, s, gm, lgs, usrs, provs, icm, rcm, rcj, cxp] = await Promise.all([
         fetchSafe('/api/products', []),
         fetchSafe('/api/clients', []),
         fetchSafe('/api/invoices', []),
@@ -134,6 +135,7 @@ export const AppProvider = ({ children }) => {
         fetchSafe('/api/providers', []),
         fetchSafe('/api/ingresos-caja-menor', []),
         fetchSafe('/api/retiros-caja-menor', []),
+        fetchSafe('/api/recibos-caja', []),
         fetchSafe('/api/cuentas-por-pagar', []),
       ]);
       
@@ -154,6 +156,7 @@ export const AppProvider = ({ children }) => {
       setProviders(Array.isArray(provs) ? provs : []);
       setIngresosCajaMenor(Array.isArray(icm) ? icm : []);
       setRetirosCajaMenor(Array.isArray(rcm) ? rcm : []);
+      setRecibosCaja(Array.isArray(rcj) ? rcj : []);
       setCuentasPorPagar(Array.isArray(cxp) ? cxp : []);
       if (s && !s.error) setSettings(s);
     } catch (err) {
@@ -1133,6 +1136,23 @@ export const AppProvider = ({ children }) => {
     logAction('Retiro de Caja Menor Eliminado', id, '', 'system');
   };
 
+  // ─── RECIBOS DE CAJA MENOR ────────────────────────────────────────────────
+  const createReciboCaja = async (data) => {
+    const nuevo = await api.post('/api/recibos-caja', {
+      ...data,
+      monto: Number(data.monto || 0),
+      creado_por: data.creado_por || currentUser?.name || currentUser?.username || ''
+    });
+    await reloadAll();
+    logAction(
+      `Recibo de Caja ${nuevo.tipo}`,
+      `${nuevo.numero} — $${Number(nuevo.monto).toLocaleString('es-CO')}`,
+      nuevo.tercero,
+      nuevo.tipo === 'Ingreso' ? 'entry' : 'exit'
+    );
+    return nuevo;
+  };
+
   // ─── EMPLEADOS + NÓMINA ───────────────────────────────────────────────────
   const addEmpleado = async (data) => {
     const id = nextId(empleados, 'EMP');
@@ -1300,6 +1320,8 @@ export const AppProvider = ({ children }) => {
       ingresosCajaMenor, addIngresoCajaMenor, editIngresoCajaMenor, deleteIngresoCajaMenor,
       // Retiros Caja Menor
       retirosCajaMenor, addRetiroCajaMenor, editRetiroCajaMenor, deleteRetiroCajaMenor,
+      // Recibos Caja Menor
+      recibosCaja, createReciboCaja,
       empleados, addEmpleado,
       liquidaciones, addLiquidacion, pagarLiquidacion,
       // Settings

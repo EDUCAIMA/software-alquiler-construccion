@@ -244,7 +244,7 @@ function Topbar() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <Package size={34} color="#76B1E0" />
               <span style={{ fontWeight: 900, color: 'white', fontSize: '1.1rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                {settings?.shortName || 'ARQUILER'}
+                {settings?.shortName || 'ALQUILER'}
               </span>
             </div>
           )}

@@ -364,6 +364,39 @@ async function initDB() {
             )
             `);
 
+        // --- Recibos de Caja Menor ---
+        // Cada recibo queda enlazado al movimiento que lo originó. Cuando se
+        // crea desde el formulario general, el servidor genera en la misma
+        // transacción el ingreso o egreso correspondiente.
+        await client.query(`
+      CREATE TABLE IF NOT EXISTS recibos_caja(
+                id SERIAL PRIMARY KEY,
+                numero VARCHAR(30) UNIQUE,
+                tipo VARCHAR(20) NOT NULL,
+                fecha DATE DEFAULT CURRENT_DATE,
+                ciudad VARCHAR(100),
+                tercero VARCHAR(255) NOT NULL,
+                identificacion VARCHAR(100),
+                concepto TEXT NOT NULL,
+                monto NUMERIC(15, 2) NOT NULL DEFAULT 0,
+                metodo_pago VARCHAR(50) DEFAULT 'Efectivo',
+                firma_empresa TEXT,
+                firma_tercero TEXT,
+                firmante_empresa VARCHAR(255),
+                firmante_tercero VARCHAR(255),
+                movimiento_tipo VARCHAR(50),
+                movimiento_id VARCHAR(100),
+                movimiento_generado BOOLEAN DEFAULT false,
+                creado_por VARCHAR(255),
+                fecha_registro TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+            `);
+        await client.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS recibos_caja_movimiento_unico
+            ON recibos_caja(movimiento_tipo, movimiento_id)
+            WHERE movimiento_tipo IS NOT NULL AND movimiento_id IS NOT NULL
+        `);
+
         // Migración: capturar el método de pago (Transferencia/Efectivo/etc.) en cada abono de una remisión
         await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50)`);
         // Migración: agregar columnas si no existen
@@ -1503,6 +1536,135 @@ app.delete('/api/retiros-caja-menor/:id', async (req, res) => {
     } catch (e) {
         console.error('ERROR DELETING RETIRO CAJA MENOR:', e.message);
         res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── RECIBOS DE CAJA MENOR ──────────────────────────────────────────────────
+app.get('/api/recibos-caja', async (req, res) => {
+    try {
+        const { rows } = await pool.query(`
+            SELECT *, monto::float8 AS monto
+            FROM recibos_caja
+            ORDER BY fecha DESC, id DESC
+        `);
+        res.json(rows);
+    } catch (e) {
+        console.error('ERROR GETTING RECIBOS CAJA:', e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/recibos-caja', async (req, res) => {
+    const {
+        tipo, fecha, ciudad, tercero, identificacion, concepto, monto,
+        metodo_pago, firma_empresa, firma_tercero, firmante_empresa,
+        firmante_tercero, movimiento_tipo, movimiento_id, creado_por
+    } = req.body;
+
+    const tipoNormalizado = tipo === 'Egreso' ? 'Egreso' : (tipo === 'Ingreso' ? 'Ingreso' : null);
+    const montoNumerico = Number(monto);
+    const firmaValida = value => !value || /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/i.test(value);
+
+    if (!tipoNormalizado || !fecha || !String(tercero || '').trim() || !String(concepto || '').trim() || !(montoNumerico > 0)) {
+        return res.status(400).json({ error: 'Tipo, fecha, tercero, concepto y monto mayor a cero son requeridos.' });
+    }
+    if (!firma_empresa && !firma_tercero) {
+        return res.status(400).json({ error: 'Debe cargar al menos una firma digital.' });
+    }
+    if (!firmaValida(firma_empresa) || !firmaValida(firma_tercero)) {
+        return res.status(400).json({ error: 'Las firmas deben ser imágenes PNG o JPG válidas.' });
+    }
+    if ([firma_empresa, firma_tercero].some(value => value && value.length > 4_000_000)) {
+        return res.status(400).json({ error: 'Cada firma debe pesar menos de 4 MB.' });
+    }
+
+    let client;
+    try {
+        client = await pool.connect();
+        await client.query('BEGIN');
+
+        if (movimiento_tipo && movimiento_id) {
+            const { rows: existentes } = await client.query(
+                'SELECT numero FROM recibos_caja WHERE movimiento_tipo = $1 AND movimiento_id = $2 LIMIT 1',
+                [movimiento_tipo, movimiento_id]
+            );
+            if (existentes.length > 0) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ error: `El movimiento ya tiene el recibo ${existentes[0].numero}.` });
+            }
+        }
+
+        const { rows: insertedRows } = await client.query(`
+            INSERT INTO recibos_caja (
+                tipo, fecha, ciudad, tercero, identificacion, concepto, monto,
+                metodo_pago, firma_empresa, firma_tercero, firmante_empresa,
+                firmante_tercero, movimiento_tipo, movimiento_id, creado_por
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            RETURNING *
+        `, [
+            tipoNormalizado, fecha, String(ciudad || '').trim() || null,
+            String(tercero).trim(), String(identificacion || '').trim() || null,
+            String(concepto).trim(), montoNumerico, metodo_pago || 'Efectivo',
+            firma_empresa || null, firma_tercero || null,
+            String(firmante_empresa || '').trim() || null,
+            String(firmante_tercero || tercero || '').trim() || null,
+            movimiento_tipo || null, movimiento_id || null,
+            String(creado_por || '').trim() || null
+        ]);
+
+        const reciboId = insertedRows[0].id;
+        const numero = `RCJ-${String(reciboId).padStart(6, '0')}`;
+        let movimientoTipo = movimiento_tipo || null;
+        let movimientoId = movimiento_id || null;
+        let movimientoGenerado = false;
+
+        // Si el recibo no se originó desde una fila existente, registra el
+        // movimiento contable/caja automáticamente para evitar duplicidades.
+        if (!movimientoTipo || !movimientoId) {
+            movimientoGenerado = true;
+            if (tipoNormalizado === 'Ingreso') {
+                movimientoTipo = 'ingreso_caja_menor';
+                movimientoId = `IC-${numero}`;
+                await client.query(`
+                    INSERT INTO ingresos_caja_menor
+                        (id, concepto, descripcion, monto, fecha_ingreso, metodo_pago, origen, referencia_soporte)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                `, [
+                    movimientoId, String(concepto).trim(), `Generado desde el recibo ${numero}`,
+                    montoNumerico, fecha, metodo_pago || 'Efectivo', String(tercero).trim(), numero
+                ]);
+            } else {
+                movimientoTipo = 'gasto_mantenimiento';
+                movimientoId = `GM-${numero}`;
+                await client.query(`
+                    INSERT INTO gastos_mantenimiento
+                        (id, id_maquina, tipo_gasto, subtipo_gasto, descripcion, costo,
+                         fecha_gasto, proveedor_beneficiario, referencia_soporte, metadata, metodo_pago)
+                    VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                `, [
+                    movimientoId, 'Caja Menor', 'Recibo de caja menor', String(concepto).trim(),
+                    montoNumerico, fecha, String(tercero).trim(), numero,
+                    JSON.stringify({ reciboCaja: numero, identificacion: identificacion || '', ciudad: ciudad || '' }),
+                    metodo_pago || 'Efectivo'
+                ]);
+            }
+        }
+
+        const { rows } = await client.query(`
+            UPDATE recibos_caja
+            SET numero = $1, movimiento_tipo = $2, movimiento_id = $3, movimiento_generado = $4
+            WHERE id = $5
+            RETURNING *, monto::float8 AS monto
+        `, [numero, movimientoTipo, movimientoId, movimientoGenerado, reciboId]);
+
+        await client.query('COMMIT');
+        res.status(201).json(rows[0]);
+    } catch (e) {
+        if (client) await client.query('ROLLBACK');
+        console.error('ERROR CREATING RECIBO CAJA:', e.message);
+        res.status(500).json({ error: e.message });
+    } finally {
+        if (client) client.release();
     }
 });
 

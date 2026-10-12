@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
     Wallet, TrendingUp, TrendingDown, ArrowUpFromLine, Download,
-    Edit3, Trash2, Banknote
+    Edit3, Trash2, Banknote, ReceiptText
 } from 'lucide-react';
 import { format } from 'date-fns';
 import Swal from 'sweetalert2';
@@ -10,6 +10,8 @@ import autoTable from 'jspdf-autotable';
 import { useAppContext } from '../context/AppContext';
 import { applyStandardLayout } from './pdfTheme';
 import RetiroCajaMenorModal from './RetiroCajaMenorModal';
+import ReciboCajaModal from './ReciboCajaModal';
+import { downloadReciboCajaPDF } from './reciboCajaPdf';
 import {
     buildMovimientosCajaMenor, resumirMovimientos, fmtCOP, formatFechaCorta
 } from './cajaMenorUtils';
@@ -26,11 +28,13 @@ export default function CajaMenor() {
     const {
         invoices = [], clients = [], ingresosCajaMenor = [],
         gastosMantenimiento = [], retirosCajaMenor = [],
-        deleteRetiroCajaMenor, settings
+        recibosCaja = [], deleteRetiroCajaMenor, settings
     } = useAppContext();
 
     const [showRetiroModal, setShowRetiroModal] = useState(false);
     const [editingRetiro, setEditingRetiro] = useState(null);
+    const [showReciboModal, setShowReciboModal] = useState(false);
+    const [movimientoRecibo, setMovimientoRecibo] = useState(null);
 
     const [filtroFechaInicio, setFiltroFechaInicio] = useState('');
     const [filtroFechaFin, setFiltroFechaFin] = useState('');
@@ -68,6 +72,26 @@ export default function CajaMenor() {
     const filasTabla = useMemo(() => [...movimientosFiltrados].reverse(), [movimientosFiltrados]);
 
     const hayFiltros = filtroFechaInicio || filtroFechaFin || filtroTipo !== 'Todos' || search;
+
+    const recibosPorMovimiento = useMemo(() => {
+        const map = new Map();
+        recibosCaja.forEach(recibo => {
+            if (recibo.movimiento_tipo && recibo.movimiento_id) {
+                map.set(`${recibo.movimiento_tipo}:${recibo.movimiento_id}`, recibo);
+            }
+        });
+        return map;
+    }, [recibosCaja]);
+
+    const openRecibo = (movimiento = null) => {
+        setMovimientoRecibo(movimiento);
+        setShowReciboModal(true);
+    };
+
+    const closeRecibo = () => {
+        setShowReciboModal(false);
+        setMovimientoRecibo(null);
+    };
 
     const handleEditRetiro = (mov) => {
         setEditingRetiro(mov._raw);
@@ -226,6 +250,10 @@ export default function CajaMenor() {
         <>
             {/* Header */}
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginBottom: '1.5rem' }}>
+                <button className="btn btn-primary" onClick={() => openRecibo()}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#2365AB', border: 'none' }}>
+                    <ReceiptText size={16} /> Nuevo Recibo de Caja
+                </button>
                 <button className="btn btn-primary" onClick={() => setShowRetiroModal(true)}
                     style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#f97316', border: 'none' }}>
                     <ArrowUpFromLine size={16} /> Retiro de Caja Menor
@@ -332,6 +360,7 @@ export default function CajaMenor() {
                             <tbody>
                                 {filasTabla.map(m => {
                                     const cfg = TIPO_CFG[m.tipo];
+                                    const recibo = recibosPorMovimiento.get(`${m.movimientoTipo}:${m.movimientoId}`);
                                     return (
                                         <tr key={m.key} style={{ borderBottom: '1px solid var(--surface-border)', transition: 'background 0.15s' }}
                                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
@@ -350,16 +379,75 @@ export default function CajaMenor() {
                                             <td style={{ padding: '0.75rem 1rem', ...CELL_TEXT, color: m.salida ? '#dc2626' : '#94a3b8', whiteSpace: 'nowrap' }}>{m.salida ? fmtCOP(m.salida) : '—'}</td>
                                             <td style={{ padding: '0.75rem 1rem', ...CELL_TEXT, fontWeight: 700, color: m.saldo < 0 ? '#dc2626' : '#104166', whiteSpace: 'nowrap' }}>{fmtCOP(m.saldo)}</td>
                                             <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
-                                                {m.tipo === 'Retiro' && (
-                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <button
+                                                        onClick={() => recibo ? downloadReciboCajaPDF(recibo, settings) : openRecibo(m)}
+                                                        style={{ padding: '0.3rem 0.5rem', background: recibo ? '#ecfdf5' : '#eff6ff', border: `1px solid ${recibo ? '#a7f3d0' : '#bfdbfe'}`, borderRadius: '6px', color: recibo ? '#047857' : '#1d4ed8', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                                                        title={recibo ? `Descargar ${recibo.numero}` : 'Generar recibo firmado para este movimiento'}>
+                                                        {recibo ? <Download size={14} /> : <ReceiptText size={14} />}
+                                                    </button>
+                                                    {m.tipo === 'Retiro' && (
+                                                        <>
                                                         <button onClick={() => handleEditRetiro(m)} style={{ padding: '0.3rem 0.5rem', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#263777', display: 'flex', alignItems: 'center', cursor: 'pointer' }} title="Editar retiro">
                                                             <Edit3 size={14} />
                                                         </button>
                                                         <button onClick={() => handleDeleteRetiro(m)} style={{ padding: '0.3rem 0.5rem', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#ef4444', display: 'flex', alignItems: 'center', cursor: 'pointer' }} title="Eliminar retiro">
                                                             <Trash2 size={14} />
                                                         </button>
-                                                    </div>
-                                                )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            <div className="glass-panel p-6" style={{ marginTop: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div>
+                        <h3 style={{ margin: 0, color: '#104166', fontWeight: 700 }}>Recibos de Caja Generados</h3>
+                        <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Comprobantes firmados y vinculados a sus ingresos o egresos.</p>
+                    </div>
+                    <span style={{ borderRadius: 999, background: '#eff6ff', color: '#1d4ed8', padding: '0.3rem 0.7rem', fontSize: '0.75rem', fontWeight: 700 }}>{recibosCaja.length} recibo{recibosCaja.length === 1 ? '' : 's'}</span>
+                </div>
+
+                {recibosCaja.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                        <ReceiptText size={40} style={{ opacity: 0.3, marginBottom: '0.65rem' }} />
+                        <p style={{ margin: 0 }}>Todavía no hay recibos firmados.</p>
+                    </div>
+                ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                                    {['Número', 'Fecha', 'Tipo', 'Tercero', 'Concepto', 'Valor', 'Forma de pago', 'Movimiento', 'PDF'].map(header => (
+                                        <th key={header} style={{ padding: '0.7rem 0.8rem', textAlign: 'left', ...CELL_TEXT, fontWeight: 'bold', whiteSpace: 'nowrap' }}>{header}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {recibosCaja.map(recibo => {
+                                    const cfg = TIPO_CFG[recibo.tipo] || TIPO_CFG.Egreso;
+                                    return (
+                                        <tr key={recibo.id} style={{ borderBottom: '1px solid var(--surface-border)' }}>
+                                            <td style={{ padding: '0.7rem 0.8rem', ...CELL_TEXT, fontWeight: 700, whiteSpace: 'nowrap' }}>{recibo.numero}</td>
+                                            <td style={{ padding: '0.7rem 0.8rem', ...CELL_TEXT, whiteSpace: 'nowrap' }}>{formatFechaCorta(recibo.fecha)}</td>
+                                            <td style={{ padding: '0.7rem 0.8rem' }}><span style={{ padding: '2px 9px', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700, background: cfg.bg, color: cfg.color }}>{recibo.tipo}</span></td>
+                                            <td style={{ padding: '0.7rem 0.8rem', ...CELL_TEXT }}>{recibo.tercero}</td>
+                                            <td style={{ padding: '0.7rem 0.8rem', ...CELL_TEXT, maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={recibo.concepto}>{recibo.concepto}</td>
+                                            <td style={{ padding: '0.7rem 0.8rem', ...CELL_TEXT, fontWeight: 700, whiteSpace: 'nowrap' }}>{fmtCOP(recibo.monto)}</td>
+                                            <td style={{ padding: '0.7rem 0.8rem', ...CELL_TEXT }}>{recibo.metodo_pago}</td>
+                                            <td style={{ padding: '0.7rem 0.8rem', ...CELL_TEXT, whiteSpace: 'nowrap' }}>{recibo.movimiento_id || '—'}</td>
+                                            <td style={{ padding: '0.7rem 0.8rem' }}>
+                                                <button onClick={() => downloadReciboCajaPDF(recibo, settings)} style={{ padding: '0.35rem 0.55rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 7, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700 }} title={`Descargar ${recibo.numero}`}>
+                                                    <Download size={14} /> PDF
+                                                </button>
                                             </td>
                                         </tr>
                                     );
@@ -372,6 +460,9 @@ export default function CajaMenor() {
 
             {showRetiroModal && (
                 <RetiroCajaMenorModal onClose={closeRetiroModal} editingRetiro={editingRetiro} />
+            )}
+            {showReciboModal && (
+                <ReciboCajaModal onClose={closeRecibo} movimiento={movimientoRecibo} />
             )}
         </>
     );
