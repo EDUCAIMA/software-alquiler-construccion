@@ -8,6 +8,11 @@ import { format, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear } f
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout } from './pdfTheme';
+import { useAppContext } from '../context/AppContext';
+import {
+    buildMovimientosEquipos, buildMovimientosFinancieros,
+    buildResumenFinanciero, buildResumenMovimientosEquipos
+} from './reporteMovimientosUtils';
 
 const fmtCOP = n => `$${Math.round(Number(n) || 0).toLocaleString('es-CO')}`;
 
@@ -98,11 +103,15 @@ export default function ReportesRemisionesModal({
     settings = {},
     initialReportType = 'cartera'
 }) {
+    const {
+        gastos = [], gastosMantenimiento = [], ingresosCajaMenor = [], retirosCajaMenor = []
+    } = useAppContext();
+
     // ─── Estados de Filtros (Solo Período de Fecha) ───────────────────────────
     const today = new Date();
     const [fechaDesde, setFechaDesde] = useState(format(startOfMonth(today), 'yyyy-MM-dd'));
     const [fechaHasta, setFechaHasta] = useState(format(endOfMonth(today), 'yyyy-MM-dd'));
-    const [reportType, setReportType] = useState(initialReportType || 'cartera'); // 'cartera' | 'ingresos' | 'detallado' | 'equipos'
+    const [reportType, setReportType] = useState(initialReportType || 'cartera'); // 'movimientos' | 'cartera' | 'ingresos' | 'detallado' | 'equipos'
     const [soloConDeuda, setSoloConDeuda] = useState(true);
     const [itemKind, setItemKind] = useState('todos'); // 'todos' | 'productos' | 'servicios'
 
@@ -113,7 +122,11 @@ export default function ReportesRemisionesModal({
     // Presets de fecha rápida
     const aplicarPresetFechas = (preset) => {
         const ahora = new Date();
-        if (preset === 'esteMes') {
+        if (preset === 'hoy') {
+            const hoy = format(ahora, 'yyyy-MM-dd');
+            setFechaDesde(hoy);
+            setFechaHasta(hoy);
+        } else if (preset === 'esteMes') {
             setFechaDesde(format(startOfMonth(ahora), 'yyyy-MM-dd'));
             setFechaHasta(format(endOfMonth(ahora), 'yyyy-MM-dd'));
         } else if (preset === 'mesAnterior') {
@@ -137,6 +150,32 @@ export default function ReportesRemisionesModal({
             return true;
         });
     }, [remisiones, fechaDesde, fechaHasta]);
+
+    // ─── Reporte integral: movimientos de bodega + caja ───────────────────
+    const movimientosEquipos = useMemo(() => buildMovimientosEquipos({
+        remisiones, clients, products, fechaDesde, fechaHasta
+    }), [remisiones, clients, products, fechaDesde, fechaHasta]);
+
+    const resumenMovimientosEquipos = useMemo(
+        () => buildResumenMovimientosEquipos(movimientosEquipos),
+        [movimientosEquipos]
+    );
+
+    const movimientosFinancieros = useMemo(() => buildMovimientosFinancieros({
+        invoices, clients, ingresosCajaMenor, gastosMantenimiento, gastos,
+        retirosCajaMenor, fechaDesde, fechaHasta
+    }), [
+        invoices, clients, ingresosCajaMenor, gastosMantenimiento, gastos,
+        retirosCajaMenor, fechaDesde, fechaHasta
+    ]);
+
+    const resumenFinanciero = useMemo(() => buildResumenFinanciero(
+        movimientosFinancieros,
+        { invoices, clients, ingresosCajaMenor, gastosMantenimiento, retirosCajaMenor }
+    ), [
+        movimientosFinancieros, invoices, clients, ingresosCajaMenor,
+        gastosMantenimiento, retirosCajaMenor
+    ]);
 
     // ─── Cálculo de Métricas y Datos del Reporte (Solo Financieros) ───────────
     const metricas = useMemo(() => {
@@ -365,7 +404,7 @@ export default function ReportesRemisionesModal({
     // ─── Generación de PDF ────────────────────────────────────────────────────
     const exportarPDF = () => {
         try {
-            const doc = new jsPDF({ orientation: reportType === 'equipos' ? 'landscape' : 'portrait', format: 'letter', unit: 'mm' });
+            const doc = new jsPDF({ orientation: ['equipos', 'movimientos'].includes(reportType) ? 'landscape' : 'portrait', format: 'letter', unit: 'mm' });
             const W = doc.internal.pageSize.getWidth();
             const H = doc.internal.pageSize.getHeight();
             const margin = 10;
@@ -376,11 +415,13 @@ export default function ReportesRemisionesModal({
                 doc,
                 reportType === 'cartera'
                     ? 'ESTADO DE CARTERA Y SALDOS PENDIENTES'
-                    : (reportType === 'ingresos'
-                        ? 'CONSOLIDADO DE INGRESOS POR CLIENTE'
-                        : (reportType === 'equipos'
-                            ? `INFORME DE ${itemKindLabel}`
-                            : 'INFORME DE REMISIONES Y ALQUILER')),
+                    : (reportType === 'movimientos'
+                        ? 'REPORTE DE MOVIMIENTOS DE EQUIPOS Y CAJA'
+                        : (reportType === 'ingresos'
+                            ? 'CONSOLIDADO DE INGRESOS POR CLIENTE'
+                            : (reportType === 'equipos'
+                                ? `INFORME DE ${itemKindLabel}`
+                                : 'INFORME DE REMISIONES Y ALQUILER'))),
                 settings,
                 nroDoc,
                 { skipFooter: true, centerTitle: true }
@@ -419,6 +460,7 @@ export default function ReportesRemisionesModal({
                         `${carteraResumen.length} clientes`
                     ]],
                     theme: 'plain',
+                    rowPageBreak: 'avoid',
                     headStyles: {
                         fillColor: [35, 101, 171],
                         textColor: 255,
@@ -439,6 +481,55 @@ export default function ReportesRemisionesModal({
                         0: { textColor: [35, 101, 171] }
                     }
                 });
+            } else if (reportType === 'movimientos') {
+                const summaryHeadStyles = {
+                    fillColor: [35, 101, 171], textColor: 255, fontSize: 7.2,
+                    fontStyle: 'bold', halign: 'center'
+                };
+                const summaryStyles = {
+                    fontSize: 8, halign: 'center', fontStyle: 'bold',
+                    textColor: [30, 41, 59], cellPadding: 2.2,
+                    lineWidth: 0.1, lineColor: [203, 213, 225]
+                };
+
+                autoTable(doc, {
+                    startY: y,
+                    margin: { left: margin, right: margin },
+                    head: [['SALIDAS DE BODEGA', 'ENTRADAS A BODEGA', 'UNIDADES QUE SALIERON', 'UNIDADES QUE ENTRARON']],
+                    body: [[
+                        `${resumenMovimientosEquipos.salidas} movimientos`,
+                        `${resumenMovimientosEquipos.entradas} movimientos`,
+                        `${resumenMovimientosEquipos.unidadesSalida} unidades`,
+                        `${resumenMovimientosEquipos.unidadesEntrada} unidades`
+                    ]],
+                    theme: 'plain',
+                    headStyles: summaryHeadStyles,
+                    styles: summaryStyles
+                });
+
+                autoTable(doc, {
+                    startY: doc.lastAutoTable.finalY + 3,
+                    margin: { left: margin, right: margin },
+                    head: [['INGRESOS DEL PERÍODO', 'ENTRÓ EN EFECTIVO', 'ENTRÓ POR CUENTA / OTROS', 'GASTOS DEL PERÍODO', 'RETIROS DE CAJA', 'TOTAL EN CAJA MENOR']],
+                    body: [[
+                        fmtCOP(resumenFinanciero.ingresos),
+                        fmtCOP(resumenFinanciero.ingresosEfectivo),
+                        fmtCOP(resumenFinanciero.ingresosCuenta),
+                        fmtCOP(resumenFinanciero.gastos),
+                        fmtCOP(resumenFinanciero.retiros),
+                        fmtCOP(resumenFinanciero.saldoCajaMenor)
+                    ]],
+                    theme: 'plain',
+                    headStyles: summaryHeadStyles,
+                    styles: summaryStyles,
+                    columnStyles: {
+                        1: { textColor: [5, 150, 105] },
+                        2: { textColor: [35, 101, 171] },
+                        3: { textColor: [220, 38, 38] },
+                        4: { textColor: [234, 88, 12] },
+                        5: { textColor: resumenFinanciero.saldoCajaMenor < 0 ? [220, 38, 38] : [35, 101, 171] }
+                    }
+                });
             } else {
                 autoTable(doc, {
                     startY: y,
@@ -450,6 +541,7 @@ export default function ReportesRemisionesModal({
                         fmtCOP(metricasVisibles.saldoPendiente)
                     ]],
                     theme: 'plain',
+                    rowPageBreak: 'avoid',
                     headStyles: {
                         fillColor: [35, 101, 171],
                         textColor: 255,
@@ -477,7 +569,138 @@ export default function ReportesRemisionesModal({
             y = doc.lastAutoTable.finalY + 6;
 
             // Sección según tipo de reporte seleccionado
-            if (reportType === 'cartera') {
+            if (reportType === 'movimientos') {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8.5);
+                doc.setTextColor(30, 41, 59);
+                doc.text('MOVIMIENTOS DE EQUIPOS - ENTRADAS Y SALIDAS DE BODEGA', margin, y);
+                y += 3;
+
+                autoTable(doc, {
+                    startY: y,
+                    margin: { left: margin, right: margin, bottom: 22 },
+                    head: [['FECHA', 'HORA', 'MOVIMIENTO', 'EQUIPO / HERRAMIENTA', 'CANT.', 'REMISIÓN', 'CLIENTE / OBRA']],
+                    body: movimientosEquipos.length > 0
+                        ? movimientosEquipos.map(movimiento => [
+                            movimiento.fecha,
+                            movimiento.hora || '—',
+                            {
+                                content: movimiento.tipo.toUpperCase(),
+                                styles: {
+                                    fontStyle: 'bold',
+                                    textColor: movimiento.tipo === 'Entrada' ? [5, 150, 105] : [35, 101, 171]
+                                }
+                            },
+                            movimiento.equipo,
+                            movimiento.cantidad,
+                            movimiento.referencia,
+                            `${movimiento.cliente} / ${movimiento.obra}`
+                        ])
+                        : [[{
+                            content: 'No hay entradas o salidas de equipos en el período seleccionado.',
+                            colSpan: 7,
+                            styles: { halign: 'center', textColor: [100, 116, 139] }
+                        }]],
+                    theme: 'plain',
+                    rowPageBreak: 'avoid',
+                    headStyles: {
+                        fillColor: [241, 245, 249], textColor: [30, 41, 59],
+                        fontSize: 7.2, fontStyle: 'bold', halign: 'center',
+                        lineWidth: 0.1, lineColor: [203, 213, 225]
+                    },
+                    styles: {
+                        fontSize: 6.8, cellPadding: 1.8, textColor: [51, 65, 85],
+                        lineWidth: 0.1, lineColor: [226, 232, 240], valign: 'middle'
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 19, halign: 'center' },
+                        1: { cellWidth: 14, halign: 'center' },
+                        2: { cellWidth: 23, halign: 'center' },
+                        3: { cellWidth: 58 },
+                        4: { cellWidth: 15, halign: 'center', fontStyle: 'bold' },
+                        5: { cellWidth: 24, halign: 'center' },
+                        6: { cellWidth: 'auto' }
+                    }
+                });
+
+                y = doc.lastAutoTable.finalY + 7;
+                // Evita dejar el encabezado financiero y una sola fila huérfanos
+                // al final de una página ocupada por movimientos de equipos.
+                if (y > H - 75) {
+                    doc.addPage();
+                    y = 15;
+                }
+
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8.5);
+                doc.setTextColor(30, 41, 59);
+                doc.text('INGRESOS, GASTOS Y RETIROS DEL PERÍODO', margin, y);
+                y += 3;
+
+                autoTable(doc, {
+                    startY: y,
+                    margin: { left: margin, right: margin, bottom: 22 },
+                    head: [['FECHA', 'TIPO', 'ORIGEN / CONCEPTO', 'TERCERO', 'FORMA DE PAGO', 'ENTRADA', 'SALIDA']],
+                    body: movimientosFinancieros.length > 0
+                        ? movimientosFinancieros.map(movimiento => [
+                            movimiento.fecha,
+                            {
+                                content: movimiento.tipo.toUpperCase(),
+                                styles: {
+                                    fontStyle: 'bold',
+                                    textColor: movimiento.tipo === 'Ingreso'
+                                        ? [5, 150, 105]
+                                        : (movimiento.tipo === 'Retiro' ? [234, 88, 12] : [220, 38, 38])
+                                }
+                            },
+                            `${movimiento.origen}${movimiento.concepto ? ` - ${movimiento.concepto}` : ''}`,
+                            movimiento.tercero,
+                            movimiento.metodoPago,
+                            movimiento.tipo === 'Ingreso' ? fmtCOP(movimiento.monto) : '—',
+                            movimiento.tipo !== 'Ingreso' ? fmtCOP(movimiento.monto) : '—'
+                        ])
+                        : [[{
+                            content: 'No hay ingresos, gastos o retiros en el período seleccionado.',
+                            colSpan: 7,
+                            styles: { halign: 'center', textColor: [100, 116, 139] }
+                        }]],
+                    foot: movimientosFinancieros.length > 0 ? [[
+                        {
+                            content: 'TOTALES DEL PERÍODO:',
+                            colSpan: 5,
+                            styles: { halign: 'right', fontStyle: 'bold' }
+                        },
+                        fmtCOP(resumenFinanciero.ingresos),
+                        fmtCOP(resumenFinanciero.gastos + resumenFinanciero.retiros)
+                    ]] : undefined,
+                    theme: 'plain',
+                    rowPageBreak: 'avoid',
+                    showFoot: 'lastPage',
+                    headStyles: {
+                        fillColor: [241, 245, 249], textColor: [30, 41, 59],
+                        fontSize: 7.2, fontStyle: 'bold', halign: 'center',
+                        lineWidth: 0.1, lineColor: [203, 213, 225]
+                    },
+                    footStyles: {
+                        fillColor: [239, 246, 255], textColor: [30, 41, 59],
+                        fontSize: 7.2, fontStyle: 'bold', lineWidth: 0.1,
+                        lineColor: [191, 219, 254], halign: 'right'
+                    },
+                    styles: {
+                        fontSize: 6.8, cellPadding: 1.8, textColor: [51, 65, 85],
+                        lineWidth: 0.1, lineColor: [226, 232, 240], valign: 'middle'
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 19, halign: 'center' },
+                        1: { cellWidth: 18, halign: 'center' },
+                        2: { cellWidth: 'auto' },
+                        3: { cellWidth: 38 },
+                        4: { cellWidth: 27, halign: 'center' },
+                        5: { cellWidth: 27, halign: 'right', textColor: [5, 150, 105] },
+                        6: { cellWidth: 27, halign: 'right', textColor: [220, 38, 38] }
+                    }
+                });
+            } else if (reportType === 'cartera') {
                 doc.setFont('helvetica', 'bold');
                 doc.setFontSize(8.5);
                 doc.setTextColor(35, 101, 171);
@@ -693,11 +916,13 @@ export default function ReportesRemisionesModal({
 
             const fileName = reportType === 'cartera'
                 ? `Estado_Cartera_${format(new Date(), 'yyyy-MM-dd')}.pdf`
-                : (reportType === 'ingresos'
-                    ? `Consolidado_Ingresos_${format(new Date(), 'yyyy-MM-dd')}.pdf`
-                    : (reportType === 'equipos'
-                        ? `Informe_${itemKindLabel.replaceAll(' ', '_')}_${format(new Date(), 'yyyy-MM-dd')}.pdf`
-                        : `Informe_Remisiones_${format(new Date(), 'yyyy-MM-dd')}.pdf`));
+                : (reportType === 'movimientos'
+                    ? `Reporte_Movimientos_${format(new Date(), 'yyyy-MM-dd')}.pdf`
+                    : (reportType === 'ingresos'
+                        ? `Consolidado_Ingresos_${format(new Date(), 'yyyy-MM-dd')}.pdf`
+                        : (reportType === 'equipos'
+                            ? `Informe_${itemKindLabel.replaceAll(' ', '_')}_${format(new Date(), 'yyyy-MM-dd')}.pdf`
+                            : `Informe_Remisiones_${format(new Date(), 'yyyy-MM-dd')}.pdf`)));
             doc.save(fileName);
         } catch (error) {
             console.error('Error generando PDF de reporte:', error);
@@ -760,10 +985,16 @@ export default function ReportesRemisionesModal({
                         </div>
                         <div>
                             <h3 style={{ margin: 0, color: '#104166', fontSize: '1.25rem', fontWeight: 800 }}>
-                                {reportType === 'cartera' ? 'ESTADO DE CARTERA Y SALDOS PENDIENTES' : 'Generador de Informes y Reportes'}
+                                {reportType === 'cartera'
+                                    ? 'ESTADO DE CARTERA Y SALDOS PENDIENTES'
+                                    : (reportType === 'movimientos'
+                                        ? 'REPORTE DE MOVIMIENTOS DE EQUIPOS Y CAJA'
+                                        : 'Generador de Informes y Reportes')}
                             </h3>
                             <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
-                                {reportType === 'cartera' ? `Nro - ${format(new Date(), 'yyyyMMdd-HHmm')} | Período: ${periodoStr}` : 'Filtros personalizados por período, ingresos y exportación a PDF'}
+                                {['cartera', 'movimientos'].includes(reportType)
+                                    ? `Nro - ${format(new Date(), 'yyyyMMdd-HHmm')} | Período: ${periodoStr}`
+                                    : 'Filtros personalizados por período, ingresos y exportación a PDF'}
                             </p>
                         </div>
                     </div>
@@ -826,6 +1057,12 @@ export default function ReportesRemisionesModal({
                             </div>
                             {/* Presets de Fecha */}
                             <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                <button
+                                    onClick={() => aplicarPresetFechas('hoy')}
+                                    style={{ background: '#e2e8f0', border: 'none', padding: '0.3rem 0.75rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
+                                >
+                                    Hoy
+                                </button>
                                 <button
                                     onClick={() => aplicarPresetFechas('esteMes')}
                                     style={{ background: '#e2e8f0', border: 'none', padding: '0.3rem 0.75rem', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
@@ -917,6 +1154,27 @@ export default function ReportesRemisionesModal({
                                 </div>
                             </div>
                         </div>
+                    ) : reportType === 'movimientos' ? (
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                            gap: '0.75rem'
+                        }}>
+                            {[
+                                ['Salidas de bodega', `${resumenMovimientosEquipos.salidas} / ${resumenMovimientosEquipos.unidadesSalida} und.`, '#2365AB', '#eff6ff', '#bfdbfe'],
+                                ['Entradas a bodega', `${resumenMovimientosEquipos.entradas} / ${resumenMovimientosEquipos.unidadesEntrada} und.`, '#047857', '#ecfdf5', '#a7f3d0'],
+                                ['Ingresos del período', fmtCOP(resumenFinanciero.ingresos), '#047857', '#f0fdf4', '#bbf7d0'],
+                                ['Entró en efectivo', fmtCOP(resumenFinanciero.ingresosEfectivo), '#c2410c', '#fff7ed', '#fed7aa'],
+                                ['Entró por cuenta / otros', fmtCOP(resumenFinanciero.ingresosCuenta), '#1d4ed8', '#eff6ff', '#bfdbfe'],
+                                ['Gastos del período', fmtCOP(resumenFinanciero.gastos), '#b91c1c', '#fef2f2', '#fecaca'],
+                                ['Total en caja menor', fmtCOP(resumenFinanciero.saldoCajaMenor), resumenFinanciero.saldoCajaMenor < 0 ? '#b91c1c' : '#104166', '#f8fafc', '#cbd5e1']
+                            ].map(([label, value, color, background, border]) => (
+                                <div key={label} style={{ background, border: `1px solid ${border}`, borderRadius: 12, padding: '0.9rem', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.67rem', color, fontWeight: 800, textTransform: 'uppercase' }}>{label}</div>
+                                    <div style={{ fontSize: '1.05rem', fontWeight: 900, color, marginTop: 4 }}>{value}</div>
+                                </div>
+                            ))}
+                        </div>
                     ) : (
                         <div style={{
                             display: 'grid',
@@ -951,6 +1209,26 @@ export default function ReportesRemisionesModal({
 
                     {/* ─── PESTAÑAS DE VISTA PREVIA ──────────────────────────────── */}
                     <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <button
+                            onClick={() => setReportType('movimientos')}
+                            style={{
+                                background: reportType === 'movimientos' ? 'rgba(35, 101, 171, 0.08)' : 'none',
+                                border: 'none',
+                                padding: '0.6rem 0.75rem',
+                                borderRadius: '6px 6px 0 0',
+                                fontSize: '0.85rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                color: reportType === 'movimientos' ? '#2365AB' : '#64748b',
+                                borderBottom: reportType === 'movimientos' ? '2px solid #2365AB' : '2px solid transparent',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.35rem'
+                            }}
+                        >
+                            <RefreshCw size={15} />
+                            Movimientos de Equipos y Caja
+                        </button>
                         <button
                             onClick={() => setReportType('cartera')}
                             style={{
@@ -1059,6 +1337,66 @@ export default function ReportesRemisionesModal({
                         overflowX: 'auto',
                         maxHeight: '340px'
                     }}>
+                        {reportType === 'movimientos' && (
+                            <div style={{ minWidth: 900 }}>
+                                <div style={{ padding: '0.7rem 0.85rem', background: '#eff6ff', color: '#1e40af', fontWeight: 900, fontSize: '0.78rem', borderBottom: '1px solid #bfdbfe' }}>
+                                    ENTRADAS Y SALIDAS DE EQUIPOS
+                                </div>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
+                                    <thead style={{ background: '#f8fafc' }}>
+                                        <tr style={{ color: '#64748b', textTransform: 'uppercase', fontSize: '0.67rem' }}>
+                                            {['Fecha', 'Hora', 'Movimiento', 'Equipo', 'Cant.', 'Remisión', 'Cliente / Obra'].map(header => (
+                                                <th key={header} style={{ padding: '0.6rem', textAlign: header === 'Equipo' || header === 'Cliente / Obra' ? 'left' : 'center' }}>{header}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {movimientosEquipos.length === 0 ? (
+                                            <tr><td colSpan={7} style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>Sin movimientos de equipos en el período.</td></tr>
+                                        ) : movimientosEquipos.map(movimiento => (
+                                            <tr key={movimiento.key} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '0.55rem', textAlign: 'center' }}>{movimiento.fecha}</td>
+                                                <td style={{ padding: '0.55rem', textAlign: 'center' }}>{movimiento.hora || '—'}</td>
+                                                <td style={{ padding: '0.55rem', textAlign: 'center', fontWeight: 800, color: movimiento.tipo === 'Entrada' ? '#047857' : '#2365AB' }}>{movimiento.tipo}</td>
+                                                <td style={{ padding: '0.55rem', fontWeight: 700 }}>{movimiento.equipo}</td>
+                                                <td style={{ padding: '0.55rem', textAlign: 'center', fontWeight: 800 }}>{movimiento.cantidad}</td>
+                                                <td style={{ padding: '0.55rem', textAlign: 'center' }}>{movimiento.referencia}</td>
+                                                <td style={{ padding: '0.55rem' }}>{movimiento.cliente} / {movimiento.obra}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+
+                                <div style={{ padding: '0.7rem 0.85rem', background: '#f8fafc', color: '#334155', fontWeight: 900, fontSize: '0.78rem', borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #e2e8f0' }}>
+                                    INGRESOS, GASTOS Y RETIROS
+                                </div>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
+                                    <thead style={{ background: '#f8fafc' }}>
+                                        <tr style={{ color: '#64748b', textTransform: 'uppercase', fontSize: '0.67rem' }}>
+                                            {['Fecha', 'Tipo', 'Origen / Concepto', 'Tercero', 'Forma de pago', 'Entrada', 'Salida'].map(header => (
+                                                <th key={header} style={{ padding: '0.6rem', textAlign: ['Origen / Concepto', 'Tercero'].includes(header) ? 'left' : (['Entrada', 'Salida'].includes(header) ? 'right' : 'center') }}>{header}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {movimientosFinancieros.length === 0 ? (
+                                            <tr><td colSpan={7} style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8' }}>Sin movimientos financieros en el período.</td></tr>
+                                        ) : movimientosFinancieros.map(movimiento => (
+                                            <tr key={movimiento.key} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '0.55rem', textAlign: 'center' }}>{movimiento.fecha}</td>
+                                                <td style={{ padding: '0.55rem', textAlign: 'center', fontWeight: 800, color: movimiento.tipo === 'Ingreso' ? '#047857' : (movimiento.tipo === 'Retiro' ? '#c2410c' : '#b91c1c') }}>{movimiento.tipo}</td>
+                                                <td style={{ padding: '0.55rem' }}>{movimiento.origen} - {movimiento.concepto}</td>
+                                                <td style={{ padding: '0.55rem' }}>{movimiento.tercero}</td>
+                                                <td style={{ padding: '0.55rem', textAlign: 'center' }}>{movimiento.metodoPago}</td>
+                                                <td style={{ padding: '0.55rem', textAlign: 'right', color: '#047857', fontWeight: 700 }}>{movimiento.tipo === 'Ingreso' ? fmtCOP(movimiento.monto) : '—'}</td>
+                                                <td style={{ padding: '0.55rem', textAlign: 'right', color: '#b91c1c', fontWeight: 700 }}>{movimiento.tipo !== 'Ingreso' ? fmtCOP(movimiento.monto) : '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
                         {reportType === 'detallado' && (
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                                 <thead style={{ background: '#f8fafc', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -1405,6 +1743,10 @@ export default function ReportesRemisionesModal({
                     <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
                         {reportType === 'cartera' ? (
                             <>Mostrando <strong>{carteraResumen.length}</strong> clientes evaluados. Total cartera por cobrar: <strong style={{ color: '#2365AB' }}>{fmtCOP(metricasCartera.totalCartera)}</strong>.</>
+                        ) : reportType === 'movimientos' ? (
+                            <>
+                                <strong>{movimientosEquipos.length}</strong> movimientos de equipos y <strong>{movimientosFinancieros.length}</strong> movimientos financieros. Caja menor: <strong style={{ color: resumenFinanciero.saldoCajaMenor < 0 ? '#b91c1c' : '#2365AB' }}>{fmtCOP(resumenFinanciero.saldoCajaMenor)}</strong>.
+                            </>
                         ) : reportType === 'equipos' ? (
                             <>Mostrando <strong>{equiposResumen.length}</strong> {itemKindLabel.toLowerCase()}. Facturado: <strong style={{ color: '#2365AB' }}>{fmtCOP(metricasEquipos.totalFacturado)}</strong>; cobrado: <strong style={{ color: '#10b981' }}>{fmtCOP(metricasEquipos.totalPagado)}</strong>.</>
                         ) : (

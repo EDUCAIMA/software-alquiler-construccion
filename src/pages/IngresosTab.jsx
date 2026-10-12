@@ -71,7 +71,7 @@ export default function IngresosTab({ actionSlot }) {
     const [filtroOrigen, setFiltroOrigen] = useState('Todos');
     const [search, setSearch] = useState('');
 
-    // ─── Unifica pagos de remisiones (abonos) + ingresos de caja menor ────────
+    // ─── Unifica pagos de remisiones + abonos de clientes + ingresos directos ───
     const allIngresos = useMemo(() => {
         const deRemisiones = invoices.flatMap(inv => {
             const client = clients.find(c => c.id === inv.clientId);
@@ -87,9 +87,31 @@ export default function IngresosTab({ actionSlot }) {
                 metodoPago: ab.metodoPago || null,
                 monto: Number(ab.monto) || 0,
                 esManual: false,
+                puedeEditarMetodo: true,
                 invoiceId: inv.id,
                 abonoIdx: idx,
             }));
+        });
+
+        const deAbonosClientes = clients.flatMap(client => {
+            const abonos = Array.isArray(client.abonos) ? client.abonos : [];
+            return abonos.map((ab, idx) => {
+                const abonoId = ab.id || `AB${idx}`;
+                const obra = (client.obras || []).find(o => String(o.id) === String(ab.obraId));
+                return {
+                    key: `CLI-${client.id}-${abonoId}`,
+                    fecha: ab.fecha || client.joined,
+                    origenTipo: 'Abono Cliente',
+                    refId: abonoId,
+                    cliente: client.name || 'N/A',
+                    concepto: ab.notas || (obra?.nombre ? `Abono para ${obra.nombre}` : 'Abono anticipado de cliente'),
+                    tipoPago: ab.aplicado ? 'Aplicado' : 'Anticipo',
+                    metodoPago: ab.metodoPago || 'Efectivo',
+                    monto: Number(ab.monto) || 0,
+                    esManual: false,
+                    puedeEditarMetodo: false,
+                };
+            });
         });
 
         const deCajaMenor = ingresosCajaMenor.map(g => ({
@@ -103,12 +125,13 @@ export default function IngresosTab({ actionSlot }) {
             metodoPago: g.metodo_pago || 'Efectivo',
             monto: Number(g.monto) || 0,
             esManual: true,
+            puedeEditarMetodo: false,
             descripcion: g.descripcion,
             referencia: g.referencia_soporte,
             _raw: g,
         }));
 
-        return [...deRemisiones, ...deCajaMenor];
+        return [...deRemisiones, ...deAbonosClientes, ...deCajaMenor];
     }, [invoices, clients, ingresosCajaMenor]);
 
     const filteredIngresos = useMemo(() => {
@@ -120,9 +143,9 @@ export default function IngresosTab({ actionSlot }) {
             const matchesOrigen = filtroOrigen === 'Todos' || row.origenTipo === filtroOrigen;
             const query = search.toLowerCase();
             const matchesSearch = !query || (
-                row.cliente.toLowerCase().includes(query) ||
-                row.concepto.toLowerCase().includes(query) ||
-                row.refId.toLowerCase().includes(query)
+                String(row.cliente || '').toLowerCase().includes(query) ||
+                String(row.concepto || '').toLowerCase().includes(query) ||
+                String(row.refId || '').toLowerCase().includes(query)
             );
             return matchesStart && matchesEnd && matchesMetodo && matchesOrigen && matchesSearch;
         }).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
@@ -203,7 +226,7 @@ export default function IngresosTab({ actionSlot }) {
         let y = applyStandardLayout(doc, 'Reporte de Ingresos', settings);
 
         doc.setTextColor(100, 116, 139); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-        doc.text('Ingresos por Remisiones (Cobros) y Caja Menor', margin, y + 8);
+        doc.text('Ingresos por remisiones, abonos de clientes y caja menor', margin, y + 8);
 
         let filterSummary = [];
         if (filtroFechaInicio) filterSummary.push(`Desde: ${filtroFechaInicio}`);
@@ -324,6 +347,7 @@ export default function IngresosTab({ actionSlot }) {
                             style={{ width: '100%', padding: '0.4rem 0.6rem', border: '1px solid var(--surface-border)', borderRadius: '6px', background: '#ffffff', color: '#104166', fontSize: '0.8rem', outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}>
                             <option value="Todos">Todos los orígenes</option>
                             <option value="Remisión">Remisión (Facturado)</option>
+                            <option value="Abono Cliente">Abono de cliente</option>
                             <option value="Caja Menor">Caja Menor (No Facturado)</option>
                         </select>
                     </div>
@@ -372,9 +396,7 @@ export default function IngresosTab({ actionSlot }) {
                                                         <option value="">Sin especificar</option>
                                                         {METODOS_PAGO.map(m => <option key={m} value={m}>{m}</option>)}
                                                     </select>
-                                                ) : row.esManual ? (
-                                                    row.metodoPago || 'Sin especificar'
-                                                ) : (
+                                                ) : row.puedeEditarMetodo ? (
                                                     <button
                                                         onClick={() => setEditandoMetodo(row.key)}
                                                         title="Clic para corregir el método de pago"
@@ -384,6 +406,8 @@ export default function IngresosTab({ actionSlot }) {
                                                         {row.metodoPago || 'Sin especificar'}
                                                         <Edit3 size={11} style={{ opacity: 0.5 }} />
                                                     </button>
+                                                ) : (
+                                                    row.metodoPago || 'Sin especificar'
                                                 )}
                                             </td>
                                             <td style={{ padding: '0.75rem 1rem', ...CELL_TEXT }}>{fmtCOP(row.monto)}</td>

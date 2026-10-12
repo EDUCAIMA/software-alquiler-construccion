@@ -3,7 +3,7 @@
 // sistema; no se almacena como un número suelto. De esta forma nunca queda
 // desincronizado con los pagos, egresos y retiros reales.
 //
-//   Saldo = pagos recibidos en efectivo
+//   Saldo = pagos y abonos de clientes recibidos en efectivo
 //         − egresos pagados en efectivo
 //         − retiros de caja menor
 
@@ -82,7 +82,35 @@ export function buildMovimientosCajaMenor({
         });
     });
 
-    // 2. Ingresos registrados manualmente (no facturados) cobrados en efectivo
+    // 2. Abonos anticipados de clientes recibidos en efectivo.
+    // Se contabiliza el monto original, no el saldo pendiente: aplicar después
+    // el abono a una factura no representa una nueva entrada ni una salida de caja.
+    clients.forEach(client => {
+        const abonos = Array.isArray(client.abonos) ? client.abonos : [];
+        abonos.forEach((ab, idx) => {
+            if (!esEfectivo(ab.metodoPago)) return;
+            const abonoId = ab.id || `AB${idx}`;
+            const obra = (client.obras || []).find(o => String(o.id) === String(ab.obraId));
+            movimientos.push({
+                key: `CLI-${client.id}-${abonoId}`,
+                fecha: toISODate(ab.fecha || client.joined),
+                tipo: 'Ingreso',
+                origen: 'Abono de Cliente',
+                referencia: abonoId,
+                concepto: `Abono en efectivo${obra?.nombre ? ` — ${obra.nombre}` : ''}${ab.notas ? ` — ${ab.notas}` : ''}`,
+                tercero: client.name || 'N/A',
+                identificacion: client.nit || '',
+                metodoPago: ab.metodoPago || 'Efectivo',
+                entrada: Number(ab.monto) || 0,
+                salida: 0,
+                movimientoTipo: 'abono_cliente',
+                movimientoId: `${client.id}-${abonoId}`,
+                _raw: ab,
+            });
+        });
+    });
+
+    // 3. Ingresos registrados manualmente (no facturados) cobrados en efectivo
     ingresosCajaMenor.forEach(ing => {
         if (!esEfectivo(ing.metodo_pago)) return;
         movimientos.push({
@@ -103,7 +131,7 @@ export function buildMovimientosCajaMenor({
         });
     });
 
-    // 3. Egresos pagados en efectivo
+    // 4. Egresos pagados en efectivo
     gastosMantenimiento.forEach(g => {
         if (!esEfectivo(g.metodo_pago)) return;
         movimientos.push({
@@ -126,7 +154,7 @@ export function buildMovimientosCajaMenor({
         });
     });
 
-    // 4. Retiros de caja menor
+    // 5. Retiros de caja menor
     retirosCajaMenor.forEach(r => {
         movimientos.push({
             key: `RET-${r.id}`,

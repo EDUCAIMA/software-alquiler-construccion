@@ -1180,7 +1180,10 @@ function ClientAbonoModal({ client, onClose, onSave }) {
         try {
             await onSave(client.id, form);
             onClose();
-            Swal.fire({ title: 'Abono registrado', text: 'Quedó disponible para aplicarlo en un próximo corte.', icon: 'success', confirmButtonColor: '#10b981' });
+            const mensaje = form.metodoPago === 'Efectivo'
+                ? 'Quedó disponible para aplicarlo en un próximo corte y registrado como ingreso en caja menor.'
+                : 'Quedó disponible para aplicarlo en un próximo corte.';
+            Swal.fire({ title: 'Abono registrado', text: mensaje, icon: 'success', confirmButtonColor: '#10b981' });
         } catch (error) {
             Swal.fire({ title: 'No se pudo registrar', text: error.message, icon: 'error', confirmButtonColor: '#ef4444' });
         } finally {

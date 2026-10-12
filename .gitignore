@@ -36,6 +36,7 @@ web-build/
 backend/node_modules/
 backend/.env
 scratch/
+output/
 test_*.js
 db_*.js
 test_db.js

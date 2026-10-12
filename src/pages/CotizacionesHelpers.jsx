@@ -44,6 +44,23 @@ function generateCotizacionPDF(cot, client, obra, settings, { download = true } 
         const fmtN = n => (Number(n) || 0).toLocaleString('es-CO');
         const fmtMoney = n => `$${fmtN(n)}`;
         const tableFontSize = 7.5;
+        const contentWidth = W - margin * 2;
+        const totalValueColumnWidth = 30;
+        const totalsLabelColumnWidth = 50;
+        const totalsBlockWidth = totalsLabelColumnWidth + totalValueColumnWidth;
+        const itemColumnWidths = {
+            item: 11,
+            cantidad: 14,
+            dias: 14,
+            tarifa: 25,
+            total: totalValueColumnWidth
+        };
+        const descriptionColumnWidth = contentWidth
+            - itemColumnWidths.item
+            - itemColumnWidths.cantidad
+            - itemColumnWidths.dias
+            - itemColumnWidths.tarifa
+            - itemColumnWidths.total;
 
         // --- ENCABEZADO Y GRID ---
         let y = applyStandardLayout(doc, 'COTIZACIÓN', settings, cot.id);
@@ -82,6 +99,7 @@ function generateCotizacionPDF(cot, client, obra, settings, { download = true } 
         autoTable(doc, {
             startY: y,
             margin: { left: margin, right: margin },
+            tableWidth: contentWidth,
             head: [['ITEM', 'EQUIPO / DESCRIPCIÓN', 'CANT.', 'DÍAS', 'TAR./DÍA', 'VR. TOTAL']],
             body: cot.items.map((i, idx) => {
                 const isServ = esItemServicio(i);
@@ -116,12 +134,12 @@ function generateCotizacionPDF(cot, client, obra, settings, { download = true } 
                 lineColor: [30, 41, 59]
             },
             columnStyles: {
-                0: { cellWidth: 11 },
-                1: { halign: 'left', cellWidth: 92.5 },
-                2: { cellWidth: 14 },
-                3: { cellWidth: 14 },
-                4: { halign: 'right', cellWidth: 25 },
-                5: { halign: 'right', cellWidth: 38 }
+                0: { cellWidth: itemColumnWidths.item },
+                1: { halign: 'left', cellWidth: descriptionColumnWidth },
+                2: { cellWidth: itemColumnWidths.cantidad },
+                3: { cellWidth: itemColumnWidths.dias },
+                4: { halign: 'right', cellWidth: itemColumnWidths.tarifa },
+                5: { halign: 'right', cellWidth: itemColumnWidths.total }
             }
         });
 
@@ -129,7 +147,7 @@ function generateCotizacionPDF(cot, client, obra, settings, { download = true } 
 
         // --- SECCIÓN DE TOTALES Y OBSERVACIONES ---
         const footerY = y;
-        const obsW = W - margin * 2 - 80;
+        const obsW = contentWidth - totalsBlockWidth;
         
         // Recuadro Observaciones / Son
         doc.setLineWidth(0.2);
@@ -146,7 +164,7 @@ function generateCotizacionPDF(cot, client, obra, settings, { download = true } 
         }
 
         // Columna de Totales (Derecha)
-        const totX = W - margin - 80;
+        const totX = W - margin - totalsBlockWidth;
         const totH = 7;
         
         const totals = [
@@ -160,26 +178,26 @@ function generateCotizacionPDF(cot, client, obra, settings, { download = true } 
 
         let ty = footerY;
         totals.forEach(([label, value]) => {
-            doc.rect(totX, ty, 50, totH);
-            doc.rect(totX + 50, ty, 30, totH);
+            doc.rect(totX, ty, totalsLabelColumnWidth, totH);
+            doc.rect(totX + totalsLabelColumnWidth, ty, totalValueColumnWidth, totH);
             doc.setFontSize(tableFontSize);
             doc.setFont('helvetica', 'bold');
             doc.text(label, totX + 2, ty + 4.5);
             doc.setFont('helvetica', 'normal');
-            doc.text(value, totX + 78, ty + 4.5, { align: 'right' });
+            doc.text(value, W - margin - 2, ty + 4.5, { align: 'right' });
             ty += totH;
         });
 
         // Gran Total Box
         doc.setFillColor(241, 245, 249);
-        doc.rect(totX, ty, 50, 9, 'F');
-        doc.rect(totX, ty, 50, 9, 'S');
-        doc.rect(totX + 50, ty, 30, 9, 'S');
+        doc.rect(totX, ty, totalsLabelColumnWidth, 9, 'F');
+        doc.rect(totX, ty, totalsLabelColumnWidth, 9, 'S');
+        doc.rect(totX + totalsLabelColumnWidth, ty, totalValueColumnWidth, 9, 'S');
         doc.setFontSize(tableFontSize);
         doc.setFont('helvetica', 'bold');
         doc.text(deposito > 0 ? 'TOTAL + DEPÓSITO' : 'TOTAL', totX + 2, ty + 6);
         doc.setFont('helvetica', 'normal');
-        doc.text(fmtMoney(total + deposito), totX + 78, ty + 6, { align: 'right' });
+        doc.text(fmtMoney(total + deposito), W - margin - 2, ty + 6, { align: 'right' });
 
         y = ty + 20;
 

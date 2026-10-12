@@ -1613,7 +1613,7 @@ app.post('/api/recibos-caja', async (req, res) => {
         ]);
 
         const reciboId = insertedRows[0].id;
-        const numero = `RCJ-${String(reciboId).padStart(6, '0')}`;
+        const numero = `RCJ-${String(reciboId).padStart(3, '0')}`;
         let movimientoTipo = movimiento_tipo || null;
         let movimientoId = movimiento_id || null;
         let movimientoGenerado = false;

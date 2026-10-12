@@ -1313,6 +1313,7 @@ export default function Remisiones() {
             {showReportesModal && (
                 <ReportesRemisionesModal
                     onClose={() => setShowReportesModal(false)}
+                    initialReportType="movimientos"
                     remisiones={remisiones}
                     clients={clients}
                     products={products}

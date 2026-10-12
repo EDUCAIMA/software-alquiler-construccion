@@ -12,6 +12,13 @@ const formatCOP = value => new Intl.NumberFormat('es-CO', {
     style: 'currency', currency: 'COP', maximumFractionDigits: 0
 }).format(Number(value) || 0);
 
+const formatNumeroRecibo = value => {
+    const text = String(value || '').trim();
+    const match = text.match(/^RCJ-0*(\d+)$/i);
+    if (!match) return text || 'RCJ-PENDIENTE';
+    return `RCJ-${String(Number(match[1])).padStart(3, '0')}`;
+};
+
 const unidades = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
 const especiales = {
     10: 'DIEZ', 11: 'ONCE', 12: 'DOCE', 13: 'TRECE', 14: 'CATORCE', 15: 'QUINCE',
@@ -100,6 +107,7 @@ export const buildReciboCajaPDF = (recibo, settings = {}) => {
     const accent = isIngreso ? [5, 150, 105] : [220, 38, 38];
     const companyName = settings.companyName || 'CIELO - ALQUILER DE HERRAMIENTA';
     const shortName = settings.shortName || 'CIELO';
+    const numeroRecibo = formatNumeroRecibo(recibo.numero);
 
     // Encabezado basado en el formato de referencia suministrado.
     doc.setDrawColor(148, 163, 184);
@@ -107,7 +115,9 @@ export const buildReciboCajaPDF = (recibo, settings = {}) => {
     doc.rect(left, 12, right - left, 26);
     doc.line(58, 12, 58, 38);
     doc.line(157, 12, 157, 38);
-    doc.line(58, 25, right, 25);
+    // La división central termina antes de la columna de código/fecha para
+    // que ninguna línea atraviese el texto de la fecha.
+    doc.line(58, 25, 157, 25);
     doc.line(157, 20.7, right, 20.7);
     doc.line(157, 29.3, right, 29.3);
 
@@ -124,11 +134,11 @@ export const buildReciboCajaPDF = (recibo, settings = {}) => {
     const companyLines = doc.splitTextToSize(companyName.toUpperCase(), 92);
     doc.text(companyLines.slice(0, 2), 107.5, companyLines.length > 1 ? 17.5 : 20.5, { align: 'center' });
     doc.setFontSize(10.5);
-    doc.text(`RECIBO DE CAJA MENOR - ${recibo.tipo.toUpperCase()}`, 107.5, 33.2, { align: 'center' });
+    doc.text('REGISTRO DE CAJA', 107.5, 33.2, { align: 'center' });
 
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'bold');
-    doc.text(recibo.numero || 'RCJ-PENDIENTE', 176.5, 17.7, { align: 'center' });
+    doc.text(numeroRecibo, 176.5, 17.7, { align: 'center' });
     doc.setFont('helvetica', 'normal');
     doc.text(formatFecha(recibo.fecha), 176.5, 26.4, { align: 'center' });
     doc.text('Pagina 1 de 1', 176.5, 35, { align: 'center' });
@@ -143,10 +153,10 @@ export const buildReciboCajaPDF = (recibo, settings = {}) => {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
     doc.setTextColor(15, 23, 42);
-    doc.text('RECIBO DE CAJA MENOR', W / 2, 69, { align: 'center' });
+    doc.text('REGISTRO DE CAJA', W / 2, 69, { align: 'center' });
     doc.setFontSize(10);
     doc.setTextColor(...accent);
-    doc.text(`${recibo.tipo.toUpperCase()}  |  Nro. ${recibo.numero || 'PENDIENTE'}`, W / 2, 76, { align: 'center' });
+    doc.text(`${recibo.tipo.toUpperCase()}  |  Nro. ${numeroRecibo}`, W / 2, 76, { align: 'center' });
 
     drawField(doc, 'Fecha:', formatFecha(recibo.fecha), left, 88, 78);
     drawField(doc, 'Ciudad:', recibo.ciudad, 108, 88, 88);
@@ -177,28 +187,19 @@ export const buildReciboCajaPDF = (recibo, settings = {}) => {
         doc.line(left, y, right, y);
     });
 
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(148, 163, 184);
-    doc.roundedRect(52, 174, 106, 22, 2, 2, 'FD');
-    doc.line(52, 185, 158, 185);
+    // Resumen sencillo, sin tarjeta ni fondo de color.
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
+    doc.setFontSize(9);
     doc.setTextColor(15, 23, 42);
-    doc.text('VALOR', 57, 181.5);
-    doc.setTextColor(...accent);
-    doc.text(formatCOP(recibo.monto), 153, 181.5, { align: 'right' });
-    doc.setTextColor(15, 23, 42);
-    doc.text('FORMA DE PAGO', 57, 192.2);
+    doc.text('VALOR:', left, 181);
     doc.setFont('helvetica', 'normal');
-    doc.text(recibo.metodo_pago || 'Efectivo', 153, 192.2, { align: 'right' });
+    doc.text(formatCOP(recibo.monto), 31, 181);
+    doc.setFont('helvetica', 'bold');
+    doc.text('FORMA DE PAGO:', 108, 181);
+    doc.setFont('helvetica', 'normal');
+    doc.text(recibo.metodo_pago || 'Efectivo', 145, 181);
 
-    if (recibo.movimiento_id) {
-        doc.setFontSize(7.2);
-        doc.setTextColor(100, 116, 139);
-        doc.text(`Movimiento vinculado: ${recibo.movimiento_id}`, W / 2, 202, { align: 'center' });
-    }
-
-    const signatureY = 211;
+    const signatureY = 199;
     const signatureW = 76;
     const signatureH = 25;
     const leftSignatureX = 20;
@@ -224,22 +225,23 @@ export const buildReciboCajaPDF = (recibo, settings = {}) => {
     }
 
     doc.setDrawColor(71, 85, 105);
-    doc.line(leftSignatureX, 241, leftSignatureX + signatureW, 241);
-    doc.line(rightSignatureX, 241, rightSignatureX + signatureW, 241);
+    const signatureLineY = signatureY + 30;
+    doc.line(leftSignatureX, signatureLineY, leftSignatureX + signatureW, signatureLineY);
+    doc.line(rightSignatureX, signatureLineY, rightSignatureX + signatureW, signatureLineY);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(30, 41, 59);
     const companyRole = isIngreso ? 'Firma autorizada - Recibe' : 'Firma autorizada - Entrega';
     const thirdRole = isIngreso ? 'Firma de quien entrega' : 'Firma de quien recibe';
-    doc.text(companyRole, leftSignatureX + signatureW / 2, 246, { align: 'center' });
-    doc.text(thirdRole, rightSignatureX + signatureW / 2, 246, { align: 'center' });
+    doc.text(companyRole, leftSignatureX + signatureW / 2, signatureLineY + 5, { align: 'center' });
+    doc.text(thirdRole, rightSignatureX + signatureW / 2, signatureLineY + 5, { align: 'center' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.2);
-    doc.text(recibo.firmante_empresa || shortName, leftSignatureX + signatureW / 2, 251, { align: 'center' });
-    doc.text(recibo.firmante_tercero || recibo.tercero || '-', rightSignatureX + signatureW / 2, 251, { align: 'center' });
+    doc.text(recibo.firmante_empresa || shortName, leftSignatureX + signatureW / 2, signatureLineY + 10, { align: 'center' });
+    doc.text(recibo.firmante_tercero || recibo.tercero || '-', rightSignatureX + signatureW / 2, signatureLineY + 10, { align: 'center' });
     if (recibo.identificacion) {
         doc.setTextColor(100, 116, 139);
-        doc.text(`CC / NIT: ${recibo.identificacion}`, rightSignatureX + signatureW / 2, 255.5, { align: 'center' });
+        doc.text(`CC / NIT: ${recibo.identificacion}`, rightSignatureX + signatureW / 2, signatureLineY + 14.5, { align: 'center' });
     }
 
     doc.setDrawColor(226, 232, 240);
@@ -258,5 +260,5 @@ export const buildReciboCajaPDF = (recibo, settings = {}) => {
 
 export const downloadReciboCajaPDF = (recibo, settings = {}) => {
     const doc = buildReciboCajaPDF(recibo, settings);
-    doc.save(`${recibo.numero || 'Recibo_Caja'}_${recibo.tipo || 'Movimiento'}.pdf`);
+    doc.save(`Registro_de_Caja_${formatNumeroRecibo(recibo.numero)}.pdf`);
 };
