@@ -92,13 +92,15 @@ export default function RetiroCajaMenorModal({ onClose, editingRetiro = null }) 
             } else {
                 await addRetiroCajaMenor(form);
             }
-            await Swal.fire({
+            // El registro ya fue confirmado por el servidor: cierre inmediato
+            // del formulario, sin dejarlo esperando la interacción con la alerta.
+            onClose();
+            void Swal.fire({
                 icon: 'success',
                 title: editingRetiro ? 'Retiro actualizado' : '¡Retiro registrado!',
                 text: `Se descontaron ${fmtCOP(montoNum)} de la caja menor. Nuevo saldo: ${fmtCOP(saldoResultante)}.`,
                 confirmButtonColor: '#2365AB'
             });
-            onClose();
         } catch (error) {
             console.error('Error registrando retiro de caja menor:', error);
             Swal.fire('Error', 'No se pudo registrar el retiro: ' + error.message, 'error');

@@ -1118,9 +1118,10 @@ export const AppProvider = ({ children }) => {
   const addRetiroCajaMenor = async (data) => {
     const id = nextId(retirosCajaMenor, 'RC');
     const nuevo = { ...data, id, monto: Number(data.monto || 0) };
-    await api.post('/api/retiros-caja-menor', nuevo);
-    await reloadAll();
+    const retiroCreado = await api.post('/api/retiros-caja-menor', nuevo);
+    setRetirosCajaMenor(prev => [...prev, retiroCreado]);
     logAction('Retiro de Caja Menor', `${id} — ${data.concepto}`, data.responsable || 'N/A', 'exit');
+    return retiroCreado;
   };
 
   const editRetiroCajaMenor = async (id, data) => {
