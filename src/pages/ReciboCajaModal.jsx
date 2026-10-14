@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { Check, Link2, ReceiptText, Trash2, Upload, X } from 'lucide-react';
-import Swal from 'sweetalert2';
 import { useAppContext } from '../context/AppContext';
 import {
     METODOS_PAGO, buildMovimientosCajaMenor, fmtCOP, resumirMovimientos, toISODate
 } from './cajaMenorUtils';
 import { downloadReciboCajaPDF } from './reciboCajaPdf';
+import { fireAboveModal } from './swalUtils';
 
 const inputStyle = {
     width: '100%', padding: '0.62rem 0.75rem', background: '#ffffff',
@@ -111,7 +111,7 @@ export default function ReciboCajaModal({ onClose, movimiento = null }) {
         try {
             update(field, await readSignatureImage(file));
         } catch (error) {
-            Swal.fire('Firma no válida', error.message, 'warning');
+            fireAboveModal({ title: 'Firma no válida', text: error.message, icon: 'warning' });
         }
     };
 
@@ -119,15 +119,15 @@ export default function ReciboCajaModal({ onClose, movimiento = null }) {
         event.preventDefault();
         const monto = Number(form.monto);
         if (!form.tercero.trim() || !form.concepto.trim() || !(monto > 0)) {
-            Swal.fire('Datos incompletos', 'Diligencie el tercero, el concepto y un valor mayor a cero.', 'warning');
+            fireAboveModal({ title: 'Datos incompletos', text: 'Diligencie el tercero, el concepto y un valor mayor a cero.', icon: 'warning' });
             return;
         }
         if (!form.firma_empresa && !form.firma_tercero) {
-            Swal.fire('Firma requerida', 'Cargue al menos una firma digital para generar el recibo firmado.', 'warning');
+            fireAboveModal({ title: 'Firma requerida', text: 'Cargue al menos una firma digital para generar el recibo firmado.', icon: 'warning' });
             return;
         }
         if (!linked && !isIngreso && form.metodo_pago === 'Efectivo' && monto > saldoDisponible) {
-            const { isConfirmed } = await Swal.fire({
+            const { isConfirmed } = await fireAboveModal({
                 title: 'El egreso supera el saldo',
                 html: `La caja menor tiene <b>${fmtCOP(saldoDisponible)}</b> y el recibo es por <b>${fmtCOP(monto)}</b>.<br/><br/>El saldo quedará en <b>${fmtCOP(saldoDisponible - monto)}</b>.`,
                 icon: 'warning',
@@ -147,16 +147,16 @@ export default function ReciboCajaModal({ onClose, movimiento = null }) {
                 firmante_tercero: form.firmante_tercero || form.tercero
             });
             downloadReciboCajaPDF(recibo, settings);
-            await Swal.fire({
+            onClose();
+            void fireAboveModal({
                 icon: 'success',
                 title: 'Recibo generado',
                 html: `<b>${recibo.numero}</b> quedó firmado y vinculado al movimiento <b>${recibo.movimiento_id}</b>.`,
                 confirmButtonColor: '#2365AB'
             });
-            onClose();
         } catch (error) {
             console.error('Error generando recibo de caja:', error);
-            Swal.fire('No se pudo generar', error.message || 'Ocurrió un error al guardar el recibo.', 'error');
+            fireAboveModal({ title: 'No se pudo generar', text: error.message || 'Ocurrió un error al guardar el recibo.', icon: 'error' });
         } finally {
             setLoading(false);
         }

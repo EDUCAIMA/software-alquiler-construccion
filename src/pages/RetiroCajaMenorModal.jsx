@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { X, Wallet, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
-import Swal from 'sweetalert2';
 import { useAppContext } from '../context/AppContext';
 import {
     buildMovimientosCajaMenor, resumirMovimientos, fmtCOP, DESTINOS_RETIRO
 } from './cajaMenorUtils';
+import { fireAboveModal } from './swalUtils';
 
 const inputStyle = {
     width: '100%', padding: '0.6rem 0.75rem', background: '#ffffff',
@@ -67,12 +67,12 @@ export default function RetiroCajaMenorModal({ onClose, editingRetiro = null }) 
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!form.concepto.trim() || montoNum <= 0) {
-            Swal.fire('Datos incompletos', 'Indique el concepto y un monto mayor a cero.', 'warning');
+            fireAboveModal({ title: 'Datos incompletos', text: 'Indique el concepto y un monto mayor a cero.', icon: 'warning' });
             return;
         }
 
         if (excedeSaldo) {
-            const { isConfirmed } = await Swal.fire({
+            const { isConfirmed } = await fireAboveModal({
                 title: 'El retiro supera el saldo',
                 html: `El saldo disponible en caja menor es <b>${fmtCOP(saldoDisponible)}</b> y está retirando <b>${fmtCOP(montoNum)}</b>.<br/><br/>La caja quedaría en <b>${fmtCOP(saldoResultante)}</b>. ¿Desea registrarlo de todas formas?`,
                 icon: 'warning',
@@ -95,7 +95,7 @@ export default function RetiroCajaMenorModal({ onClose, editingRetiro = null }) 
             // El registro ya fue confirmado por el servidor: cierre inmediato
             // del formulario, sin dejarlo esperando la interacción con la alerta.
             onClose();
-            void Swal.fire({
+            void fireAboveModal({
                 icon: 'success',
                 title: editingRetiro ? 'Retiro actualizado' : '¡Retiro registrado!',
                 text: `Se descontaron ${fmtCOP(montoNum)} de la caja menor. Nuevo saldo: ${fmtCOP(saldoResultante)}.`,
@@ -103,7 +103,7 @@ export default function RetiroCajaMenorModal({ onClose, editingRetiro = null }) 
             });
         } catch (error) {
             console.error('Error registrando retiro de caja menor:', error);
-            Swal.fire('Error', 'No se pudo registrar el retiro: ' + error.message, 'error');
+            fireAboveModal({ title: 'Error', text: 'No se pudo registrar el retiro: ' + error.message, icon: 'error' });
         } finally {
             setLoading(false);
         }
