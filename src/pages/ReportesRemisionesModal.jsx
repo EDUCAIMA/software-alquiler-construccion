@@ -885,7 +885,7 @@ export default function ReportesRemisionesModal({
             const nitText = settings?.nit ? `NIT. ${settings.nit}` : 'NIT. 700.112.495 - 2';
             const addressText = settings?.address || 'Calle 14 No. 3 - 62 Pitalito / Huila - Colombia';
             const phoneText = settings?.phone || '3214010834';
-            const emailText = settings?.email || 'andresfbol11@gmail.com';
+            const emailText = settings?.email || 'comercial@cieloalquiler.com';
 
             for (let i = 1; i <= pageCount; i++) {
                 doc.setPage(i);

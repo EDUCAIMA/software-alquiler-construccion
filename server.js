@@ -483,9 +483,16 @@ async function initDB() {
         if (parseInt(sRows[0].count) === 0) {
             await client.query(`
         INSERT INTO settings(id, company_name, short_name, name_complement, nit, phone, email, logo, address) VALUES
-            ('main', 'CIELO - ALQUILER DE EQUIPOS', 'CIELO', 'ALQUILER DE EQUIPOS', '900.000.000-1', '300 123 4567', 'gerencia@cielo.com', null, 'Calle 123 #45-67')
+            ('main', 'CIELO - ALQUILER DE EQUIPOS', 'CIELO', 'ALQUILER DE EQUIPOS', '900.000.000-1', '300 123 4567', 'comercial@cieloalquiler.com', null, 'Calle 123 #45-67')
                 `);
         }
+
+        // Unificar correos empresariales heredados con el correo comercial oficial.
+        await client.query(`
+            UPDATE settings
+            SET email = 'comercial@cieloalquiler.com'
+            WHERE email IN ('gerencia@cielo.com', 'andresfbol11@gmail.com', 'gerencia@empresa.co')
+        `);
 
         // --- Seed inicial de products si está vacío ---
         const { rows: pRows } = await client.query('SELECT COUNT(*) FROM products');

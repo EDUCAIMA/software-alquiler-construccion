@@ -592,7 +592,7 @@ const getHabeasText = (settings) => `De conformidad con la Ley 1581 de 2012 y el
 
 Sus datos personales (nombre, identificación, dirección, teléfono, correo electrónico, firma digital, huella dactilar y fotografía) serán tratados con las siguientes finalidades: (1) Gestión comercial y facturación, (2) Ejecución del contrato de alquiler, (3) Cobro de cartera, y (4) Cumplimiento de obligaciones legales.
 
-Sus datos NO serán vendidos ni cedidos a terceros sin su autorización. Usted tiene derecho a conocer, actualizar, rectificar y suprimir sus datos personales. Para ejercer estos derechos comuníquese a: ${settings?.email || 'gerencia@empresa.co'}.
+Sus datos NO serán vendidos ni cedidos a terceros sin su autorización. Usted tiene derecho a conocer, actualizar, rectificar y suprimir sus datos personales. Para ejercer estos derechos comuníquese a: ${settings?.email || 'comercial@cieloalquiler.com'}.
 
 Las firmas digitales y datos biométricos recopilados están protegidos mediante encriptación AES-256 y sólo pueden ser consultados por personal autorizado de ${settings?.shortName || 'CIELO'}, en cumplimiento de los estándares de seguridad exigidos por la Ley.
 

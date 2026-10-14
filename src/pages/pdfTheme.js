@@ -81,7 +81,7 @@ export const applyStandardLayout = (doc, title, settings, number = '', options =
             const nitText = settings?.nit ? `NIT. ${settings.nit}` : 'NIT. 700.112.495 - 2';
             const addressText = settings?.address || 'Calle 14 No. 3 - 62 Pitalito / Huila - Colombia';
             const phoneText = settings?.phone || '3214010834';
-            const emailText = settings?.email || 'andresfbol11@gmail.com';
+            const emailText = settings?.email || 'comercial@cieloalquiler.com';
 
             doc.setDrawColor(226, 232, 240);
             doc.setLineWidth(0.3);
