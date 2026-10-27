@@ -1,49 +1,18 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
-    Calculator, Clock, TrendingUp, FileText, Download, X,
-    Building2, Truck, ChevronRight, ChevronDown, CheckCircle, AlertTriangle, Percent
+    Calculator, FileText, X, Truck, ChevronDown, CheckCircle, AlertTriangle
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { differenceInDays, format, eachDayOfInterval, isSunday, isSaturday, addDays } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { applyStandardLayout, drawInfoGrid, createEquipoTagger } from './pdfTheme';
 import { generateInvoicePDF, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
+import { calculateCorteRentalLines } from './corteBillingUtils';
+import { calculatePendingCorteTransport } from './corteInvoiceUtils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtCOP = n => `$${(n || 0).toLocaleString('es-CO')}`;
-const esServicio = (item = {}, product = {}) => {
-    const descriptor = [
-        item.category, item.tipoCobro, item.esquemaCobro, item.nombre, item.name,
-        product.category, product.tipoCobro, product.esquemaCobro, product.nombre, product.name
-    ].filter(Boolean).join(' ').toLowerCase();
-    return ['servicio', 'servio ', 'única vez', 'unica vez', 'mano de obra', 'transporte', 'entrega', 'recogida', 'flete', 'acarreo', 'armado', 'desarmado', 'depósito', 'deposito', 'cargo por']
-        .some(term => descriptor.includes(term));
-};
-const calculateBillableDays = (start, end, scheme, billedPeriods = []) => {
-    try {
-        if (scheme === 'Única Vez' || (scheme || '').toLowerCase().includes('única')) return 1;
-        const days = eachDayOfInterval({ start, end });
-        let count = 0;
-        days.forEach(d => {
-            const isBilled = billedPeriods.some(p => d >= p.start && d <= p.end);
-            if (isBilled) return;
-
-            let isBillable = true;
-            if (isSunday(d)) {
-                if (scheme === 'Lunes-Sábado' || scheme === 'Lunes-Viernes') isBillable = false;
-            } else if (isSaturday(d)) {
-                if (scheme === 'Lunes-Viernes') isBillable = false;
-            }
-
-            if (isBillable) {
-                count++;
-            }
-        });
-        return count;
-    } catch (e) { return 1; }
-};
-
 const getEasterSunday = (year) => {
     const a = year % 19;
     const b = Math.floor(year / 100);
@@ -125,45 +94,6 @@ const getColombianHolidaysMap = (year) => {
     addHoliday(corazon);
 
     return holidays;
-};
-
-const countColombianHolidays = (start, end, scheme, billedPeriods = []) => {
-    try {
-        if (scheme === 'Única Vez' || (scheme || '').toLowerCase().includes('única')) return 0;
-        const days = eachDayOfInterval({ start, end });
-        let count = 0;
-        const holidaysCache = {};
-        const getHolidaysForYear = (y) => {
-            if (!holidaysCache[y]) {
-                holidaysCache[y] = getColombianHolidaysMap(y);
-            }
-            return holidaysCache[y];
-        };
-
-        days.forEach(d => {
-            const isBilledPeriod = billedPeriods.some(p => d >= p.start && d <= p.end);
-            if (isBilledPeriod) return;
-
-            let isBilled = true;
-            if (isSunday(d)) {
-                if (scheme === 'Lunes-Sábado' || scheme === 'Lunes-Viernes') isBilled = false;
-            } else if (isSaturday(d)) {
-                if (scheme === 'Lunes-Viernes') isBilled = false;
-            }
-
-            if (isBilled) {
-                const year = d.getFullYear();
-                const holidays = getHolidaysForYear(year);
-                const dateStr = format(d, 'yyyy-MM-dd');
-                if (holidays.has(dateStr)) {
-                    count++;
-                }
-            }
-        });
-        return count;
-    } catch (e) {
-        return 0;
-    }
 };
 
 function generateCortePDF(resultado, client, obra, settings, remisiones, invoices) {
@@ -333,6 +263,9 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     const [fechaCorte, setFechaCorte] = useState(format(new Date(), 'yyyy-MM-dd'));
     const [generado, setGenerado] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [invoiceError, setInvoiceError] = useState('');
+    const savingRef = useRef(false);
     const [selectedRemIds, setSelectedRemIds] = useState([]);
 
     const [customDays, setCustomDays] = useState({}); // key -> number
@@ -372,46 +305,25 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         setClientSearch(selectedClient?.name || '');
     }, [selectedClient?.id, selectedClient?.name]);
 
-    // Filtered remissions list for selection
+    // El cierre corresponde a la devolución física. La cobertura facturada se
+    // descuenta después, por equipo, cantidad y fecha, sin depender del pago.
     const availableRems = useMemo(() => {
         if (!clientId) return [];
-
-        // Una remisión cerrada y pagada no vuelve a cobrarse. En cambio, una
-        // remisión Activa o Parcial sí debe permanecer disponible: un pago
-        // anterior sólo cubre su período facturado, no los días posteriores.
-        const remisionesPagadas = new Set();
-        const facturasPagadas = new Set();
-        invoices.forEach(invoice => {
-            const amount = Number(invoice.amount) || 0;
-            const paidAmount = Number(invoice.paidAmount) || 0;
-            const isPaid = ['paid', 'pagada'].includes(String(invoice.status || '').toLowerCase()) ||
-                (amount > 0 && paidAmount >= amount);
-
-            if (!isPaid) return;
-
-            facturasPagadas.add(String(invoice.id));
-
-            (invoice.items || []).forEach(item => {
-                if (item.remId) remisionesPagadas.add(String(item.remId));
-            });
-        });
-
-        return remisiones.filter(r =>
-            r.clientId === clientId &&
-            (!obraId || r.obraId === obraId) &&
-            r.estado !== 'Cancelada' &&
-            !(r.estado === 'Cerrada' && (
-                remisionesPagadas.has(String(r.id)) ||
-                facturasPagadas.has(String(r.facturaId || ''))
-            ))
-        ).sort((a, b) => b.fecha.localeCompare(a.fecha));
-    }, [clientId, obraId, remisiones, invoices]);
+        return remisiones.filter(rem =>
+            String(rem.clientId) === String(clientId) &&
+            (!obraId || String(rem.obraId) === String(obraId)) &&
+            !['cancelada', 'anulada'].includes(String(rem.estado || '').toLowerCase())
+        ).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+    }, [clientId, obraId, remisiones]);
 
     // Reset when base client/obra/dates/festivos change
     React.useEffect(() => {
         setCustomDays({});
         setCustomDates({});
         setCustomFestivos({});
+        setCustomHorasInicio({});
+        setCustomHorasFin({});
+        setInvoiceError('');
     }, [clientId, obraId, fechaInicio, fechaCorte, aplicarFestivos]);
 
     // Update selection when filters change
@@ -430,357 +342,36 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     const resultado = useMemo(() => {
         if (!clientId || !fechaInicio || !fechaCorte) return null;
 
-        const parseUTCDate = (str) => {
-            if (!str) return null;
-            const [y, m, d] = str.split('-').map(Number);
-            return new Date(y, m - 1, d);
-        };
-
-        const fStart = parseUTCDate(fechaInicio);
-        const fEnd = parseUTCDate(fechaCorte);
-
-        const relatedInvoices = invoices.filter(inv =>
-            inv.clientId === clientId &&
-            (!obraId || inv.obraId === obraId) &&
-            inv.status !== 'Cancelada'
-        );
-
-        const billedPeriodsByRem = {};
-        const billedServices = new Set();
-
-        relatedInvoices.forEach(inv => {
-            let list = inv.cortes;
-            if (typeof list === 'string') {
-                try { list = JSON.parse(list); } catch (e) { list = []; }
-            }
-
-            const remIdsInInvoice = new Set();
-            if (Array.isArray(inv.items)) {
-                inv.items.forEach(item => {
-                    if (item.remId) {
-                        remIdsInInvoice.add(item.remId);
-                    }
-                });
-            }
-
-            // Facturas antiguas pueden estar vinculadas desde la remisión pero
-            // no contener remId dentro de sus ítems. Conservamos la relación
-            // para descontar únicamente el período ya pagado, sin ocultar el
-            // alquiler activo de los siguientes cortes.
-            availableRems.forEach(rem => {
-                if (String(rem.facturaId || '') === String(inv.id)) {
-                    remIdsInInvoice.add(rem.id);
-                }
-            });
-
-            if (Array.isArray(list) && list.length > 0) {
-                list.forEach(c => {
-                    if (c.fechaInicio && c.fechaCorte) {
-                        const period = {
-                            start: parseUTCDate(c.fechaInicio),
-                            end: parseUTCDate(c.fechaCorte)
-                        };
-                        remIdsInInvoice.forEach(rId => {
-                            if (!billedPeriodsByRem[rId]) billedPeriodsByRem[rId] = [];
-                            billedPeriodsByRem[rId].push(period);
-                        });
-                    }
-                });
-            } else if (Array.isArray(inv.items)) {
-                const legacyDays = Math.max(0, ...inv.items.map(item => Number(item.days) || 0));
-                const legacyStart = parseUTCDate(inv.date);
-                const legacyEnd = legacyStart && legacyDays > 0
-                    ? addDays(legacyStart, legacyDays - 1)
-                    : null;
-
-                inv.items.forEach(item => {
-                    if (item.remId && item.remFecha && item.days) {
-                        const start = parseUTCDate(item.remFecha);
-                        if (start) {
-                            const end = new Date(start);
-                            end.setDate(start.getDate() + (Number(item.days) - 1));
-                            if (!billedPeriodsByRem[item.remId]) billedPeriodsByRem[item.remId] = [];
-                            billedPeriodsByRem[item.remId].push({ start, end });
-                        }
-                    }
-                });
-
-                // Mismo tratamiento para la factura histórica vinculada sólo
-                // por facturaId en la remisión.
-                if (legacyStart && legacyEnd) {
-                    remIdsInInvoice.forEach(rId => {
-                        if (!billedPeriodsByRem[rId]) billedPeriodsByRem[rId] = [];
-                        billedPeriodsByRem[rId].push({ start: legacyStart, end: legacyEnd });
-                    });
-                }
-            }
-            if (Array.isArray(inv.items)) {
-                inv.items.forEach(item => {
-                    if (item.remId) {
-                        billedServices.add(`${item.remId}-${item.productId}`);
-                        billedServices.add(`${item.remId}-${item.nombre}`);
-                    }
-                });
+        const holidaysByYear = new Map();
+        const { lineas, issues } = calculateCorteRentalLines({
+            remisiones: availableRems,
+            invoices,
+            products,
+            fechaInicio,
+            fechaCorte,
+            customDates,
+            customDays,
+            customFestivos,
+            customHorasInicio,
+            customHorasFin,
+            aplicarFestivos,
+            calculateHours: calcularHorasAlquiler,
+            isHoliday: date => {
+                const year = Number(date.slice(0, 4));
+                if (!holidaysByYear.has(year)) holidaysByYear.set(year, getColombianHolidaysMap(year));
+                return holidaysByYear.get(year).has(date);
             }
         });
 
-        const rems = availableRems.filter(r =>
-            parseUTCDate(r.fecha) <= fEnd
+        const selectedLineas = lineas.filter(line =>
+            selectedRemIds.includes(line.remId) && Number(line.subtotal) > 0
         );
-
-        const lineas = [];
-        let subtotalTotal = 0;
-        let totalTransporte = 0;
-
-        rems.forEach(rem => {
-            const rDate = parseUTCDate(rem.fecha);
-            if (rDate >= fStart && rDate <= fEnd) {
-                totalTransporte += rem.transporte || 0;
-            }
-
-            rem.items.forEach(item => {
-                const prod = products.find(p => p.id === item.productId);
-                if (item.cantidad > 0) {
-                    const equipStart = rDate;
-                    const scheme = prod?.esquemaCobro || 'Calendario';
-                    const tarifa = Number((item.tarifaDia !== undefined && item.tarifaDia !== null) ? item.tarifaDia : ((item.price !== undefined && item.price !== null) ? item.price : (prod?.value || 0)));
-
-                    const isServ = esServicio(item, prod);
-                    const isHora = (item.tipoCobro || '').toLowerCase() === 'hora' || (prod?.tipoCobro || '').toLowerCase() === 'hora';
-
-                    if (isServ) {
-                        const inRange = rDate >= fStart && rDate <= fEnd;
-                        const isAlreadyBilled = billedServices.has(`${rem.id}-${item.productId}`) ||
-                            billedServices.has(`${rem.id}-${item.nombre || item.productId}`);
-                        if (!inRange || isAlreadyBilled) return;
-                    }
-
-                    let accountedQty = 0;
-
-                    if (item.devoluciones && Array.isArray(item.devoluciones)) {
-                        const devMap = {};
-                        item.devoluciones.forEach(dev => {
-                            if (!devMap[dev.fecha]) devMap[dev.fecha] = 0;
-                            devMap[dev.fecha] += dev.cantidad;
-                        });
-
-                        Object.entries(devMap).forEach(([fecha, cantidad]) => {
-                            const lineKey = `${rem.id}-${item.productId}-dev-${fecha}`;
-                            const effectiveDevFecha = customDates[lineKey] || fecha;
-                            const dDate = parseUTCDate(effectiveDevFecha);
-                            const effectiveStart = equipStart > fStart ? equipStart : fStart;
-                            const effectiveEnd = dDate < fEnd ? dDate : fEnd;
-
-                            const effectiveHoraInicio = customHorasInicio[lineKey] !== undefined ? customHorasInicio[lineKey] : (item.horaInicio || '');
-                            const effectiveHoraFin = customHorasFin[lineKey] !== undefined ? customHorasFin[lineKey] : (item.horaFin || '');
-
-                            let calcHours = 0;
-                            if (isHora) {
-                                if (effectiveHoraInicio && effectiveHoraFin) {
-                                    calcHours = calcularHorasAlquiler(effectiveHoraInicio, effectiveHoraFin);
-                                } else if (item.horasCalculadas) {
-                                    calcHours = item.horasCalculadas;
-                                } else if (item.dias) {
-                                    calcHours = item.dias;
-                                } else {
-                                    calcHours = 1;
-                                }
-                            }
-
-                            let dDays = 0;
-                            if (isHora) {
-                                dDays = calcHours || 1;
-                            } else if (effectiveStart <= effectiveEnd) {
-                                dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
-                            }
-
-                            const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
-                            const clampedDays = Math.max(0, finalDays);
-
-                            const autoFestivos = (!aplicarFestivos || isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
-                            const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
-                            const clampedFestivos = isHora ? 0 : Math.min(clampedDays, Math.max(0, festivos));
-                            const netDays = clampedDays - clampedFestivos;
-
-                            const sub = cantidad * netDays * tarifa;
-                            subtotalTotal += sub;
-                            lineas.push({
-                                key: lineKey,
-                                productId: item.productId,
-                                type: 'dev',
-                                devFecha: effectiveDevFecha,
-                                defaultDevFecha: fecha,
-                                remId: rem.id,
-                                remFecha: rem.fecha,
-                                equipo: `${prod?.name || item.productId} (Dev: ${effectiveDevFecha})`,
-                                cantidad: cantidad,
-                                diasBase: clampedDays,
-                                festivos: clampedFestivos,
-                                dias: netDays,
-                                maxDays: dDays,
-                                tarifaDia: tarifa,
-                                subtotal: sub,
-                                estado: rem.estado,
-                                esquema: isHora ? 'Por Horas' : (isServ ? 'Cobro Único' : scheme),
-                                isServ,
-                                isHora,
-                                horaInicio: effectiveHoraInicio,
-                                horaFin: effectiveHoraFin
-                            });
-                            accountedQty += cantidad;
-                        });
-                    }
-
-                    const orphanReturns = (item.cantidadDevuelta || 0) - accountedQty;
-                    if (orphanReturns > 0) {
-                        const lineKey = `${rem.id}-${item.productId}-orphan`;
-                        const defaultOrphanDate = rem.fecha;
-                        const effectiveDevFecha = customDates[lineKey] || defaultOrphanDate;
-                        const dDate = parseUTCDate(effectiveDevFecha);
-                        const effectiveStart = equipStart > fStart ? equipStart : fStart;
-                        const effectiveEnd = dDate < fEnd ? dDate : fEnd;
-
-                        const effectiveHoraInicio = customHorasInicio[lineKey] !== undefined ? customHorasInicio[lineKey] : (item.horaInicio || '');
-                        const effectiveHoraFin = customHorasFin[lineKey] !== undefined ? customHorasFin[lineKey] : (item.horaFin || '');
-
-                        let calcHours = 0;
-                        if (isHora) {
-                            if (effectiveHoraInicio && effectiveHoraFin) {
-                                calcHours = calcularHorasAlquiler(effectiveHoraInicio, effectiveHoraFin);
-                            } else if (item.horasCalculadas) {
-                                calcHours = item.horasCalculadas;
-                            } else if (item.dias) {
-                                calcHours = item.dias;
-                            } else {
-                                calcHours = 1;
-                            }
-                        }
-
-                        let dDays = 0;
-                        if (isHora) {
-                            dDays = calcHours || 1;
-                        } else if (effectiveStart <= effectiveEnd) {
-                            dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
-                        }
-
-                        const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
-                        const clampedDays = Math.max(0, finalDays);
-
-                        const autoFestivos = (!aplicarFestivos || isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
-                        const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
-                        const clampedFestivos = isHora ? 0 : Math.min(clampedDays, Math.max(0, festivos));
-                        const netDays = clampedDays - clampedFestivos;
-
-                        const sub = orphanReturns * netDays * tarifa;
-                        subtotalTotal += sub;
-                        lineas.push({
-                            key: lineKey,
-                            productId: item.productId,
-                            type: 'orphan',
-                            devFecha: effectiveDevFecha,
-                            defaultDevFecha: defaultOrphanDate,
-                            remId: rem.id,
-                            remFecha: rem.fecha,
-                            equipo: `${prod?.name || item.productId} (Dev. previa: ${effectiveDevFecha})`,
-                            cantidad: orphanReturns,
-                            diasBase: clampedDays,
-                            festivos: clampedFestivos,
-                            dias: netDays,
-                            maxDays: dDays,
-                            tarifaDia: tarifa,
-                            subtotal: sub,
-                            estado: rem.estado,
-                            esquema: isHora ? 'Por Horas' : (isServ ? 'Cobro Único' : scheme),
-                            isServ,
-                            isHora,
-                            horaInicio: effectiveHoraInicio,
-                            horaFin: effectiveHoraFin
-                        });
-                        accountedQty += orphanReturns;
-                    }
-
-                    const remainingQty = item.cantidad - accountedQty;
-                    if (remainingQty > 0) {
-                        const lineKey = `${rem.id}-${item.productId}-remaining`;
-                        const effectiveDevFecha = customDates[lineKey] || fechaCorte;
-                        const dDate = parseUTCDate(effectiveDevFecha);
-                        const effectiveStart = equipStart > fStart ? equipStart : fStart;
-                        const effectiveEnd = dDate;
-
-                        const effectiveHoraInicio = customHorasInicio[lineKey] !== undefined ? customHorasInicio[lineKey] : (item.horaInicio || '');
-                        const effectiveHoraFin = customHorasFin[lineKey] !== undefined ? customHorasFin[lineKey] : (item.horaFin || '');
-
-                        let calcHours = 0;
-                        if (isHora) {
-                            if (effectiveHoraInicio && effectiveHoraFin) {
-                                calcHours = calcularHorasAlquiler(effectiveHoraInicio, effectiveHoraFin);
-                            } else if (item.horasCalculadas) {
-                                calcHours = item.horasCalculadas;
-                            } else if (item.dias) {
-                                calcHours = item.dias;
-                            } else {
-                                calcHours = 1;
-                            }
-                        }
-
-                        let dDays = 0;
-                        if (isHora) {
-                            dDays = calcHours || 1;
-                        } else if (effectiveStart <= effectiveEnd) {
-                            dDays = isServ ? 1 : calculateBillableDays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
-                        }
-
-                        const finalDays = customDays[lineKey] !== undefined ? customDays[lineKey] : dDays;
-                        const clampedDays = Math.max(0, finalDays);
-
-                        const autoFestivos = (!aplicarFestivos || isServ || isHora) ? 0 : countColombianHolidays(effectiveStart, effectiveEnd, scheme, billedPeriodsByRem[rem.id] || []);
-                        const festivos = customFestivos[lineKey] !== undefined ? customFestivos[lineKey] : autoFestivos;
-                        const clampedFestivos = isHora ? 0 : Math.min(clampedDays, Math.max(0, festivos));
-                        const netDays = clampedDays - clampedFestivos;
-
-                        const sub = remainingQty * netDays * tarifa;
-                        subtotalTotal += sub;
-                        lineas.push({
-                            key: lineKey,
-                            productId: item.productId,
-                            type: 'remaining',
-                            devFecha: effectiveDevFecha,
-                            defaultDevFecha: fechaCorte,
-                            remId: rem.id,
-                            remFecha: rem.fecha,
-                            equipo: effectiveDevFecha !== fechaCorte ? `${prod?.name || item.productId} (Corte: ${effectiveDevFecha})` : (prod?.name || item.productId),
-                            cantidad: remainingQty,
-                            diasBase: clampedDays,
-                            festivos: clampedFestivos,
-                            dias: netDays,
-                            maxDays: dDays,
-                            tarifaDia: tarifa,
-                            subtotal: sub,
-                            estado: rem.estado,
-                            esquema: isHora ? 'Por Horas' : (isServ ? 'Cobro Único' : scheme),
-                            isServ,
-                            isHora,
-                            horaInicio: effectiveHoraInicio,
-                            horaFin: effectiveHoraFin
-                        });
-                    }
-                }
-            });
+        const remisionesConCobro = new Set(selectedLineas.map(line => String(line.remId)));
+        const pendingTransport = calculatePendingCorteTransport({
+            remisiones, invoices, remIdsConCobro: remisionesConCobro, fechaInicio, fechaCorte
         });
-
-        // 4. Calculate filtered totals based on selectedRemIds
-        // No se deben arrastrar al documento líneas de períodos ya cobrados.
-        // Al no tener días facturables su subtotal es cero; dejarlas aquí hacía
-        // que el PDF mostrara remisiones antiguas aunque no incrementaran el saldo.
-        const selectedLineas = lineas.filter(l =>
-            selectedRemIds.includes(l.remId) && Number(l.subtotal) > 0
-        );
-        const remisionesConCobro = new Set(selectedLineas.map(l => String(l.remId)));
-        const subtotalTotalFiltered = selectedLineas.reduce((s, l) => s + l.subtotal, 0);
-        const totalTransporteFiltered = rems.filter(r => remisionesConCobro.has(String(r.id))).reduce((s, r) => {
-            const rDate = parseUTCDate(r.fecha);
-            return (rDate >= fStart && rDate <= fEnd) ? s + (r.transporte || 0) : s;
-        }, 0);
+        const totalTransporteFiltered = pendingTransport.total;
+        const subtotalTotalFiltered = selectedLineas.reduce((sum, line) => sum + line.subtotal, 0);
 
         const valorDescuento = Math.max(0, Number(descuentoValor) || 0);
         const descuento = descuentoTipo === 'porcentaje'
@@ -800,8 +391,10 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
         const totalNeto = Math.max(0, totalAntesDePagos - pagosAplicados);
 
         return {
-            lineas, // All lines for UI
-            selectedLineas, // Only selected for PDF/Invoice
+            lineas,
+            issues: [...issues, ...pendingTransport.issues],
+            transportes: pendingTransport.transportes,
+            selectedLineas,
             subtotal: subtotalTotalFiltered,
             descuento,
             subtotalConDescuento,
@@ -814,21 +407,27 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             porcIVA,
             porcRet
         };
-    }, [clientId, obraId, fechaInicio, fechaCorte, availableRems, selectedRemIds, products, invoices, selectedClient, customDays, customDates, customFestivos, descuentoTipo, descuentoValor, aplicarFestivos, abonosDisponibles, selectedAbonoIds]);
+    }, [clientId, fechaInicio, fechaCorte, availableRems, remisiones, selectedRemIds, products, invoices, selectedClient, customDays, customDates, customFestivos, customHorasInicio, customHorasFin, descuentoTipo, descuentoValor, aplicarFestivos, abonosDisponibles, selectedAbonoIds]);
 
     const handleGenerate = () => { if (resultado) setGenerado(true); };
     const handleSaveInvoice = async () => {
-        if (!resultado || saved) return;
+        if (!resultado || saved || savingRef.current || resultado.selectedLineas.length === 0) return;
+        savingRef.current = true;
+        setSaving(true);
+        setInvoiceError('');
 
         const itemsToFacturar = resultado.selectedLineas.map(l => ({
-            productId: l.equipo,
+            productId: l.productId,
             nombre: l.equipo,
             quantity: l.cantidad,
             days: l.dias,
             price: l.tarifaDia,
-            tipoCobro: l.isServ ? 'Servicio' : undefined,
+            tipoCobro: l.isServ ? 'Servicio' : l.isHora ? 'Hora' : 'Día',
+            esquemaCobro: l.esquema,
             remId: l.remId,
-            remFecha: l.remFecha
+            remItemKey: l.remItemKey,
+            remFecha: l.remFecha,
+            rentalCoverage: l.billingCoverage
         }));
 
         try {
@@ -847,6 +446,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                     id: Date.now(),
                     fechaInicio: fechaInicio,
                     fechaCorte: fechaCorte,
+                    transportes: resultado.transportes,
                     status: 'Pendiente',
                     abonoIds: selectedAbonoIds
                 }]
@@ -867,6 +467,10 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             setSaved(true);
         } catch (e) {
             console.error('Error saving invoice:', e);
+            setInvoiceError(e.message || 'No se pudo guardar el corte.');
+        } finally {
+            savingRef.current = false;
+            setSaving(false);
         }
     };
 
@@ -1182,6 +786,28 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                 </div>
                             ) : resultado && (
                                 <>
+                                    {resultado.issues.length > 0 && (
+                                        <div role="status" style={{ padding: '1rem 1.25rem', border: '1px solid #fcd34d', borderRadius: 12, background: '#fffbeb', color: '#78350f' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800 }}>
+                                                <AlertTriangle size={18} /> Ítems pendientes de revisión
+                                            </div>
+                                            <p style={{ margin: '0.5rem 0', fontSize: '0.85rem' }}>
+                                                Estos ítems no se incluyen en el cobro. Revisa las fechas de devolución y los períodos de sus facturas.
+                                            </p>
+                                            <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.85rem' }}>
+                                                {resultado.issues.map((issue, index) => (
+                                                    <li key={`${issue.remId}-${issue.itemKey}-${issue.code}-${index}`} style={{ marginTop: 4 }}>
+                                                        {issue.remId ? `${issue.remId}: ` : ''}{issue.message}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                    {resultado.lineas.length === 0 && resultado.issues.length === 0 && (
+                                        <div role="status" style={{ padding: '2rem', border: '1px solid #bbf7d0', borderRadius: 16, background: '#f0fdf4', color: '#166534', textAlign: 'center' }}>
+                                            No hay alquiler pendiente de facturar en este período.
+                                        </div>
+                                    )}
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                                         {(() => {
                                             const grouped = resultado.lineas.reduce((acc, l) => {
@@ -1269,7 +895,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                                                                     value={l.devFecha || ''}
                                                                                     onChange={e => {
                                                                                         const newDate = e.target.value;
-                                                                                        setCustomDates(prev => ({ ...prev, [l.key]: newDate }));
+                                                                                        setCustomDates(prev => ({ ...prev, [l.dateKey || l.key]: newDate }));
                                                                                     }}
                                                                                     style={{
                                                                                         padding: '0.35rem 0.5rem',
@@ -1431,14 +1057,15 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
                                         })()}
                                     </div>
 
+                                    {invoiceError && <div role="alert" style={{ color: '#b91c1c', padding: '0.75rem 1rem', background: '#fef2f2', borderRadius: 8 }}>{invoiceError}</div>}
                                     <div style={{ background: '#ffffff', color: '#104166', padding: '1.25rem 2.5rem', borderRadius: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #e2e8f0', marginTop: 'auto', flexShrink: 0, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                                             <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Gran Total Neto a Facturar:</span>
                                             <span style={{ fontSize: '2.2rem', fontWeight: 900, color: '#104166', letterSpacing: '-0.02em' }}>{fmtCOP(resultado.totalNeto)}</span>
                                         </div>
                                         <div style={{ display: 'flex', gap: '1rem' }}>
-                                            <button className="btn" disabled={saved || resultado.lineas.length === 0} onClick={handleSaveInvoice} style={{ background: '#10b981', color: 'white', border: 'none', padding: '0.85rem 2.5rem', borderRadius: 12, fontWeight: 900, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)' }}>
-                                                {saved ? <><CheckCircle size={22} /> Guardado</> : <><FileText size={22} /> Facturar</>}
+                                            <button className="btn" disabled={saved || saving || resultado.selectedLineas.length === 0} onClick={handleSaveInvoice} style={{ background: '#10b981', color: 'white', border: 'none', padding: '0.85rem 2.5rem', borderRadius: 12, fontWeight: 900, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 10, cursor: saving ? 'wait' : 'pointer', opacity: saved || saving || resultado.selectedLineas.length === 0 ? 0.55 : 1, boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)' }}>
+                                                {saved ? <><CheckCircle size={22} /> Guardado</> : saving ? 'Guardando…' : <><FileText size={22} /> Facturar</>}
                                             </button>
                                         </div>
                                     </div>

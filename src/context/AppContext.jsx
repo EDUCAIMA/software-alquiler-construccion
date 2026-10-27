@@ -669,7 +669,7 @@ export const AppProvider = ({ children }) => {
       estado: 'Activa',
       items: data.items.map(i => {
         const prod = products.find(p => p.id === i.productId);
-        return { ...i, cantidad: isServiceProduct(prod) ? 1 : i.cantidad, cantidadDevuelta: 0 };
+        return { ...i, remItemId: i.remItemId || crypto.randomUUID(), cantidad: isServiceProduct(prod) ? 1 : i.cantidad, cantidadDevuelta: 0 };
       })
     };
     await api.post('/api/remisiones', nueva);

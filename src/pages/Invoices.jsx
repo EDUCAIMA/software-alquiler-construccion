@@ -957,7 +957,7 @@ export default function Invoices({ hideHeader = false } = {}) {
                                             const prod = products.find(p => p.id === item.productId);
                                             return (
                                                 <tr key={idx} style={{ borderBottom: '1px solid var(--surface-border)' }}>
-                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{prod?.name || item.productId}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{item.nombre || item.name || prod?.name || item.productId}</td>
                                                     <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.quantity}</td>
                                                     <td style={{ padding: '0.75rem', textAlign: 'center' }}>{item.days}d</td>
                                                     <td style={{ padding: '0.75rem', textAlign: 'right' }}>${item.price.toLocaleString()}</td>

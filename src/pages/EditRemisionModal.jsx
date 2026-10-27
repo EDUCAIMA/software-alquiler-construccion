@@ -9,8 +9,9 @@ export default function EditRemisionModal({ remision, onClose, onSave, products 
     const [transporte, setTransporte] = useState(remision?.transporte || 0);
     const [responsableTransporte, setResponsableTransporte] = useState(remision?.responsableTransporte || '');
     const [notas, setNotas] = useState(remision?.notas || '');
-    const [items, setItems] = useState(
+    const [items, setItems] = useState(() =>
         (remision?.items || []).map(i => ({
+            ...i,
             productId: i.productId || '',
             nombre: i.nombre || i.name || '',
             cantidad: Number(i.cantidad) || 1,
@@ -81,6 +82,7 @@ export default function EditRemisionModal({ remision, onClose, onSave, products 
         setItems(prev => [
             ...prev,
             {
+                remItemId: crypto.randomUUID(),
                 productId: prod.id,
                 nombre: prod.name,
                 cantidad: 1,

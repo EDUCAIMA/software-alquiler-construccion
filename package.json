@@ -14,6 +14,7 @@
     "start": "node server.js",
     "start:frontend": "serve -s dist -l $PORT",
     "lint": "eslint .",
+    "test:corte": "node --test src/pages/corteBillingUtils.test.js src/pages/corteInvoiceUtils.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
