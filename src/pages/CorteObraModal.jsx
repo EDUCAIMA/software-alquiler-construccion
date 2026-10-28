@@ -253,7 +253,7 @@ function generateCortePDF(resultado, client, obra, settings, remisiones, invoice
 }
 
 export default function CorteObraModal({ onClose, initialClientId = '', initialObraId = '' }) {
-    const { clients, remisiones, products, invoices, createInvoice, settings, markClientAbonosApplied } = useAppContext();
+    const { clients, remisiones, products, invoices, logs, createInvoice, settings, markClientAbonosApplied } = useAppContext();
 
     const [clientId, setClientId] = useState(initialClientId);
     const [clientSearch, setClientSearch] = useState('');
@@ -347,6 +347,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             remisiones: availableRems,
             invoices,
             products,
+            auditLogs: logs,
             fechaInicio,
             fechaCorte,
             customDates,
@@ -407,7 +408,7 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
             porcIVA,
             porcRet
         };
-    }, [clientId, fechaInicio, fechaCorte, availableRems, remisiones, selectedRemIds, products, invoices, selectedClient, customDays, customDates, customFestivos, customHorasInicio, customHorasFin, descuentoTipo, descuentoValor, aplicarFestivos, abonosDisponibles, selectedAbonoIds]);
+    }, [clientId, fechaInicio, fechaCorte, availableRems, remisiones, selectedRemIds, products, invoices, logs, selectedClient, customDays, customDates, customFestivos, customHorasInicio, customHorasFin, descuentoTipo, descuentoValor, aplicarFestivos, abonosDisponibles, selectedAbonoIds]);
 
     const handleGenerate = () => { if (resultado) setGenerado(true); };
     const handleSaveInvoice = async () => {

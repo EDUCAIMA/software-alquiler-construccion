@@ -254,6 +254,110 @@ test('una factura vinculada ausente no convierte automáticamente todo el alquil
     requireIssue(calculate({ remisiones: [remission({ facturaId: 'F-AUSENTE' })], invoices: [] }));
 });
 
+const deletedLinkFixture = () => {
+    const products = [
+        product('P-103', { name: 'Andamio actual', esquemaCobro: 'Lunes-Sábado' }),
+        product('P-107', { name: 'Tablón actual', esquemaCobro: 'Lunes-Sábado' }),
+        product('S', { name: 'Entrega equipos', tipoCobro: 'Servicio', category: 'Servicios' })
+    ];
+    const remisiones = [
+        ['REM-026', 'F-016', '2026-07-24', 2500, 3500],
+        ['REM-053', 'F-035', '2026-07-31', 3000, 1000]
+    ].map(([id, facturaId, fecha, scaffoldRate, plankRate]) => remission({
+        id, facturaId, fecha, estado: 'Activa', items: [
+            item('P-103', { nombre: 'Andamio original', cantidad: 4, cantidadDevuelta: 0, devoluciones: [], tarifaDia: scaffoldRate }),
+            item('P-107', { nombre: 'Tablón original', cantidad: 4, cantidadDevuelta: 0, devoluciones: [], tarifaDia: plankRate }),
+            item('S', { nombre: 'Entrega equipos', tipoCobro: 'Servicio', cantidadDevuelta: 0, devoluciones: [], tarifaDia: 20000 })
+        ]
+    }));
+    const invoices = [invoice({ id: 'F-084', date: '2026-08-31',
+        cortes: [{ fechaInicio: '2026-07-24', fechaCorte: '2026-08-31' }],
+        items: remisiones.flatMap(rem => rem.items.map(i => ({ remId: rem.id,
+            productId: i.productId === 'P-107' ? 'Tablón con descripción antigua' : i.nombre,
+            nombre: i.productId === 'P-107' ? 'Tablón con descripción antigua' : i.nombre,
+            quantity: i.cantidad, days: i.productId === 'S' ? 1 : rem.id === 'REM-026' ? 33 : 27,
+            price: i.tarifaDia, remFecha: rem.fecha, tipoCobro: i.productId === 'S' ? 'Servicio' : undefined
+        })))
+    }), invoice({ id: 'F-198', date: '2026-10-03',
+        cortes: [{ fechaInicio: '2026-09-01', fechaCorte: '2026-09-30' }],
+        items: remisiones.flatMap(rem => rem.items.filter(i => i.productId !== 'S').map(i => ({
+            remId: rem.id, productId: products.find(p => p.id === i.productId).name,
+            nombre: products.find(p => p.id === i.productId).name,
+            quantity: i.cantidad, days: 26, price: i.tarifaDia, remFecha: rem.fecha
+        })))
+    })];
+    return { remisiones, invoices, products,
+        auditLogs: remisiones.map(rem => ({ action: 'Invoice Deleted', product: rem.facturaId })),
+        fechaInicio: '2026-10-01', fechaCorte: '2026-10-30' };
+};
+
+test('REM-026 y REM-053: las facturas iniciales eliminadas no bloquean el nuevo corte de octubre', () => {
+    const result = calculate(deletedLinkFixture());
+    assert.deepEqual(result.issues, []);
+    assert.equal(result.lineas.length, 4);
+    assert.ok(result.lineas.every(line => line.dias === 26 && !line.isServ));
+    assert.equal(result.lineas.filter(line => line.remId === 'REM-026').reduce((sum, line) => sum + line.subtotal, 0), 624000);
+    assert.equal(result.lineas.filter(line => line.remId === 'REM-053').reduce((sum, line) => sum + line.subtotal, 0), 416000);
+});
+
+test('el corte nuevo de remisiones con vínculos eliminados no vuelve a cobrarse después de facturar', () => {
+    const fixture = deletedLinkFixture();
+    const original = calculate(fixture);
+    const emitted = savedInvoice(charged(original), {
+        date: '2026-10-30', cortes: [{ fechaInicio: fixture.fechaInicio, fechaCorte: fixture.fechaCorte }]
+    });
+    const result = calculate({ ...fixture, invoices: [...fixture.invoices, emitted] });
+    requireNoCharge(result);
+    assert.deepEqual(result.issues, []);
+});
+
+test('las facturas de agosto y septiembre siguen impidiendo recobrar esos períodos', () => {
+    const fixture = deletedLinkFixture();
+    requireIssue(calculate({ ...fixture, fechaInicio: '2026-07-24', fechaCorte: '2026-08-31' }));
+    const september = calculate({ ...fixture, fechaInicio: '2026-09-01', fechaCorte: '2026-09-30' });
+    requireNoCharge(september);
+    assert.deepEqual(september.issues, []);
+});
+
+test('sin evidencia de eliminación, o con evidencia de otra factura, se conserva la revisión del vínculo ausente', () => {
+    const fixture = deletedLinkFixture();
+    for (const auditLogs of [[], [{ action: 'Invoice Deleted', product: 'F-OTRA' }],
+        [{ action: 'Rental Order Generated', product: 'F-016' }]]) {
+        const result = calculate({ ...fixture, auditLogs });
+        requireIssue(result);
+        assert.ok(result.issues.every(issue => issue.code === 'MISSING_LINKED_INVOICE'));
+    }
+});
+
+test('un registro de eliminación no ignora una factura que actualmente existe con ese identificador', () => {
+    const result = calculate({ remisiones: [remission({ facturaId: 'F-TEST' })], invoices: [invoice()],
+        auditLogs: [{ action: 'Invoice Deleted', product: 'F-TEST' }] });
+    assert.equal(total(result), 20);
+});
+
+test('un corte antiguo sin fechas verificables o que se superpone al actual todavía requiere revisar sus equipos', () => {
+    const fixture = deletedLinkFixture();
+    for (const cortes of [[], [{ fechaInicio: 'incorrecta', fechaCorte: '2026-08-31' }],
+        [{ fechaInicio: '2026-08-31', fechaCorte: '2026-07-24' }],
+        [{ fechaInicio: '2026-07-24', fechaCorte: '2026-10-01' }],
+        [{ fechaInicio: '2026-07-24', fechaCorte: '2026-08-31' }, { fechaInicio: '2026-10-01', fechaCorte: '2026-10-02' }]]) {
+        const result = calculate({ ...fixture, invoices: [{ ...fixture.invoices[0], cortes }, fixture.invoices[1]] });
+        requireIssue(result);
+        assert.ok(result.issues.some(issue => issue.code === 'AMBIGUOUS_INVOICE_ITEM'));
+    }
+});
+
+test('un servicio ya emitido en un corte anterior conserva su cobertura al confirmar la eliminación del vínculo inicial', () => {
+    const rem = remission({ facturaId: 'F-AUSENTE', items: [item('S', {
+        nombre: 'Entrega equipos', tipoCobro: 'Servicio', cantidadDevuelta: 0, devoluciones: []
+    })] });
+    const result = calculate({ remisiones: [rem], products: [product('S', { name: 'Entrega equipos', tipoCobro: 'Servicio' })],
+        invoices: [invoice({ items: [{ remId: rem.id, productId: 'S', quantity: 1, days: 1 }],
+            cortes: [{ fechaInicio: '2026-02-01', fechaCorte: '2026-02-28' }] })],
+        auditLogs: [{ action: 'Invoice Deleted', product: 'F-AUSENTE' }] });
+    requireNoCharge(result);
+});
+
 test('una factura de otra obra no se asigna automáticamente a la remisión actual', () => {
     requireIssue(calculate({ invoices: [invoice({ obraId: 'OTRA-OBRA' })] }));
 });

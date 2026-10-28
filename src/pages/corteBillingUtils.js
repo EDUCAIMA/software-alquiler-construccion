@@ -53,6 +53,15 @@ const allowedDay = (day, scheme) => {
 const overrideNumber = (map, key, fallback) => Object.prototype.hasOwnProperty.call(map, key) && num(map[key]) !== null ? Math.max(0, Number(map[key])) : fallback;
 const encode = value => encodeURIComponent(String(value));
 
+const cutsOutsideWindow = (invoice, start, end) => {
+    if (!validArray(invoice.cortes)) return false;
+    const cuts = arr(invoice.cortes);
+    return cuts.length > 0 && cuts.every(cut => {
+        const from = dayOf(cut.fechaInicio), to = dayOf(cut.fechaCorte);
+        return from !== null && to !== null && from <= to && (to < start || from > end);
+    });
+};
+
 function segmentsFromDays(days, quantity) {
     const result = [];
     for (const day of days) {
@@ -64,7 +73,7 @@ function segmentsFromDays(days, quantity) {
 }
 
 export function calculateCorteRentalLines({
-    remisiones = [], invoices = [], products = [], fechaInicio, fechaCorte,
+    remisiones = [], invoices = [], products = [], auditLogs = [], fechaInicio, fechaCorte,
     customDates = {}, customDays = {}, customFestivos = {}, customHorasInicio = {}, customHorasFin = {},
     aplicarFestivos = false, isHoliday = () => false, calculateHours = () => 0
 } = {}) {
@@ -85,6 +94,9 @@ export function calculateCorteRentalLines({
     }
     const productMap = new Map(products.map(product => [id(product.id), product]));
     const validInvoices = invoices.filter(invoice => !cancelled(invoice.status));
+    const deletedInvoiceIds = new Set(auditLogs
+        .filter(log => log.action === 'Invoice Deleted')
+        .map(log => id(log.product)).filter(Boolean));
 
     for (const rem of remisiones) {
         if (cancelled(rem.estado)) continue;
@@ -197,9 +209,11 @@ export function calculateCorteRentalLines({
         const relevant = infos.filter(info => info.cohorts.length > 0 && !info.blocked);
         if (relevant.length === 0) continue;
         const linkedInvoiceId = id(rem.facturaId ?? rem.factura_id);
-        if (linkedInvoiceId && !invoices.some(invoice => sameId(invoice.id, linkedInvoiceId))) {
-            // Check the complete input, including canceled invoices: a canceled
-            // record deliberately releases coverage; a missing record does not.
+        if (linkedInvoiceId && !invoices.some(invoice => sameId(invoice.id, linkedInvoiceId)) &&
+            !deletedInvoiceIds.has(linkedInvoiceId)) {
+            // A confirmed deletion releases this stale link, like cancellation.
+            // An unexplained missing record still requires review. All surviving
+            // invoices are checked below, including replacement cuts.
             for (const info of relevant) report('MISSING_LINKED_INVOICE', rem, info,
                 `${info.name}: la factura vinculada ${linkedInvoiceId} no está disponible; revisa su cobertura antes de emitir otro cobro.`, linkedInvoiceId);
             continue;
@@ -227,6 +241,7 @@ export function calculateCorteRentalLines({
                 for (const info of relevant) { info.blocked = true; report('INVOICE_OBRA_MISMATCH', rem, info, `${info.name}: la factura ${invoice.id} está vinculada a otra obra.`, invoice.id); }
                 continue;
             }
+            const outsideWindow = cutsOutsideWindow(invoice, windowStart, windowEnd);
             for (const invItem of invItems) {
                 if (invItem.remId && !sameId(invItem.remId, rem.id)) continue;
                 if (!invItem.remId && !direct) continue;
@@ -251,6 +266,11 @@ export function calculateCorteRentalLines({
                 if (matches.length !== 1) {
                     const apparentKind = coverage?.kind || (isService(invItem) ? 'service' : fold(invItem.tipoCobro).includes('hora') ? 'hourly' : 'daily');
                     const affected = matches.length ? matches : relevant.filter(info => info.kind === apparentKind);
+                    // Old descriptions need reconciliation only when their daily
+                    // cut overlaps this calculation. Services and hourly events
+                    // retain their lifetime coverage checks, even in old cuts.
+                    if (!coverage && outsideWindow && apparentKind === 'daily' &&
+                        !infos.some(info => info.kind === 'hourly') && affected.every(info => info.kind === 'daily')) continue;
                     for (const info of affected) {
                         if (!relevant.includes(info)) continue;
                         info.blocked = true;
@@ -260,6 +280,7 @@ export function calculateCorteRentalLines({
                 }
                 const info = matches[0];
                 if (!relevant.includes(info) || info.blocked) continue;
+                if (!coverage && info.kind === 'daily' && outsideWindow) continue;
                 if (coverage && (coverage.version !== 1 || coverage.kind !== info.kind || (coverage.productId && !sameId(coverage.productId, info.productId)))) {
                     info.blocked = true;
                     report('INCOMPATIBLE_COVERAGE', rem, info, `${info.name}: la cobertura guardada en ${invoice.id} no corresponde al ítem o tipo de alquiler.`, invoice.id);
