@@ -1,5 +1,6 @@
 // Pure billing calculation. Dates are calendar dates (UTC is used only to avoid
 // time-zone/DST arithmetic); no invoice, remisión or product is changed here.
+import { readCorteRecords } from './corteDataUtils.js';
 const DAY = 86400000;
 const EPSILON = 1e-8;
 const id = value => String(value ?? '').trim();
@@ -7,17 +8,10 @@ const sameId = (a, b) => id(a) !== '' && id(a) === id(b);
 const num = value => value === '' || value === null || value === undefined ? null :
     (Number.isFinite(Number(value)) ? Number(value) : null);
 const fold = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-const arr = value => {
-    if (Array.isArray(value)) return value;
-    if (typeof value === 'string') { try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) return parsed; } catch { /* Report at the affected item. */ } }
-    return [];
-};
-const validArray = value => {
-    if (value === undefined || value === null || value === '' || Array.isArray(value)) return true;
-    if (typeof value === 'string') { try { return Array.isArray(JSON.parse(value)); } catch { return false; } }
-    return false;
-};
+const arr = value => readCorteRecords(value) || [];
+const validArray = value => readCorteRecords(value) !== null;
 const dayOf = value => {
+    if (value instanceof Date && !Number.isFinite(value.getTime())) return null;
     const text = value instanceof Date ? value.toISOString().slice(0, 10) : String(value ?? '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
     const [y, m, d] = text.split('-').map(Number);
@@ -223,12 +217,13 @@ export function calculateCorteRentalLines({
         for (const invoice of validInvoices) {
             const direct = sameId(rem.facturaId ?? rem.factura_id, invoice.id);
             const invItems = arr(invoice.items);
-            const linked = direct || invItems.some(invoiceItem => sameId(invoiceItem.remId, rem.id));
-            if (!linked) continue;
             if (!validArray(invoice.items)) {
+                if (!direct && invoice.clientId && !sameId(invoice.clientId, rem.clientId)) continue;
                 for (const info of relevant) { info.blocked = true; report('INVALID_INVOICE_ITEMS', rem, info, `${info.name}: no se pueden leer los ítems de la factura ${invoice.id}.`, invoice.id); }
                 continue;
             }
+            const linked = direct || invItems.some(invoiceItem => sameId(invoiceItem.remId, rem.id));
+            if (!linked) continue;
             if (direct && invItems.length === 0) {
                 for (const info of relevant) { info.blocked = true; report('EMPTY_LINKED_INVOICE', rem, info, `${info.name}: la factura vinculada ${invoice.id} no contiene ítems que permitan comprobar su cobertura.`, invoice.id); }
                 continue;
@@ -304,6 +299,11 @@ export function calculateCorteRentalLines({
                         continue;
                     }
                     for (const segment of coverage.segments) {
+                        if (!segment || typeof segment !== 'object' || Array.isArray(segment)) {
+                            info.blocked = true;
+                            report('INVALID_COVERAGE_SEGMENT', rem, info, `${info.name}: revisa los intervalos de cobertura de la factura ${invoice.id}.`, invoice.id);
+                            break;
+                        }
                         const start = dayOf(segment.start), end = dayOf(segment.end), q = num(segment.quantity);
                         if (start === null || end === null || start > end || q === null || q <= 0) {
                             info.blocked = true;

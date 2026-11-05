@@ -10,6 +10,7 @@ import { applyStandardLayout, drawInfoGrid, createEquipoTagger } from './pdfThem
 import { generateInvoicePDF, calcularHorasAlquiler, calcularHoraFin } from './CotizacionesHelpers';
 import { calculateCorteRentalLines } from './corteBillingUtils';
 import { calculatePendingCorteTransport } from './corteInvoiceUtils';
+import { requireCorteRecords } from './corteDataUtils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtCOP = n => `$${(n || 0).toLocaleString('es-CO')}`;
@@ -278,21 +279,21 @@ export default function CorteObraModal({ onClose, initialClientId = '', initialO
     const [descuentoValor, setDescuentoValor] = useState('');
     const [selectedAbonoIds, setSelectedAbonoIds] = useState([]);
 
-    const selectedClient = clients.find(c => c.id === clientId);
-    const obrasDisp = selectedClient?.obras || [];
-    const selectedObra = obrasDisp.find(o => o.id === obraId);
-    const abonosDisponibles = useMemo(() => (selectedClient?.abonos || []).filter(abono =>
+    const selectedClient = clients.find(c => String(c.id) === String(clientId));
+    const obrasDisp = requireCorteRecords(selectedClient?.obras, 'las obras');
+    const selectedObra = obrasDisp.find(o => String(o.id) === String(obraId));
+    const abonosDisponibles = useMemo(() => requireCorteRecords(selectedClient?.abonos, 'los abonos').filter(abono =>
         !abono.aplicado && Number(abono.saldo ?? abono.monto) > 0 &&
         abono.aplicarProximoCorte !== false &&
         (!abono.obraId || !obraId || String(abono.obraId) === String(obraId))
     ), [selectedClient, obraId]);
     const clientsSorted = useMemo(() => {
         return [...clients].sort((a, b) =>
-            (a.name || '').localeCompare((b.name || ''), 'es', { sensitivity: 'base' })
+            String(a.name || '').localeCompare(String(b.name || ''), 'es', { sensitivity: 'base' })
         );
     }, [clients]);
     const filteredClients = useMemo(() => {
-        const query = clientSearch.trim().toLowerCase();
+        const query = String(clientSearch).trim().toLowerCase();
         if (!query) return clientsSorted;
         return clientsSorted.filter(client =>
             [client.name, client.id, client.nit, client.city]

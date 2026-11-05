@@ -31,6 +31,35 @@ const calculate = (overrides = {}) => calculateCorteRentalLines({
 });
 const charged = result => result.lineas.filter(line => Number(line.subtotal) > 0);
 const total = result => charged(result).reduce((sum, line) => sum + Number(line.subtotal), 0);
+
+test('ítems vacíos de una remisión muestran revisión sin desmontar la ventana', () => {
+    const result = calculate({ remisiones: [remission({ items: [null] })] });
+    assert.equal(result.lineas.length, 0);
+    assert.ok(result.issues.some(issue => issue.code === 'INVALID_REM_ITEMS'));
+});
+
+test('devolución vacía no inventa días pendientes ni rompe el cálculo', () => {
+    const result = calculate({ remisiones: [remission({ items: [item('A', { devoluciones: [null] })] })] });
+    assert.equal(result.lineas.length, 0);
+    assert.ok(result.issues.some(issue => issue.code === 'INVALID_RETURN_HISTORY'));
+});
+
+test('factura con ítem vacío bloquea el recobro aunque no pueda leerse su remId', () => {
+    const result = calculate({ invoices: [invoice({ items: [null] })] });
+    assert.equal(result.lineas.length, 0);
+    assert.ok(result.issues.some(issue => issue.code === 'INVALID_INVOICE_ITEMS'));
+});
+
+test('cortes y segmentos vacíos de facturas requieren revisión sin recobrar', () => {
+    for (const overrides of [
+        { cortes: [null] },
+        { items: [{ remId: 'REM-TEST', productId: 'A', rentalCoverage: { version: 1, kind: 'daily', segments: [null] } }] }
+    ]) {
+        const result = calculate({ invoices: [invoice(overrides)] });
+        assert.equal(result.lineas.length, 0);
+        assert.ok(result.issues.length > 0);
+    }
+});
 const unitDays = result => charged(result).reduce((sum, line) => sum + Number(line.cantidad) * Number(line.dias), 0);
 const requireNoCharge = result => {
     assert.equal(total(result), 0);

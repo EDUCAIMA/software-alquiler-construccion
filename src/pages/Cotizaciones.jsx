@@ -26,7 +26,7 @@ import { ApprovalModal, ShareModal, ContratoEditorModal } from './CotModals';
 import CotDetailPanel from './CotDetailPanel';
 import { NuevaRemisionModal } from './RemisionComponents';
 
-// ─── Error Boundary para el modal de nueva cotización ────────────────────────
+// Un fallo de un formulario no debe desmontar toda la aplicación.
 class ModalErrorBoundary extends React.Component {
     constructor(props) {
         super(props);
@@ -36,7 +36,7 @@ class ModalErrorBoundary extends React.Component {
         return { hasError: true, error };
     }
     componentDidCatch(error, info) {
-        console.error('❌ Error en NuevaCotizacionModal:', error, info);
+        console.error(`Error en ${this.props.title || 'formulario'}:`, error, info);
     }
     render() {
         if (this.state.hasError) {
@@ -54,7 +54,7 @@ class ModalErrorBoundary extends React.Component {
                         >
                             <X size={18} />
                         </button>
-                        <h3 style={{ color: '#ef4444', marginBottom: '1rem' }}>⚠️ Error al cargar el formulario</h3>
+                        <h3 role="alert" style={{ color: '#ef4444', marginBottom: '1rem' }}>Error al cargar {this.props.title || 'el formulario'}</h3>
                         <pre style={{ background: '#f8fafc', padding: '1rem', borderRadius: 8, fontSize: '0.75rem', overflow: 'auto', maxHeight: 200, color: '#dc2626' }}>
                             {this.state.error?.message || String(this.state.error)}
                         </pre>
@@ -915,11 +915,13 @@ export default function Cotizaciones({ hideHeader = false, onInvoiceCreated } = 
             )}
             {/* Nuevo Modal de Corte de Obra */}
             {showCorteModal && (
-                <CorteObraModal 
-                    initialClientId={corteModalParams.clientId}
-                    initialObraId={corteModalParams.obraId}
-                    onClose={() => setShowCorteModal(false)}
-                />
+                <ModalErrorBoundary title="Corte de Obra" onClose={() => setShowCorteModal(false)}>
+                    <CorteObraModal
+                        initialClientId={corteModalParams.clientId}
+                        initialObraId={corteModalParams.obraId}
+                        onClose={() => setShowCorteModal(false)}
+                    />
+                </ModalErrorBoundary>
             )}
 
             {remPreloadData && (
