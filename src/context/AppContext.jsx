@@ -171,13 +171,16 @@ export const AppProvider = ({ children }) => {
   const logAction = async (action, product, client, type) => {
     const timeStr = format(new Date(), 'yyyy-MM-dd hh:mm a');
     try {
-      const { data } = await api.post('/api/logs', {
+      const data = await api.post('/api/logs', {
         action,
         product: product ? String(product) : '',
         client: client ? String(client) : '',
         time: timeStr,
         type: type || 'system'
       });
+      if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.action !== 'string') {
+        throw new Error('Respuesta inválida al registrar el movimiento');
+      }
       setLogs(prev => [data, ...prev]);
     } catch (e) {
       console.error('Error recording log:', e);

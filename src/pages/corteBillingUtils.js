@@ -88,8 +88,9 @@ export function calculateCorteRentalLines({
     }
     const productMap = new Map(products.map(product => [id(product.id), product]));
     const validInvoices = invoices.filter(invoice => !cancelled(invoice.status));
-    const deletedInvoiceIds = new Set(auditLogs
-        .filter(log => log.action === 'Invoice Deleted')
+    // Un registro vacío no confirma una eliminación ni debe cerrar el corte.
+    const deletedInvoiceIds = new Set((Array.isArray(auditLogs) ? auditLogs : [])
+        .filter(log => log?.action === 'Invoice Deleted')
         .map(log => id(log.product)).filter(Boolean));
 
     for (const rem of remisiones) {

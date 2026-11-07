@@ -329,6 +329,39 @@ test('REM-026 y REM-053: las facturas iniciales eliminadas no bloquean el nuevo 
     assert.equal(result.lineas.filter(line => line.remId === 'REM-053').reduce((sum, line) => sum + line.subtotal, 0), 416000);
 });
 
+test('registros vacíos en el historial no cierran el corte ni alteran los días ya facturados', () => {
+    const invoices = [invoice()];
+    const auditLogs = [undefined, null, {}, '', false, 42,
+        { action: 'Rental Order Generated', product: 'Invoice F-TEST' }];
+    const original = structuredClone(auditLogs);
+    const result = calculate({ invoices, auditLogs });
+    assert.deepEqual(result, calculate({ invoices }));
+    assert.equal(total(result), 20);
+    assert.deepEqual(auditLogs, original);
+});
+
+test('el historial mixto conserva las eliminaciones válidas y evita recobrar un corte guardado', () => {
+    const fixture = deletedLinkFixture();
+    const auditLogs = [undefined, ...fixture.auditLogs, null, {}];
+    const result = calculate({ ...fixture, auditLogs });
+    assert.deepEqual(result, calculate(fixture));
+    const emitted = savedInvoice(charged(result), {
+        date: '2026-10-30', cortes: [{ fechaInicio: fixture.fechaInicio, fechaCorte: fixture.fechaCorte }]
+    });
+    const afterSave = calculate({ ...fixture, auditLogs, invoices: [...fixture.invoices, emitted] });
+    requireNoCharge(afterSave);
+    assert.deepEqual(afterSave.issues, []);
+});
+
+test('un historial ausente o ilegible no confirma la eliminación de una factura vinculada', () => {
+    const fixture = deletedLinkFixture();
+    for (const auditLogs of [undefined, null, {}, '', 'historial inválido', 42, [undefined, null, {}]]) {
+        const result = calculate({ ...fixture, auditLogs });
+        requireIssue(result);
+        assert.ok(result.issues.every(issue => issue.code === 'MISSING_LINKED_INVOICE'));
+    }
+});
+
 test('el corte nuevo de remisiones con vínculos eliminados no vuelve a cobrarse después de facturar', () => {
     const fixture = deletedLinkFixture();
     const original = calculate(fixture);
